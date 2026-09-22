@@ -1,8 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import"],
   "rules": {
     "typescript/no-explicit-any": "off",
-    "typescript/no-floating-promises": "error"
+    "typescript/no-floating-promises": "error",
+    "import/sort": ["error", { "groups": ["builtin", "external", "internal", "parent", "sibling", "index"] }]
   },
   "env": {
     "node": true
