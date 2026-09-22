@@ -34,15 +34,12 @@ export class UsersController {
   }
 
   @Post()
-  createUser(@Body(new ValidationPipe()) createUserDto: CreateUserDto): number {
+  createUser(@Body() createUserDto: CreateUserDto): number {
     return this.usersService.createUser(createUserDto);
   }
 
   @Patch(":id")
-  updateUser(
-    @Param("id", ParseIntPipe) id: number,
-    @Body(new ValidationPipe()) updateUserDto: UpdateUserDto,
-  ): string {
+  updateUser(@Param("id", ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto): string {
     return this.usersService.updateUser(id, updateUserDto);
   }
 
