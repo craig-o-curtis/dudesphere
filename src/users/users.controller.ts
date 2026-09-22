@@ -8,8 +8,8 @@ import {
   Post,
   Query,
   DefaultValuePipe,
-  ValidationPipe,
   Body,
+  ParseBoolPipe,
 } from "@nestjs/common";
 
 import { CreateUserDto } from "./dto/create-user.dto.js";
@@ -24,8 +24,9 @@ export class UsersController {
   getUsers(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("isDude", new DefaultValuePipe(false), ParseBoolPipe) isDude: boolean,
   ) {
-    return this.usersService.getUsers(limit, page);
+    return this.usersService.getUsers(limit, page, isDude);
   }
 
   @Get(":id")
