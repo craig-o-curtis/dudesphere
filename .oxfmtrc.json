@@ -1,17 +1,22 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [],
-  "import": {
+  "sortImports": {
     "enabled": true,
-    "order": "custom",
-    "sort_by_length": false,
+    "order": "asc",
+    "ignoreCase": true,
     "groups": [
-      { "name": "builtin", "patterns": ["node:*"] },
-      { "name": "nestjs", "patterns": ["@nestjs/common"] },
-      { "name": "external", "patterns": ["@nestjs/*", "@/*"] },
-      { "name": "internal", "patterns": ["./**", "../**"] }
+      "builtin",
+      "external",
+      ["internal", "subpath"],
+      ["parent", "sibling", "index"],
+      "style",
+      "unknown"
     ],
-    "side_effects": true,
-    "max_imports_per_line": 4
+    "newlinesBetween": true,
+    "partitionByComment": false,
+    "partitionByNewline": false,
+    "sortSideEffects": false,
+    "internalPattern": ["~/", "@/", "#"]
   }
 }

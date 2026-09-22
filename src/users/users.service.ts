@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
 
+import { CreateUserDto } from "./dto/create-user.dto.js";
+import { UpdateUserDto } from "./dto/update-user.dto.js";
+
 @Injectable()
 export class UsersService {
   // for now mock users in the constructor
@@ -30,21 +33,23 @@ export class UsersService {
     return this.users.find((user) => user.id === id);
   }
 
-  createUser(): number {
+  createUser(createUserDto: CreateUserDto): number {
     // create a new user
     const newUser = {
       id: this.users.length + 1,
-      name: "New User",
+      ...createUserDto,
     };
     this.users.push(newUser);
     return newUser.id;
   }
 
-  updateUser(id: number, user: { name: string }): string {
-    // find user, update
-    const userToUpdate = this.users.find((user) => user.id === id);
-    if (userToUpdate) {
-      userToUpdate.name = user.name;
+  updateUser(id: number, updateUserDto: UpdateUserDto): string {
+    const userIndex = this.users.findIndex((user) => user.id === id);
+    if (userIndex !== -1) {
+      this.users[userIndex] = {
+        ...this.users[userIndex],
+        ...updateUserDto,
+      };
     }
 
     return "User with id: " + id + " updated";

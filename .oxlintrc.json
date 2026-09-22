@@ -4,7 +4,19 @@
   "rules": {
     "typescript/no-explicit-any": "off",
     "typescript/no-floating-promises": "error",
-    "import/sort": ["error", { "groups": ["builtin", "external", "internal", "parent", "sibling", "index"] }]
+    "import/sort": [
+      "error",
+      {
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          "parent",
+          "sibling",
+          "index"
+        ]
+      }
+    ]
   },
   "env": {
     "node": true
