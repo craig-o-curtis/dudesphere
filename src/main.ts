@@ -11,8 +11,9 @@ async function bootstrap() {
   // Enable validation with class-validator
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      transform: true,
+      whitelist: true, // ignores any extra properties that are not defined in the DTO
+      forbidNonWhitelisted: true, // throws an error if any extra properties are present
+      transform: true, // automatically transforms payloads to be objects typed according to their DTO classes
     }),
   );
 
