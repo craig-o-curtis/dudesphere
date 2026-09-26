@@ -1,22 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["@northguild/gmt-oxlint"],
+  "extends": ["./node_modules/@northguild/gmt-oxlint/config/recommended.json"],
   "plugins": ["import"],
   "rules": {
     "typescript/no-explicit-any": "off",
-    "typescript/no-floating-promises": "error",
-    "import/sort": [
-      "error",
-      {
-        "groups": [
-          "builtin",
-          "external",
-          "internal",
-          "parent",
-          "sibling",
-          "index"
-        ]
-      }
-    ]
+    "typescript/no-floating-promises": "error"
   },
   "env": {
     "node": true

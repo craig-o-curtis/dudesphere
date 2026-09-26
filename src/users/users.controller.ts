@@ -26,12 +26,19 @@ export class UsersController {
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query("isDude", new DefaultValuePipe(false), ParseBoolPipe) isDude: boolean,
   ) {
-    return this.usersService.getUsers(limit, page, isDude);
+    // if has boolean for isDude, then call the other service methods
+    if (typeof isDude !== "boolean") {
+      return this.usersService.getUsers(limit, page);
+    }
+    if (isDude) {
+      return this.usersService.getDudes(limit, page);
+    }
+    return this.usersService.getNonDudes(limit, page);
   }
 
   @Get(":id")
-  getUser(@Param("id", ParseIntPipe) id: number): unknown {
-    return this.usersService.getUser(id);
+  getUserById(@Param("id", ParseIntPipe) id: number): unknown {
+    return this.usersService.getUserById(id);
   }
 
   @Post()

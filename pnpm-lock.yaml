@@ -17,12 +17,18 @@ importers:
       '@nestjs/core':
         specifier: ^12.0.1
         version: 12.0.4(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@12.0.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/mapped-types':
+        specifier: ^12.0.0
+        version: 12.0.0(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)
       '@nestjs/observe':
         specifier: ^0.3.0
         version: 0.3.1(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.4(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)
+      '@northguild/gmt':
+        specifier: ^1.17.0
+        version: 1.17.0
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -48,6 +54,9 @@ importers:
       '@nestjs/testing':
         specifier: ^12.0.1
         version: 12.0.4(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)(@nestjs/platform-express@12.0.4)
+      '@northguild/gmt-oxlint':
+        specifier: ^1.2.1
+        version: 1.2.1(oxlint@1.85.0(oxlint-tsgolint@7.0.2002))
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
@@ -292,6 +301,10 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@js-temporal/polyfill@0.5.1':
+    resolution: {integrity: sha512-hloP58zRVCRSpgDxmqCWJNlizAlUgJFqG2ypq79DCvyv9tHjRYMDOcPFjzfl/A1/YxDvRCZz8wvZvmapQnKwFQ==}
+    engines: {node: '>=12'}
+
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
     engines: {node: '>=8'}
@@ -362,6 +375,20 @@ packages:
       '@nestjs/platform-express':
         optional: true
       '@nestjs/websockets':
+        optional: true
+
+  '@nestjs/mapped-types@12.0.0':
+    resolution: {integrity: sha512-aX7lxZcqXldtnSr0bgT2ZPQvpTpIwBMW1GMX29o4s3q02vmq6JoTYuPW0GwYXa8BiFMRX7WbGZVDA703pNqOMQ==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@nestjs/common': ^10.0.0 || ^11.0.0 || ^12.0.0
+      class-transformer: ^0.4.0 || ^0.5.0
+      class-validator: ^0.13.0 || ^0.14.0 || ^0.15.0
+      reflect-metadata: ^0.1.12 || ^0.2.0
+    peerDependenciesMeta:
+      class-transformer:
+        optional: true
+      class-validator:
         optional: true
 
   '@nestjs/mau@0.2.8':
@@ -435,6 +462,15 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@northguild/gmt-oxlint@1.2.1':
+    resolution: {integrity: sha512-ot1NndXxCaGikCYqe3r4D+nFM3twd1WMwylfj8xfWLCCWSRYgIFXmQ2yLpCcjf53KWxS660jmaIqWndXQh5lQA==}
+    peerDependencies:
+      oxlint: '>=1.0.0'
+
+  '@northguild/gmt@1.17.0':
+    resolution: {integrity: sha512-I+pBuASzEqvEHPw5V8iIzg/XqNW7zptj+n4askXs1tZ71eciw9sYxcsF1MFohR1Ha4tOggBLy1q8U7BR+St3bw==}
+    engines: {node: '>=22.16.0'}
 
   '@oxc-project/types@0.150.0':
     resolution: {integrity: sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw==}
@@ -1612,6 +1648,9 @@ packages:
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
+  jsbi@4.3.2:
+    resolution: {integrity: sha512-9fqMSQbhJykSeii05nxKl4m6Eqn2P6rOlYiS+C5Dr/HPIU/7yZxu5qzbs40tgaFORiw2Amd0mirjxatXYMkIew==}
+
   json-schema-traverse@1.0.0:
     resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
 
@@ -2621,6 +2660,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@js-temporal/polyfill@0.5.1':
+    dependencies:
+      jsbi: 4.3.2
+
   '@lukeed/csprng@1.1.0': {}
 
   '@nestjs/cli@12.0.3(@swc/core@1.16.2)(@types/node@24.13.6)(prettier@3.9.8)(webpack@5.111.1(@swc/core@1.16.2))':
@@ -2684,6 +2727,14 @@ snapshots:
     optionalDependencies:
       '@nestjs/platform-express': 12.0.4(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)
 
+  '@nestjs/mapped-types@12.0.0(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)':
+    dependencies:
+      '@nestjs/common': 12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      reflect-metadata: 0.2.2
+    optionalDependencies:
+      class-transformer: 0.5.1
+      class-validator: 0.15.1
+
   '@nestjs/mau@0.2.8':
     dependencies:
       chalk: 4.1.2
@@ -2736,6 +2787,14 @@ snapshots:
       '@nestjs/platform-express': 12.0.4(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)
 
   '@noble/hashes@1.8.0': {}
+
+  '@northguild/gmt-oxlint@1.2.1(oxlint@1.85.0(oxlint-tsgolint@7.0.2002))':
+    dependencies:
+      oxlint: 1.85.0(oxlint-tsgolint@7.0.2002)
+
+  '@northguild/gmt@1.17.0':
+    dependencies:
+      '@js-temporal/polyfill': 0.5.1
 
   '@oxc-project/types@0.150.0': {}
 
@@ -3752,6 +3811,8 @@ snapshots:
     optional: true
 
   js-tokens@10.0.0: {}
+
+  jsbi@4.3.2: {}
 
   json-schema-traverse@1.0.0: {}
 

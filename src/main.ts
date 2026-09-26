@@ -1,4 +1,5 @@
-import { ValidationPipe } from "@nestjs/common";
+import { ClassSerializerInterceptor, ValidationPipe } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule, ObserveInstrument } from "./app.module.js";
@@ -7,6 +8,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     instrument: ObserveInstrument,
   });
+
+  // Enable serialization to exclude sensitive fields (e.g. password)
+  // So using @Exclude() will work
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   // Enable validation with class-validator
   app.useGlobalPipes(

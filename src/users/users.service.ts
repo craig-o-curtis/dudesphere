@@ -1,11 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Inject, forwardRef } from "@nestjs/common";
 
+import { AuthService } from "../auth/auth.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 
 @Injectable()
 export class UsersService {
+  constructor(@Inject(forwardRef(() => AuthService)) private readonly authService: AuthService) {}
   // for now mock users in the constructor
   private users: UserResponseDto[] = [
     {
@@ -24,30 +26,59 @@ export class UsersService {
     },
   ];
 
-  getUsers(limit?: number, page?: number, isDude?: boolean): unknown {
-    let users = this.users.filter((user) => {
-      if (isDude) {
-        return user.isDude;
-      }
-      return true;
-    });
-
-    if (limit && page) {
-      const startIndex = (page - 1) * limit;
-      const endIndex = page * limit;
-      return users.slice(startIndex, endIndex);
+  getUsers(limit?: number, page?: number): UserResponseDto[] {
+    if (!this.authService.isAuthenticated) {
+      throw new Error("User is not authenticated");
     }
 
-    return users;
+    let result = this.users;
+
+    if (limit || page) {
+      const pageSize = limit ?? 20;
+      const pageNum = page ?? 1;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = pageNum * pageSize;
+      result = result.slice(startIndex, endIndex);
+    }
+
+    return result;
   }
 
-  getUser(id: number): UserResponseDto {
+  getUserById(id: number): UserResponseDto {
     const user = this.users.find((user) => user.id === id);
     if (!user) {
       throw new Error("User not found");
     }
 
     return user;
+  }
+
+  getDudes(limit?: number, page?: number): UserResponseDto[] {
+    let result = this.users.filter((user) => user.isDude);
+
+    if (limit || page) {
+      const pageSize = limit ?? 20;
+      const pageNum = page ?? 1;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = pageNum * pageSize;
+      result = result.slice(startIndex, endIndex);
+    }
+
+    return result;
+  }
+
+  getNonDudes(limit?: number, page?: number): UserResponseDto[] {
+    let result = this.users.filter((user) => !user.isDude);
+
+    if (limit || page) {
+      const pageSize = limit ?? 20;
+      const pageNum = page ?? 1;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = pageNum * pageSize;
+      result = result.slice(startIndex, endIndex);
+    }
+
+    return result;
   }
 
   createUser(createUserDto: CreateUserDto): number {
@@ -65,10 +96,7 @@ export class UsersService {
   updateUser(id: number, updateUserDto: UpdateUserDto): string {
     const userIndex = this.users.findIndex((user) => user.id === id);
     if (userIndex !== -1) {
-      this.users[userIndex] = {
-        ...this.users[userIndex],
-        ...updateUserDto,
-      };
+      this.users[userIndex] = Object.assign({}, this.users[userIndex], updateUserDto);
     }
 
     return "User with id: " + id + " updated";
