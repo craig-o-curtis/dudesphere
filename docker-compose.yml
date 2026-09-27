@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: dude-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${PG_ADMIN_USER}
+      POSTGRES_PASSWORD: ${PG_ADMIN_PW}
+      POSTGRES_DB: ${PG_DATABASE}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_ADMIN_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:8
+    container_name: dude-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MG_ADMIN_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MG_ADMIN_PW}
+      MONGO_INITDB_DATABASE: dude-tweets
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dude-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dude.com
+      PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PW}
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: dude-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MG_ADMIN_USER}:${MG_ADMIN_PW}@mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MG_ADMIN_USER}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MG_ADMIN_PW}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongo
+
+volumes:
+  postgres_data:
+  mongo_data:
