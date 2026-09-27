@@ -5,9 +5,10 @@ export class UserResponseDto {
   name: string;
   email: string;
   isDude: boolean;
+  createdAt?: string | null;
 
   @Exclude()
-  password: string;
+  password?: string;
 
   constructor(partial: Partial<UserResponseDto>) {
     Object.assign(this, partial);
