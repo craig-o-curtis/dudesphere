@@ -9,5 +9,13 @@
   },
   "env": {
     "node": true
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.entity.ts", "src/**/*.schema.ts"],
+      "rules": {
+        "@northguild/gmt-oxlint/no-date-global": "off"
+      }
+    }
+  ]
 }
