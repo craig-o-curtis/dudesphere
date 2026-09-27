@@ -1,118 +1,234 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# dude
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS demo application with PostgreSQL (TypeORM) and MongoDB (Mongoose).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech Stack
 
-## Description
+- **NestJS 12** — Backend framework
+- **PostgreSQL 18** — User data (TypeORM)
+- **MongoDB 8** — Tweet data (Mongoose)
+- **@northguild/gmt** — GMT-only date handling (ISO strings, zero JS Date usage)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Prerequisites
 
-## Project setup
+- [Node.js](https://nodejs.org/) (LTS version)
+- [pnpm](https://pnpm.io/installation)
+- [Docker](https://www.docker.com/) (for databases)
+
+## Project Setup
 
 ```bash
-$ pnpm install
+# Install dependencies
+pnpm install
 ```
 
-## Compile and run the project
+## Environment Variables
+
+Copy the example environment file and adjust as needed:
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+cp .env.example .env
 ```
 
-## Run tests
+## Running the Application
 
 ```bash
-# unit tests
-$ pnpm run test
+# Development mode (with hot reload)
+pnpm run start:dev
 
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+# Production mode
+pnpm run start:prod
 ```
 
-## Deployment
+## Database Setup with Docker Compose
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Start PostgreSQL, MongoDB, and pgAdmin:
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Start all database services in the background
+docker compose up -d
+
+# Check service status
+docker compose ps
+
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (⚠️ deletes all data)
+docker compose down -v
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Database Services
 
-## Observability
+| Service       | Port  | URL                   | Description              |
+| ------------- | ----- | --------------------- | ------------------------ |
+| PostgreSQL    | 5432  | —                     | User data (TypeORM)      |
+| MongoDB       | 27017 | —                     | Tweet data (Mongoose)    |
+| pgAdmin       | 5050  | http://localhost:5050 | PostgreSQL management UI |
+| Mongo Express | 8081  | http://localhost:8081 | MongoDB management UI    |
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+### Database Credentials
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+Credentials are configured in `.env`:
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+- **PostgreSQL**: `dude` / `dude_password_123`
+- **MongoDB**: `dude` / `dude_mongo_123`
 
-This project is already instrumented. Create a free account at [observe.nestjs.com](https://observe.nestjs.com), add an application, and paste the generated app key and secret into the `ObserveModule.forRoot()` call in `src/app.module.ts`.
+## Development Commands
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+```bash
+# Lint code (oxlint with GMT plugin)
+pnpm run lint
 
-## Resources
+# Run unit tests
+pnpm run test
 
-Check out a few resources that may come in handy when working with NestJS:
+# Run e2e tests
+pnpm run test:e2e
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+# Run test coverage
+pnpm run test:cov
 
-## Support
+# Build the project
+pnpm run build
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## API Endpoints
 
-## Stay in touch
+### Users
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+| Method | Endpoint   | Description    |
+| ------ | ---------- | -------------- |
+| GET    | /users     | Get all users  |
+| GET    | /users/:id | Get user by ID |
+| POST   | /users     | Create a user  |
+| PATCH  | /users/:id | Update a user  |
+| DELETE | /users/:id | Delete a user  |
 
-## License
+### Tweets
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Method | Endpoint   | Description     |
+| ------ | ---------- | --------------- |
+| GET    | /tweet     | Get all tweets  |
+| GET    | /tweet/:id | Get tweet by ID |
+| POST   | /tweet     | Create a tweet  |
+| PATCH  | /tweet/:id | Update a tweet  |
+| DELETE | /tweet/:id | Delete a tweet  |
+
+### Auth
+
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| POST   | /auth    | Login       |
+
+## Database Usage
+
+| Database   | What it stores         | ORM/Driver | Module       |
+| ---------- | ---------------------- | ---------- | ------------ |
+| PostgreSQL | Users (accounts)       | TypeORM    | `src/users/` |
+| MongoDB    | Tweets (posts/replies) | Mongoose   | `src/tweet/` |
+
+PostgreSQL is a relational database — perfect for structured user data with relationships. MongoDB is a document database — ideal for flexible tweet records that may include nested replies.
+
+## Running with Docker Compose (Recommended)
+
+Run the entire application — NestJS + PostgreSQL + MongoDB — in a single Docker Compose setup. This gives you a production-like environment locally with zero config differences.
+
+### How It Works
+
+```
+┌──────────────────────────────────────────────┐
+│           Docker Network                     │
+│                                              │
+│  ┌───────────┐    postgres:5432   ┌─────────┐│
+│  │  dude-app │ ─────────────────→ │postgres ││
+│  │ (NestJS)  │                    │         ││
+│  └───────────┘                    └─────────┘│
+│       │                                   │  │
+│       │    mongo:27017                    │  │
+│       └─────────────────────────────────→ │mongo│
+│                                           └─┼───┘
+│  ┌──────────┐                               │
+│  │ pgadmin  │ ──────────────────────────────┘
+│  │ :5050    │                               │
+│  └──────────┘                               │
+└─────────────────────────────────────────────┘
+        ↓ port mapping
+   localhost:3000 → dude-app:3000
+```
+
+All containers share a Docker network, so service names (`postgres`, `mongo`) resolve automatically as hostnames. No config changes between local dev and production.
+
+### Quick Start
+
+```bash
+# Build and start everything in the background
+docker compose up -d --build
+
+# Follow the app logs (same as seeing output in your terminal)
+docker compose logs -f dude
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (⚠️ deletes all data)
+docker compose down -v
+```
+
+### Development with Hot-Reload
+
+The Docker setup mounts your local `src/` directory into the container, so **hot-reload works exactly like local dev**:
+
+1. Start Docker: `docker compose up -d`
+2. Edit files in your editor
+3. NestJS detects changes and reloads automatically
+4. Refresh your browser or Thunder Client to see updates
+
+**No rebuild needed for code changes.** Only rebuild when you add/remove npm packages:
+
+```bash
+docker compose up -d --build   # After adding packages
+docker compose up -d            # Normal dev (no rebuild)
+```
+
+### Two Development Approaches
+
+| Approach                 | Command                                                      | Hot-Reload          | DB Host             |
+| ------------------------ | ------------------------------------------------------------ | ------------------- | ------------------- |
+| **Docker (recommended)** | `docker compose up -d`                                       | ✅ Via volume mount | `PG_HOST=postgres`  |
+| **Local NestJS**         | `pnpm run start:dev` + `docker compose up -d postgres mongo` | ✅ Instant          | `PG_HOST=localhost` |
+
+**Docker approach:** One command, everything runs together. Best for demos and production parity.
+
+**Local approach:** Faster iteration (no Docker overhead). Run databases in Docker, NestJS locally. Change `PG_HOST=localhost` in `.env`.
+
+### Useful Commands
+
+```bash
+# View logs for all services
+docker compose logs -f
+
+# View logs for a specific service
+docker compose logs -f dude        # NestJS app
+docker compose logs -f postgres    # PostgreSQL
+docker compose logs -f mongo       # MongoDB
+
+# Check running containers
+docker compose ps
+
+# Rebuild after Dockerfile changes
+docker compose up -d --build
+
+# Enter a running container
+docker compose exec dude sh
+docker compose exec dude-postgres psql -U dude -d dude
+```
+
+## Architecture
+
+- **Users** → PostgreSQL via TypeORM (`src/users/`)
+- **Tweets** → MongoDB via Mongoose (`src/tweet/`)
+- **Date Handling** → ISO strings only, enforced by oxlint GMT plugin
