@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Query,
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { UsersService } from "../users/users.service.js";
 import { CreateTweetDto } from "./dto/create-tweet.dto.js";
@@ -24,11 +14,10 @@ export class TweetController {
   ) {}
 
   @Get()
-  public getTweets(
-    @Query("userId", new ParseIntPipe({ optional: true })) userId?: number,
-  ): TweetResponseDto[] {
-    const users = this.usersService.getUsers() as Array<{ id: number; name: string }>;
-    return this.tweetService.getTweets(userId).map(
+  public async getTweets(@Query("userId") userId?: number): Promise<TweetResponseDto[]> {
+    const users = await this.usersService.getUsers();
+    const tweets = await this.tweetService.getTweets(userId);
+    return tweets.map(
       (t) =>
         new TweetResponseDto({
           id: t.id,
@@ -42,9 +31,9 @@ export class TweetController {
   }
 
   @Post()
-  public postTweet(@Body() createTweetDto: CreateTweetDto): TweetResponseDto {
-    const newTweet = this.tweetService.createTweet(createTweetDto);
-    const users = this.usersService.getUsers() as Array<{ id: number; name: string }>;
+  public async postTweet(@Body() createTweetDto: CreateTweetDto): Promise<TweetResponseDto> {
+    const newTweet = await this.tweetService.createTweet(createTweetDto);
+    const users = await this.usersService.getUsers();
     return new TweetResponseDto({
       id: newTweet.id,
       userId: newTweet.userId,
@@ -56,13 +45,12 @@ export class TweetController {
   }
 
   @Patch(":id")
-  public patchTweet(
+  public async patchTweet(
     @Param("id") id: string,
     @Body() updateTweetDto: UpdateTweetDto,
-  ): TweetResponseDto {
-    const tweetId = Number(id);
-    const updatedTweet = this.tweetService.patchTweet(tweetId, updateTweetDto);
-    const users = this.usersService.getUsers() as Array<{ id: number; name: string }>;
+  ): Promise<TweetResponseDto> {
+    const updatedTweet = await this.tweetService.patchTweet(id, updateTweetDto);
+    const users = await this.usersService.getUsers();
     return new TweetResponseDto({
       id: updatedTweet.id,
       userId: updatedTweet.userId,
@@ -74,7 +62,7 @@ export class TweetController {
   }
 
   @Delete(":id")
-  deleteTweet(@Param("id", ParseIntPipe) id: number): void {
-    this.tweetService.deleteTweet(id);
+  async deleteTweet(@Param("id") id: string): Promise<void> {
+    await this.tweetService.deleteTweet(id);
   }
 }

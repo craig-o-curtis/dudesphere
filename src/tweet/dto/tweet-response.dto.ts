@@ -2,7 +2,7 @@ import { Expose, Transform } from "class-transformer";
 
 export class TweetResponseDto {
   @Expose()
-  id: number;
+  id: string;
 
   @Expose()
   userId: number;
@@ -11,11 +11,11 @@ export class TweetResponseDto {
   message: string;
 
   @Expose()
-  userName?: string;
+  userName?: string | null;
 
   @Expose()
   @Transform(({ obj }) => obj.replyToId || null)
-  replyToId?: number | null;
+  replyToId?: string | null;
 
   @Expose()
   @Transform(({ obj }) => (obj.createdAt ? obj.createdAt : null))

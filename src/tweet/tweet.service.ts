@@ -1,67 +1,94 @@
 import { Injectable } from "@nestjs/common";
-import { getUtcNow } from "@northguild/gmt";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
 
 import { CreateTweetDto } from "./dto/create-tweet.dto.js";
 import { TweetResponseDto } from "./dto/tweet-response.dto.js";
 import { UpdateTweetDto } from "./dto/update-tweet.dto.js";
+import { Tweet, TweetDocument } from "./tweet.schema.js";
 
 @Injectable()
 export class TweetService {
-  private tweets: TweetResponseDto[] = [
-    { id: 1, userId: 1, message: "tweet 1", createdAt: "2026-01-07T14:32:34Z", replyToId: null },
-    { id: 2, userId: 1, message: "tweet 2", createdAt: "2026-01-07T14:32:34Z", replyToId: null },
-    { id: 3, userId: 1, message: "tweet 3", createdAt: "2026-01-07T14:32:34Z", replyToId: 1 },
-    { id: 4, userId: 2, message: "tweet 4", createdAt: "2026-01-07T14:32:34Z", replyToId: null },
-  ];
+  constructor(@InjectModel(Tweet.name) private readonly tweetModel: Model<TweetDocument>) {}
 
-  getTweets(userId?: number) {
+  async getTweets(userId?: number): Promise<TweetResponseDto[]> {
+    const query: Record<string, any> = {};
     if (userId) {
-      return this.tweets.filter((tweet) => tweet.userId === userId);
+      query.userId = userId;
     }
 
-    return this.tweets;
+    const tweets = await this.tweetModel.find(query).exec();
+    return tweets.map((tweet) => ({
+      id: tweet._id.toString(),
+      userId: tweet.userId,
+      message: tweet.message,
+      userName: tweet.userName || null,
+      createdAt: tweet.createdAt ?? null,
+      replyToId: tweet.replyToId ?? null,
+    }));
   }
 
-  getTweetById(id: number): TweetResponseDto {
-    const tweet = this.tweets.find((tweet) => tweet.id === id);
+  async getTweetById(id: string): Promise<TweetResponseDto> {
+    const tweet = await this.tweetModel.findById(id).exec();
     if (!tweet) {
       throw new Error("Tweet not found");
     }
-    return tweet;
+    return {
+      id: tweet._id.toString(),
+      userId: tweet.userId,
+      message: tweet.message,
+      userName: tweet.userName || null,
+      createdAt: tweet.createdAt ?? null,
+      replyToId: tweet.replyToId ?? null,
+    };
   }
 
-  createTweet(createTweetDto: CreateTweetDto) {
-    const newTweet = {
-      id: this.tweets.length + 1,
+  async createTweet(createTweetDto: CreateTweetDto): Promise<TweetResponseDto> {
+    const newTweet = await this.tweetModel.create({
       userId: Number(createTweetDto.userId),
       message: createTweetDto.message,
-      createdAt: getUtcNow(),
-      replyToId: createTweetDto.replyToId ? Number(createTweetDto.replyToId) : null,
-    };
-    this.tweets.push(newTweet);
-    return newTweet;
-  }
-
-  patchTweet(id: number, updateTweetDto: UpdateTweetDto) {
-    const tweet = this.tweets.find((tweet) => tweet.id === id);
-    if (!tweet) {
-      throw new Error("Tweet not found");
-    }
-
-    const updatedTweet = Object.assign({}, tweet, {
-      ...updateTweetDto,
-      replyToId: updateTweetDto.replyToId ? Number(updateTweetDto.replyToId) : undefined,
+      replyToId: createTweetDto.replyToId || null,
     });
-    this.tweets = this.tweets.map((t) => (t.id === id ? updatedTweet : t));
-    return updatedTweet;
+
+    return {
+      id: newTweet._id.toString(),
+      userId: newTweet.userId,
+      message: newTweet.message,
+      userName: newTweet.userName || null,
+      createdAt: newTweet.createdAt ?? null,
+      replyToId: newTweet.replyToId ?? null,
+    };
   }
 
-  deleteTweet(tweetId: number) {
-    const tweet = this.tweets.find((tweet) => tweet.id === tweetId);
-    if (!tweet) {
+  async patchTweet(id: string, updateTweetDto: UpdateTweetDto): Promise<TweetResponseDto> {
+    const updatedTweet = await this.tweetModel
+      .findByIdAndUpdate(
+        id,
+        Object.assign({}, updateTweetDto, {
+          replyToId: updateTweetDto.replyToId || undefined,
+        }),
+        { new: true },
+      )
+      .exec();
+
+    if (!updatedTweet) {
       throw new Error("Tweet not found");
     }
 
-    this.tweets = this.tweets.filter((tweet) => tweet.id !== tweetId);
+    return {
+      id: updatedTweet._id.toString(),
+      userId: updatedTweet.userId,
+      message: updatedTweet.message,
+      userName: updatedTweet.userName || null,
+      createdAt: updatedTweet.createdAt ?? null,
+      replyToId: updatedTweet.replyToId ?? null,
+    };
+  }
+
+  async deleteTweet(tweetId: string): Promise<void> {
+    const result = await this.tweetModel.findByIdAndDelete(tweetId).exec();
+    if (!result) {
+      throw new Error("Tweet not found");
+    }
   }
 }
