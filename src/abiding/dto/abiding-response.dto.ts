@@ -1,6 +1,6 @@
 import { Expose, Transform } from "class-transformer";
 
-export class TweetResponseDto {
+export class AbidingResponseDto {
   @Expose()
   id: string;
 
@@ -25,7 +25,7 @@ export class TweetResponseDto {
   @Transform(({ obj }) => obj.updatedAt)
   updatedAt: string;
 
-  constructor(partial: Partial<TweetResponseDto>) {
+  constructor(partial: Partial<AbidingResponseDto>) {
     Object.assign(this, partial);
   }
 }
