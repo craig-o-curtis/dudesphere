@@ -6,6 +6,7 @@ export class UserResponseDto {
   email: string;
   role: string;
   isDude: boolean;
+  ordainedDate: string | null;
   createdAt: string;
   updatedAt: string;
 

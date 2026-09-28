@@ -11,7 +11,7 @@ export class AuthService {
     private readonly usersService: UsersService,
   ) {}
 
-  public get isAuthenticated(): boolean {
+  get isAuthenticated(): boolean {
     return this.authStateService.isAuthenticated;
   }
 

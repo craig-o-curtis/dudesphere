@@ -26,7 +26,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MG_ADMIN_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MG_ADMIN_PW}
-      MONGO_INITDB_DATABASE: dude-tweets
+      MONGO_INITDB_DATABASE: dude-abidings
     ports:
       - "27017:27017"
     volumes:

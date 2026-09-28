@@ -14,7 +14,8 @@
     {
       "files": ["src/**/*.entity.ts", "src/**/*.schema.ts"],
       "rules": {
-        "@northguild/gmt-oxlint/no-date-global": "off"
+        "@northguild/gmt-oxlint/no-date-global": "off",
+        "@northguild/gmt-oxlint/no-new-date": "off"
       }
     }
   ]
