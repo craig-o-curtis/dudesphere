@@ -1,4 +1,4 @@
-# dude
+# DudeSphere
 
 NestJS demo application with PostgreSQL (TypeORM) and MongoDB (Mongoose).
 
@@ -6,7 +6,7 @@ NestJS demo application with PostgreSQL (TypeORM) and MongoDB (Mongoose).
 
 - **NestJS 12** — Backend framework
 - **PostgreSQL 18** — User data (TypeORM)
-- **MongoDB 8** — Tweet data (Mongoose)
+- **MongoDB 8** — Abiding data (Mongoose)
 - **@northguild/gmt** — GMT-only date handling (ISO strings, zero JS Date usage)
 
 ## Prerequisites
@@ -66,7 +66,7 @@ docker compose down -v
 | Service       | Port  | URL                   | Description              |
 | ------------- | ----- | --------------------- | ------------------------ |
 | PostgreSQL    | 5432  | —                     | User data (TypeORM)      |
-| MongoDB       | 27017 | —                     | Tweet data (Mongoose)    |
+| MongoDB       | 27017 | —                     | Abiding data (Mongoose)  |
 | pgAdmin       | 5050  | http://localhost:5050 | PostgreSQL management UI |
 | Mongo Express | 8081  | http://localhost:8081 | MongoDB management UI    |
 
@@ -108,15 +108,15 @@ pnpm run build
 | PATCH  | /users/:id | Update a user  |
 | DELETE | /users/:id | Delete a user  |
 
-### Tweets
+### Abidings
 
-| Method | Endpoint   | Description     |
-| ------ | ---------- | --------------- |
-| GET    | /tweet     | Get all tweets  |
-| GET    | /tweet/:id | Get tweet by ID |
-| POST   | /tweet     | Create a tweet  |
-| PATCH  | /tweet/:id | Update a tweet  |
-| DELETE | /tweet/:id | Delete a tweet  |
+| Method | Endpoint     | Description       |
+| ------ | ------------ | ----------------- |
+| GET    | /abiding     | Get all abidings  |
+| GET    | /abiding/:id | Get abiding by ID |
+| POST   | /abiding     | Create a abiding  |
+| PATCH  | /abiding/:id | Update a abiding  |
+| DELETE | /abiding/:id | Delete a abiding  |
 
 ### Auth
 
@@ -126,12 +126,12 @@ pnpm run build
 
 ## Database Usage
 
-| Database   | What it stores         | ORM/Driver | Module       |
-| ---------- | ---------------------- | ---------- | ------------ |
-| PostgreSQL | Users (accounts)       | TypeORM    | `src/users/` |
-| MongoDB    | Tweets (posts/replies) | Mongoose   | `src/tweet/` |
+| Database   | What it stores           | ORM/Driver | Module         |
+| ---------- | ------------------------ | ---------- | -------------- |
+| PostgreSQL | Users (accounts)         | TypeORM    | `src/users/`   |
+| MongoDB    | Abidings (posts/replies) | Mongoose   | `src/abiding/` |
 
-PostgreSQL is a relational database — perfect for structured user data with relationships. MongoDB is a document database — ideal for flexible tweet records that may include nested replies.
+PostgreSQL is a relational database — perfect for structured user data with relationships. MongoDB is a document database — ideal for flexible abiding records that may include nested replies.
 
 ## Running with Docker Compose (Recommended)
 
@@ -230,5 +230,5 @@ docker compose exec dude-postgres psql -U dude -d dude
 ## Architecture
 
 - **Users** → PostgreSQL via TypeORM (`src/users/`)
-- **Tweets** → MongoDB via Mongoose (`src/tweet/`)
+- **Abidings** → MongoDB via Mongoose (`src/abiding/`)
 - **Date Handling** → ISO strings only, enforced by oxlint GMT plugin
