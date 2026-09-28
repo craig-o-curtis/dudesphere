@@ -27,16 +27,15 @@ export class UsersController {
   getUsers(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("isDude", new DefaultValuePipe(false), ParseBoolPipe) isDude: boolean,
+    @Query("isDude") isDude?: string,
   ) {
-    // if has boolean for isDude, then call the other service methods
-    if (typeof isDude !== "boolean") {
-      return this.usersService.getUsers(limit, page);
-    }
-    if (isDude) {
+    if (isDude === "true") {
       return this.usersService.getDudes(limit, page);
     }
-    return this.usersService.getNonDudes(limit, page);
+    if (isDude === "false") {
+      return this.usersService.getNonDudes(limit, page);
+    }
+    return this.usersService.getUsers(limit, page);
   }
 
   @Get(":id")
