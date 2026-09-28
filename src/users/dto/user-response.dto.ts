@@ -4,8 +4,10 @@ export class UserResponseDto {
   id: number;
   name: string;
   email: string;
+  role: string;
   isDude: boolean;
-  createdAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 
   @Exclude()
   password?: string;

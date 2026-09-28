@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
-export class CreateTweetDto {
+export class CreateAbidingDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
