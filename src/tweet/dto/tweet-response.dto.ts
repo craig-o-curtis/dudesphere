@@ -18,8 +18,12 @@ export class TweetResponseDto {
   replyToId?: string | null;
 
   @Expose()
-  @Transform(({ obj }) => (obj.createdAt ? obj.createdAt : null))
-  createdAt: string | null;
+  @Transform(({ obj }) => obj.createdAt)
+  createdAt: string;
+
+  @Expose()
+  @Transform(({ obj }) => obj.updatedAt)
+  updatedAt: string;
 
   constructor(partial: Partial<TweetResponseDto>) {
     Object.assign(this, partial);

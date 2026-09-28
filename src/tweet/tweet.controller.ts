@@ -24,8 +24,8 @@ export class TweetController {
           userId: t.userId,
           message: t.message,
           userName: users.find((u) => u.id === t.userId)?.name || "Unknown",
-          createdAt: t.createdAt || null,
-          replyToId: t.replyToId ?? null,
+          createdAt: t.createdAt || "",
+          replyToId: t.replyToId ?? undefined,
         }),
     );
   }

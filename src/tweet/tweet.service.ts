@@ -18,14 +18,7 @@ export class TweetService {
     }
 
     const tweets = await this.tweetModel.find(query).exec();
-    return tweets.map((tweet) => ({
-      id: tweet._id.toString(),
-      userId: tweet.userId,
-      message: tweet.message,
-      userName: tweet.userName || null,
-      createdAt: tweet.createdAt ?? null,
-      replyToId: tweet.replyToId ?? null,
-    }));
+    return tweets.map((tweet) => this.toResponseDto(tweet));
   }
 
   async getTweetById(id: string): Promise<TweetResponseDto> {
@@ -33,14 +26,7 @@ export class TweetService {
     if (!tweet) {
       throw new Error("Tweet not found");
     }
-    return {
-      id: tweet._id.toString(),
-      userId: tweet.userId,
-      message: tweet.message,
-      userName: tweet.userName || null,
-      createdAt: tweet.createdAt ?? null,
-      replyToId: tweet.replyToId ?? null,
-    };
+    return this.toResponseDto(tweet);
   }
 
   async createTweet(createTweetDto: CreateTweetDto): Promise<TweetResponseDto> {
@@ -50,14 +36,7 @@ export class TweetService {
       replyToId: createTweetDto.replyToId || null,
     });
 
-    return {
-      id: newTweet._id.toString(),
-      userId: newTweet.userId,
-      message: newTweet.message,
-      userName: newTweet.userName || null,
-      createdAt: newTweet.createdAt ?? null,
-      replyToId: newTweet.replyToId ?? null,
-    };
+    return this.toResponseDto(newTweet);
   }
 
   async patchTweet(id: string, updateTweetDto: UpdateTweetDto): Promise<TweetResponseDto> {
@@ -75,14 +54,7 @@ export class TweetService {
       throw new Error("Tweet not found");
     }
 
-    return {
-      id: updatedTweet._id.toString(),
-      userId: updatedTweet.userId,
-      message: updatedTweet.message,
-      userName: updatedTweet.userName || null,
-      createdAt: updatedTweet.createdAt ?? null,
-      replyToId: updatedTweet.replyToId ?? null,
-    };
+    return this.toResponseDto(updatedTweet);
   }
 
   async deleteTweet(tweetId: string): Promise<void> {
@@ -90,5 +62,19 @@ export class TweetService {
     if (!result) {
       throw new Error("Tweet not found");
     }
+  }
+
+  // --- Private helpers ---
+
+  private toResponseDto(tweet: TweetDocument): TweetResponseDto {
+    return {
+      id: tweet._id.toString(),
+      userId: tweet.userId,
+      message: tweet.message,
+      userName: tweet.userName || undefined,
+      createdAt: tweet.createdAt ?? "",
+      updatedAt: tweet.updatedAt ?? "",
+      replyToId: tweet.replyToId ?? undefined,
+    };
   }
 }
