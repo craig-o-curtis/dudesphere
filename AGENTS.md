@@ -4,4 +4,4 @@ This is a vanilla Nestjs project. The goal is to setup with raw databases, no fa
 
 ## Resources
 
-See `.agents/skills/nestjs-best-practices` for more details.
+Follow NestJS Best Practices with all code related to NestJS. See `.agents/skills/nestjs-best-practices` for implementation details.

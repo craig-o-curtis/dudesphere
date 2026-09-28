@@ -1,6 +1,6 @@
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
-export class UpdateTweetDto {
+export class UpdateAbidingDto {
   @IsOptional()
   @IsString()
   @MinLength(1)

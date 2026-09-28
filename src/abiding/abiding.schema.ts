@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document } from "mongoose";
 
-export type TweetDocument = Tweet & Document;
+export type AbidingDocument = Abiding & Document;
 
 @Schema({ timestamps: true })
-export class Tweet extends Document {
+export class Abiding extends Document {
   @Prop({ required: true })
   userId: number;
 
@@ -15,7 +15,7 @@ export class Tweet extends Document {
   })
   message: string;
 
-  // Optional reply chain — reference to parent tweet (MongoDB ObjectId)
+  // Optional reply chain — reference to parent abiding (MongoDB ObjectId)
   @Prop({ type: String, default: null })
   replyToId: string | null;
 
@@ -23,24 +23,17 @@ export class Tweet extends Document {
   @Prop({ type: String, default: null })
   userName: string | null;
 
-  // Flexible media — optional images, links, etc.
-  @Prop([{ type: String }])
-  images?: string[];
-
-  @Prop([{ type: String }])
-  links?: string[];
-
   // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
   createdAt: string | null;
   updatedAt: string | null;
 }
 
-export const TweetSchema = SchemaFactory.createForClass(Tweet);
+export const AbidingSchema = SchemaFactory.createForClass(Abiding);
 
 // Convert Mongoose Date getters to ISO strings (no JS Date objects in app code)
-TweetSchema.path("createdAt").get(function (this: TweetDocument, v: Date) {
+AbidingSchema.path("createdAt").get(function (this: AbidingDocument, v: Date) {
   return v?.toISOString() ?? null;
 });
-TweetSchema.path("updatedAt").get(function (this: TweetDocument, v: Date) {
+AbidingSchema.path("updatedAt").get(function (this: AbidingDocument, v: Date) {
   return v?.toISOString() ?? null;
 });

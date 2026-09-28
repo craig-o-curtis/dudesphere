@@ -4,11 +4,11 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { createObserveModule } from "@nestjs/observe";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { AbidingModule } from "./abiding/abiding.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { TweetModule } from "./tweet/tweet.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -18,24 +18,25 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ConfigModule.forRoot(),
     ObserveModule.forRootAsync({
       imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         appKey: config.getOrThrow<string>("DUDE_OBSERVE_APP_KEY"),
         appSecret: config.getOrThrow<string>("DUDE_OBSERVE_APP_SECRET"),
         serviceId: "dude",
       }),
-      inject: [ConfigService],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         type: "postgres",
-        host: config.get("PG_HOST", "localhost"),
-        port: config.get("PG_PORT", 5432),
-        username: config.get("PG_ADMIN_USER", "dude"),
-        password: config.get("PG_ADMIN_PW", "dude_password_123"),
-        database: config.get("PG_DATABASE", "dude"),
+        host: config.getOrThrow("PG_HOST"),
+        port: config.getOrThrow("PG_PORT"),
+        username: config.getOrThrow("PG_ADMIN_USER"),
+        password: config.getOrThrow("PG_ADMIN_PW"),
+        database: config.getOrThrow("PG_DATABASE"),
         autoLoadEntities: true,
-        synchronize: true, // WARNING: only for development! Use migrations in production.
+        // TODO see if need entities array with [User]
+        synchronize: config.get("NODE_ENV") !== "production", // synchronize creates, updates, and deletes tables - only use in development
       }),
       inject: [ConfigService],
     }),
@@ -48,7 +49,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     UsersModule,
     AuthStateModule,
-    TweetModule,
+    AbidingModule,
     AuthModule,
   ],
   controllers: [AppController],
