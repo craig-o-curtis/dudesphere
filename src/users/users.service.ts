@@ -1,6 +1,5 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
 import { CreateUserDto } from "./dto/create-user.dto.js";
@@ -13,7 +12,7 @@ export class UsersService {
   constructor(@InjectRepository(User) private readonly usersRepository: Repository<User>) {}
 
   async getUsers(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: undefined }, limit, page);
+    return this.findAll(limit, page);
   }
 
   async getUserById(id: number): Promise<UserResponseDto> {
@@ -32,30 +31,17 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
-  async getDudes(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: true }, limit, page);
-  }
-
-  async getNonDudes(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: false }, limit, page);
-  }
-
   async createUser(createUserDto: CreateUserDto): Promise<number> {
     const existing = await this.usersRepository.findOne({ where: { email: createUserDto.email } });
     if (existing) {
       throw new ConflictException("Email already registered"); // Returns code 409
     }
 
-    const now = getUtcNow();
     // .create returns TypeORM entity instance tracked by repository's persistence context
     const newUser = this.usersRepository.create({
-      name: createUserDto.name,
+      username: createUserDto.username,
       email: createUserDto.email,
       password: createUserDto.password,
-      isDude: createUserDto.isDude ?? false,
-      ordainedDate: createUserDto.ordainedDate ?? null,
-      createdAt: now,
-      updatedAt: now,
     });
 
     // .save inserts into the table
@@ -88,20 +74,8 @@ export class UsersService {
 
   // --- Private helpers ---
 
-  private async findAll(
-    where: Partial<User>,
-    limit?: number,
-    page?: number,
-  ): Promise<UserResponseDto[]> {
-    // Filter out undefined values from where clause
-    const filteredWhere = Object.fromEntries(
-      Object.entries(where).filter(([_, v]) => v !== undefined),
-    );
-
+  private async findAll(limit?: number, page?: number): Promise<UserResponseDto[]> {
     let query = this.usersRepository.createQueryBuilder("user");
-    if (Object.keys(filteredWhere).length > 0) {
-      query = query.where(filteredWhere);
-    }
 
     if (limit || page) {
       const pageSize = limit ?? 20;
@@ -116,11 +90,9 @@ export class UsersService {
   private toResponseDto(user: User): UserResponseDto {
     return {
       id: user.id,
-      name: user.name,
+      username: user.username,
       email: user.email,
       role: user.role,
-      isDude: user.isDude,
-      ordainedDate: user.ordainedDate ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

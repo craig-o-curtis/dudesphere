@@ -71,7 +71,7 @@ export class AbidingService {
       id: abiding._id.toString(),
       userId: abiding.userId,
       message: abiding.message,
-      userName: abiding.userName || undefined,
+      username: abiding.username || undefined,
       createdAt: abiding.createdAt ?? "",
       updatedAt: abiding.updatedAt ?? "",
       replyToId: abiding.replyToId ?? undefined,

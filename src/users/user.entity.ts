@@ -1,12 +1,9 @@
 import { Exclude } from "class-transformer";
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { Column, Entity, Index, PrimaryGeneratedColumn } from "typeorm";
+
+import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
+import { SoftDeleteUtcColumn } from "../shared/decorators/soft-delete-utc-column.decorator.js";
+import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
 
 export enum UserRole {
   ADMIN = "admin",
@@ -25,10 +22,11 @@ export class User {
   @Column({
     type: "varchar",
     nullable: false,
-    length: 100,
+    length: 24,
+    unique: true,
   })
   @Index()
-  name: string;
+  username: string;
 
   @Column({ type: "varchar", nullable: false, length: 100, unique: true })
   @Index()
@@ -41,30 +39,15 @@ export class User {
   @Column({ type: "simple-enum", enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @Column({ default: false })
-  isDude: boolean;
-
-  // Optional date when the user was ordained as a dude priest (ISO 8601 UTC string)
-  @Column({ type: "timestamp", nullable: true })
-  ordainedDate: string | null;
-
-  @CreateDateColumn({
-    type: "timestamp",
-    transformer: {
-      // oxlint-disable-next-line no-new-date — TypeORM transformer requires Date conversion
-      to: (value: string) => new Date(value),
-      from: (value: Date) => value.toISOString(),
-    },
-  })
+  // Auto-set once on row creation
+  @CreateUtcColumn()
   createdAt: string;
 
-  @UpdateDateColumn({
-    type: "timestamp",
-    transformer: {
-      // oxlint-disable-next-line no-new-date — TypeORM transformer requires Date conversion
-      to: (value: string) => new Date(value),
-      from: (value: Date) => value.toISOString(),
-    },
-  })
+  // Auto-set on creation, auto-update on every change
+  @UpdateUtcColumn()
   updatedAt: string;
+
+  // Soft delete column — set by TypeORM softDelete(), transformer prevents Date leakage
+  @SoftDeleteUtcColumn()
+  deletedAt: string | null;
 }

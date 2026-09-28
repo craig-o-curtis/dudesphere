@@ -2,16 +2,17 @@ import { Exclude } from "class-transformer";
 
 export class UserResponseDto {
   id: number;
-  name: string;
+  username: string;
   email: string;
   role: string;
-  isDude: boolean;
-  ordainedDate: string | null;
   createdAt: string;
   updatedAt: string;
 
   @Exclude()
   password?: string;
+
+  @Exclude()
+  deletedAt?: string;
 
   constructor(partial: Partial<UserResponseDto>) {
     Object.assign(this, partial);

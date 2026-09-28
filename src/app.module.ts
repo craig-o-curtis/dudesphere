@@ -10,6 +10,7 @@ import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { UsersModule } from "./users/users.module.js";
+import { ProfileModule } from './profile/profile.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -51,6 +52,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AuthStateModule,
     AbidingModule,
     AuthModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],
