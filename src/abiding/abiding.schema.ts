@@ -21,7 +21,7 @@ export class Abiding extends Document {
 
   // Optional username snapshot (so replies still show original author)
   @Prop({ type: String, default: null })
-  userName: string | null;
+  username: string | null;
 
   // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
   createdAt: string | null;

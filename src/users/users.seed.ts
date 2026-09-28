@@ -35,21 +35,19 @@ export class UsersSeedService implements OnModuleInit {
 
     if (admin) {
       // Update existing user to ensure correct role/flags
-      admin.name = "Admin";
+      admin.username = "Admin";
       admin.password = adminPassword;
       admin.role = UserRole.ADMIN;
-      admin.isDude = true;
       await this.usersRepository.save(admin);
       this.logger.log(`Updated admin user (${adminEmail}) with role ${UserRole.ADMIN}`);
     } else {
       // Create new admin
       const nowUtc = getUtcNow();
       admin = this.usersRepository.create({
-        name: "Admin",
+        username: "Admin",
         email: adminEmail,
         password: adminPassword,
         role: UserRole.ADMIN,
-        isDude: true,
         createdAt: nowUtc,
         updatedAt: nowUtc,
       });

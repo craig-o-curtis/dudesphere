@@ -11,7 +11,7 @@ export class AbidingResponseDto {
   message: string;
 
   @Expose()
-  userName?: string | null;
+  username?: string | null;
 
   @Expose()
   @Transform(({ obj }) => obj.replyToId || null)

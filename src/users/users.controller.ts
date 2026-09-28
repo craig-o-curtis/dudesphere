@@ -26,14 +26,7 @@ export class UsersController {
   getUsers(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("isDude") isDude?: string,
   ) {
-    if (isDude === "true") {
-      return this.usersService.getDudes(limit, page);
-    }
-    if (isDude === "false") {
-      return this.usersService.getNonDudes(limit, page);
-    }
     return this.usersService.getUsers(limit, page);
   }
 
