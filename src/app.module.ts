@@ -43,7 +43,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        uri: config.get("MONGO_URI", "mongodb://localhost:27017/dude-tweets"),
+        uri: config.get("MONGO_URI", "mongodb://localhost:27017/dude-abidings"),
       }),
       inject: [ConfigService],
     }),

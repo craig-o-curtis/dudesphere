@@ -227,6 +227,45 @@ docker compose exec dude sh
 docker compose exec dude-postgres psql -U dude -d dude
 ```
 
+## Database Migrations
+
+This project uses TypeORM's migration system for schema changes. During local development, `synchronize: true` is enabled in `app.module.ts`, which auto-applies entity changes on every app start. This is convenient for rapid iteration but should not be used in production.
+
+### When to Use Migrations
+
+- Before deploying to staging or production
+- When your schema stabilizes and you need version-controlled DB changes
+- When adding NOT NULL constraints or other changes that can't be applied to existing data
+
+### Migration Workflow
+
+**1. Generate a migration** (creates a SQL file from entity diffs):
+
+```bash
+npx typeorm migration:generate -d data-source.ts src/migrations/AddOrdainedDate
+```
+
+**2. Review the generated SQL** in `src/migrations/`. It includes both `up` (apply) and `down` (rollback) methods:
+
+```sql
+-- Up
+ALTER TABLE "user" ADD "ordainedDate" TIMESTAMP;
+
+-- Down
+ALTER TABLE "user" DROP COLUMN "ordainedDate";
+```
+
+**3. Run migrations**:
+
+```bash
+npx typeorm migration:run        # Apply pending migrations
+npx typeorm migration:revert     # Undo the last migration
+```
+
+### Production Setup
+
+In production, set `synchronize: false` in `app.module.ts` and only use migrations to manage schema changes. Never rely on `synchronize` in production — it can drop columns or tables without warning.
+
 ## Architecture
 
 - **Users** → PostgreSQL via TypeORM (`src/users/`)

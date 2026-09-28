@@ -9,7 +9,6 @@ import {
   Query,
   DefaultValuePipe,
   Body,
-  ParseBoolPipe,
   UseGuards,
 } from "@nestjs/common";
 

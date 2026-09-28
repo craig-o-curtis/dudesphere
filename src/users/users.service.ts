@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
@@ -41,21 +41,39 @@ export class UsersService {
   }
 
   async createUser(createUserDto: CreateUserDto): Promise<number> {
+    const existing = await this.usersRepository.findOne({ where: { email: createUserDto.email } });
+    if (existing) {
+      throw new ConflictException("Email already registered"); // Returns code 409
+    }
+
     const now = getUtcNow();
+    // .create returns TypeORM entity instance tracked by repository's persistence context
     const newUser = this.usersRepository.create({
       name: createUserDto.name,
       email: createUserDto.email,
       password: createUserDto.password,
       isDude: createUserDto.isDude ?? false,
+      ordainedDate: createUserDto.ordainedDate ?? null,
       createdAt: now,
       updatedAt: now,
     });
 
+    // .save inserts into the table
     const savedUser = await this.usersRepository.save(newUser);
     return savedUser.id;
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<string> {
+    // Check for email conflicts (only if email is being updated)
+    if (updateUserDto.email) {
+      const existing = await this.usersRepository.findOne({
+        where: { email: updateUserDto.email },
+      });
+      if (existing && existing.id !== id) {
+        throw new ConflictException("Email already registered");
+      }
+    }
+
     await this.usersRepository.update(id, updateUserDto);
     return `User with id: ${id} updated`;
   }
@@ -102,6 +120,7 @@ export class UsersService {
       email: user.email,
       role: user.role,
       isDude: user.isDude,
+      ordainedDate: user.ordainedDate ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

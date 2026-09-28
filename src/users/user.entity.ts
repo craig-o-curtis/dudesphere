@@ -22,11 +22,15 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({
+    type: "varchar",
+    nullable: false,
+    length: 100,
+  })
   @Index()
   name: string;
 
-  @Column({ unique: true })
+  @Column({ type: "varchar", nullable: false, length: 100, unique: true })
   @Index()
   email: string;
 
@@ -40,9 +44,14 @@ export class User {
   @Column({ default: false })
   isDude: boolean;
 
+  // Optional date when the user was ordained as a dude priest (ISO 8601 UTC string)
+  @Column({ type: "timestamp", nullable: true })
+  ordainedDate: string | null;
+
   @CreateDateColumn({
     type: "timestamp",
     transformer: {
+      // oxlint-disable-next-line no-new-date — TypeORM transformer requires Date conversion
       to: (value: string) => new Date(value),
       from: (value: Date) => value.toISOString(),
     },
@@ -52,6 +61,7 @@ export class User {
   @UpdateDateColumn({
     type: "timestamp",
     transformer: {
+      // oxlint-disable-next-line no-new-date — TypeORM transformer requires Date conversion
       to: (value: string) => new Date(value),
       from: (value: Date) => value.toISOString(),
     },
