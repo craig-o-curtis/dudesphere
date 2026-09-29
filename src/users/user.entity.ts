@@ -32,7 +32,7 @@ export class User {
   @Index()
   email: string;
 
-  @Column()
+  @Column({ type: "varchar", length: 255 })
   @Exclude()
   password: string;
 

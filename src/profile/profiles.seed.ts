@@ -1,5 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
@@ -8,7 +7,7 @@ import { User } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
 
 @Injectable()
-export class ProfilesSeedService implements OnModuleInit {
+export class ProfilesSeedService {
   private readonly logger = new Logger(ProfilesSeedService.name);
 
   constructor(
@@ -16,16 +15,9 @@ export class ProfilesSeedService implements OnModuleInit {
     private readonly profilesRepository: Repository<Profile>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly configService: ConfigService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.seed();
-  }
-
-  async seed(): Promise<void> {
-    const adminEmail = this.configService.get<string>("EMAIL");
-
+  async seed(adminEmail: string): Promise<void> {
     if (!adminEmail) {
       this.logger.warn("EMAIL not set — skipping profile seed");
       return;
