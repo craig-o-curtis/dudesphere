@@ -31,6 +31,14 @@ export class Abiding extends Document {
 
 export const AbidingSchema = SchemaFactory.createForClass(Abiding);
 
+// Indexes
+AbidingSchema.index({ userId: 1 });
+AbidingSchema.index({ replyToId: 1 });
+// get latest abidings for a user
+AbidingSchema.index({ userId: 1, createdAt: -1 });
+// get latest abidings
+AbidingSchema.index({ createdAt: -1 });
+
 // Convert Mongoose Date getters to ISO strings (no JS Date objects in app code)
 AbidingSchema.path("createdAt").get(function (this: AbidingDocument, v: Date) {
   return v?.toISOString() ?? null;

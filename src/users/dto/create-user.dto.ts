@@ -1,4 +1,6 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from "class-validator";
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+
+import { CreateProfileDto } from "../../profile/dto/create-profile-dto.js";
 
 export class CreateUserDto {
   @IsString()
@@ -18,4 +20,8 @@ export class CreateUserDto {
   @MinLength(6)
   @MaxLength(20)
   password: string;
+
+  // a default profile is created when creating a user
+  @IsOptional()
+  profile: CreateProfileDto | null;
 }

@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 
+import { Profile } from "../profile/profile.entity.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
@@ -9,7 +10,10 @@ import { User } from "./user.entity.js";
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectRepository(User) private readonly usersRepository: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly usersRepository: Repository<User>,
+    @InjectRepository(Profile) private readonly profilesRepository: Repository<Profile>,
+  ) {}
 
   async getUsers(limit?: number, page?: number): Promise<UserResponseDto[]> {
     return this.findAll(limit, page);
@@ -60,11 +64,15 @@ export class UsersService {
       }
     }
 
-    await this.usersRepository.update(id, updateUserDto);
+    // Update user fields only (profile updates handled separately)
+    const { profile: _, ...userFields } = updateUserDto;
+    await this.usersRepository.update(id, userFields);
+
     return `User with id: ${id} updated`;
   }
 
   async deleteUser(id: number): Promise<string> {
+    // Then delete the user
     const result = await this.usersRepository.delete(id);
     if (result.affected === 0) {
       throw new Error("User not found");
