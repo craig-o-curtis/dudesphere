@@ -26,24 +26,8 @@ export class ProfileService {
     return this.toResponseDto(profile);
   }
 
-  async getProfileByUserId(userId: number): Promise<ProfileResponseDto | null> {
-    const profile = await this.profileRepository.findOne({ where: { userId } });
-    if (!profile) {
-      return null;
-    }
-    return this.toResponseDto(profile);
-  }
-
   async createProfile(createProfileDto: CreateProfileDto): Promise<number> {
-    const existing = await this.profileRepository.findOne({
-      where: { userId: createProfileDto.userId },
-    });
-    if (existing) {
-      throw new Error("Profile already exists for this user");
-    }
-
     const newProfile = this.profileRepository.create({
-      userId: createProfileDto.userId,
       firstName: createProfileDto.firstName ?? null,
       lastName: createProfileDto.lastName ?? null,
       bio: createProfileDto.bio ?? null,
@@ -87,7 +71,6 @@ export class ProfileService {
   private toResponseDto(profile: Profile): ProfileResponseDto {
     return {
       id: profile.id,
-      userId: profile.userId,
       firstName: profile.firstName ?? null,
       lastName: profile.lastName ?? null,
       bio: profile.bio ?? null,

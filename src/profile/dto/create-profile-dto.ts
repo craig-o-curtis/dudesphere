@@ -9,9 +9,6 @@ import {
 } from "class-validator";
 
 export class CreateProfileDto {
-  @IsInt()
-  userId: number;
-
   @IsString()
   @IsOptional()
   @MinLength(2)

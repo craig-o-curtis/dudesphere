@@ -35,9 +35,7 @@ export class ProfilesSeedService {
 
     const nowUtc = getUtcNow();
 
-    let profile = await this.profilesRepository.findOne({
-      where: { userId: adminUser.id },
-    });
+    let profile = adminUser.profile;
 
     if (profile) {
       // Update existing profile
@@ -51,7 +49,6 @@ export class ProfilesSeedService {
     } else {
       // Create new admin profile
       profile = this.profilesRepository.create({
-        userId: adminUser.id,
         firstName: "Admin",
         lastName: "Dude",
         bio: "bio breaking",

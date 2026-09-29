@@ -10,9 +10,6 @@ export class Profile {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: "int" })
-  userId: number;
-
   @Column({ type: "varchar", nullable: true, length: 100 })
   firstName: string | null;
 
