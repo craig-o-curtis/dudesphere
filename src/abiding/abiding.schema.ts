@@ -5,10 +5,11 @@ export type AbidingDocument = Abiding & Document;
 
 @Schema({ timestamps: true })
 export class Abiding extends Document {
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   userId: number;
 
   @Prop({
+    type: String,
     required: true,
     minlength: [1, "Message must be at least 1 character"],
     maxlength: [280, "Message cannot exceed 280 characters"],

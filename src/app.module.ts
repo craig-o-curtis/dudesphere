@@ -9,8 +9,8 @@ import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ProfileModule } from "./profile/profile.module.js";
 import { UsersModule } from "./users/users.module.js";
-import { ProfileModule } from './profile/profile.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 

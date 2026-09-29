@@ -25,7 +25,7 @@ export class Profile {
   @Column({ type: "varchar", nullable: true })
   profileImageUrl: string | null;
 
-  @Column({ default: false })
+  @Column({ type: "boolean", default: false })
   isDude: boolean;
 
   // Optional date when the user was ordained as a dude priest (ISO 8601 UTC string)

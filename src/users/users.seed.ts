@@ -1,5 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
@@ -7,23 +6,15 @@ import { Repository } from "typeorm";
 import { User, UserRole } from "./user.entity.js";
 
 @Injectable()
-export class UsersSeedService implements OnModuleInit {
+export class UsersSeedService {
   private readonly logger = new Logger(UsersSeedService.name);
 
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly configService: ConfigService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.seed();
-  }
-
-  async seed(): Promise<void> {
-    const adminEmail = this.configService.get<string>("EMAIL");
-    const adminPassword = this.configService.get<string>("PASSWORD");
-
+  async seed(adminEmail: string, adminPassword: string): Promise<void> {
     if (!adminEmail || !adminPassword) {
       this.logger.warn("EMAIL or PASSWORD not set — skipping admin seed");
       return;
