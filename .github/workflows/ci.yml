@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push to the same branch/PR cancels the run that's still going
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the code
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # version comes from "packageManager" in package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json # version comes from "engines.node"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  migrations:
+    name: Migrations apply, match entities, and roll back
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine # same image as docker-compose.yml
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: dudesphere_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    # Read by src/database/data-source.ts. A throwaway database, so no secrets needed.
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_ADMIN_USER: ci
+      PG_ADMIN_PW: ci
+      PG_DATABASE: dudesphere_ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply all migrations to an empty database
+        run: pnpm migration:run
+      - name: Entities match the migrated schema
+        run: pnpm migration:check
+      - name: Newest migration can be rolled back
+        run: pnpm migration:revert
+      - name: ...and re-applied
+        run: pnpm migration:run
+      - name: Entities still match
+        run: pnpm migration:check

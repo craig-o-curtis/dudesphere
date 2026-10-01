@@ -83,6 +83,12 @@ Credentials are configured in `.env`:
 # Lint code (oxlint with GMT plugin)
 pnpm run lint
 
+# Typecheck everything, including tests (pnpm run build skips spec files)
+pnpm run typecheck
+
+# Check formatting without changing files (pnpm run format fixes it)
+pnpm run format:check
+
 # Run unit tests
 pnpm run test
 
@@ -126,6 +132,25 @@ pnpm run migration:revert
 6. Commit the migration file together with the entity change.
 
 Never edit a migration that has already been committed. Databases that have already run it won't run it again. Add a new migration instead.
+
+## Continuous Integration
+
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has two jobs, which run in parallel:
+
+| Job                                                 | Steps                                                                                                                               |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Format, lint, typecheck, test, build**            | `format:check` → `lint` → `typecheck` → `test` → `build`                                                                            |
+| **Migrations apply, match entities, and roll back** | Starts a throwaway Postgres 18, then `migration:run` → `migration:check` → `migration:revert` → `migration:run` → `migration:check` |
+
+To catch failures before pushing, run the same commands locally:
+
+```bash
+pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
+```
+
+- **Versions** come from `package.json`: `engines.node` sets the Node version and `packageManager` sets the pnpm version. To upgrade either, change it there.
+- **E2E tests (`test:e2e`) don't run in CI.** They boot the whole app, which needs MongoDB and the Nest Observe keys.
+- **No secrets are needed.** The Postgres used by the migrations job exists only for the length of the run.
 
 ## API Endpoints
 
