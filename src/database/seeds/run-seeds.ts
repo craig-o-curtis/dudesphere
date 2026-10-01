@@ -1,13 +1,15 @@
 import "reflect-metadata";
-import { NestFactory } from "@nestjs/core";
-import * as dotenv from "dotenv";
 import * as path from "path";
 import * as process from "process";
 
+import { NestFactory } from "@nestjs/core";
+import * as dotenv from "dotenv";
+
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-import { AppModule } from "../../app.module.js";
 import { ConfigService } from "@nestjs/config";
+
+import { AppModule } from "../../app.module.js";
 import { ProfilesSeedService } from "../../profile/profiles.seed.js";
 import { UsersSeedService } from "../../users/users.seed.js";
 import { AbidingSeedService } from "./abiding.seed.js";
@@ -46,4 +48,4 @@ async function runSeeds() {
   }
 }
 
-runSeeds();
+await runSeeds();

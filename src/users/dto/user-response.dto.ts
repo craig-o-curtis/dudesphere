@@ -1,5 +1,7 @@
 import { Exclude } from "class-transformer";
 
+import { ProfileResponseDto } from "../../profile/dto/profile-response.dto.js";
+
 export class UserResponseDto {
   id: number;
   username: string;
@@ -7,6 +9,7 @@ export class UserResponseDto {
   role: string;
   createdAt: string;
   updatedAt: string;
+  profile?: ProfileResponseDto | null;
 
   @Exclude()
   password?: string;

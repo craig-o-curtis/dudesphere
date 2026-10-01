@@ -9,5 +9,7 @@ export default defineConfig({
     globals: true,
     root: "./",
     include: ["**/*.spec.ts"],
+    // Decorators like @Type() need this loaded first; Nest loads it for the app, tests must too
+    setupFiles: ["reflect-metadata"],
   },
 });

@@ -1,17 +1,14 @@
 import {
   Body,
   Controller,
-  Delete,
+  DefaultValuePipe,
   Get,
   Param,
-  Patch,
-  Post,
-  Query,
-  DefaultValuePipe,
   ParseIntPipe,
+  Patch,
+  Query,
 } from "@nestjs/common";
 
-import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfileService } from "./profile.service.js";
@@ -28,33 +25,26 @@ export class ProfileController {
     return this.profileService.getProfiles(limit, page);
   }
 
-  @Get(":id")
-  getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileById(id);
-  }
-
+  // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
   @Get("user/:userId")
-  getProfileByUserId(
-    @Param("userId", ParseIntPipe) userId: number,
-  ): Promise<ProfileResponseDto | null> {
+  getProfileByUserId(@Param("userId", ParseIntPipe) userId: number): Promise<ProfileResponseDto> {
     return this.profileService.getProfileByUserId(userId);
   }
 
-  @Post()
-  createProfile(@Body() createProfileDto: CreateProfileDto): Promise<number> {
-    return this.profileService.createProfile(createProfileDto);
+  @Get(":id")
+  getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
+    return this.profileService.getProfileById(id);
   }
 
   @Patch(":id")
   updateProfile(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateProfileDto: UpdateProfileDto,
-  ): Promise<string> {
+  ): Promise<ProfileResponseDto> {
     return this.profileService.updateProfile(id, updateProfileDto);
   }
 
-  @Delete(":id")
-  deleteProfile(@Param("id", ParseIntPipe) id: number): Promise<string> {
-    return this.profileService.deleteProfile(id);
-  }
+  // We do not need a deleteProfile method, final deletion happens when
+  // the user account is deleted. This is enabled through
+  // the cascade option in the User entity.
 }

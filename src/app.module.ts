@@ -37,7 +37,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         database: config.getOrThrow("PG_DATABASE"),
         autoLoadEntities: true,
         // TODO see if need entities array with [User]
-        synchronize: config.get("NODE_ENV") !== "production", // synchronize creates, updates, and deletes tables - only use in development
+        synchronize: false, // migrations are the single source of truth for the schema
       }),
       inject: [ConfigService],
     }),

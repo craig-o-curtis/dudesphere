@@ -34,7 +34,14 @@ Right now the `user` table points at the profile (`user.profileId`). You'll flip
 Replace the whole file with:
 
 ```ts
-import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  type Relation,
+} from "typeorm";
 
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
 import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
@@ -112,7 +119,7 @@ You should **still** see the `getProfileByUserId` error. That's expected, and Le
 ### 💡 Why
 
 - **`@JoinColumn` decides which table gets the foreign-key column.** Putting it on `Profile` puts `userId` on the `profile` table.
-- **Why the profile should point at the user:** `onDelete: "CASCADE"` means *"when the row I point at is deleted, delete me too."* With `profile.userId`, deleting a user deletes their profile, which is what you want. The old way (`user.profileId`) flips that around: deleting a profile would delete the **user**.
+- **Why the profile should point at the user:** `onDelete: "CASCADE"` means _"when the row I point at is deleted, delete me too."_ With `profile.userId`, deleting a user deletes their profile, which is what you want. The old way (`user.profileId`) flips that around: deleting a profile would delete the **user**.
 - **Why remove `@Unique(["userId"])`:** a `@JoinColumn` on a `@OneToOne` already makes the column unique, so you'd be adding it twice.
 - **Why `Relation<User>` instead of just `User`:** your project is an ES module (`"type": "module"`), and these two files import each other. With a plain `User` type, the app crashes on startup with `Cannot access 'User' before initialization`. `Relation<>` is TypeORM's fix for exactly this situation.
 
@@ -418,7 +425,10 @@ export class UsersService {
   }
 
   async getUserById(id: number): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({ where: { id }, relations: { profile: true } });
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: { profile: true },
+    });
     if (!user) {
       throw new NotFoundException(`User #${id} not found`);
     }
@@ -600,13 +610,14 @@ No errors. You'll try the endpoints for real in Lesson 6, after the database is 
 - **Why not TypeORM's `cascade: ["insert"]`?** It works, but it hides what's being saved. TypeORM's own docs warn that cascades can cause "unintended side effects, bugs, and security issues". An explicit transaction is easier to read and to test.
 - **Why `@ValidateNested()` and `@Type()`?** I tested all three versions against your validation settings:
 
-  | Decorators on `profile` | Sending `{"firstName":"X","evil":1}` |
-  |---|---|
-  | only `@IsOptional()` (your old code) | **Accepted with no checks at all**, including the made-up `evil` field |
-  | `+ @ValidateNested()` | Rejects everything, even valid profiles |
+  | Decorators on `profile`              | Sending `{"firstName":"X","evil":1}`                                     |
+  | ------------------------------------ | ------------------------------------------------------------------------ |
+  | only `@IsOptional()` (your old code) | **Accepted with no checks at all**, including the made-up `evil` field   |
+  | `+ @ValidateNested()`                | Rejects everything, even valid profiles                                  |
   | `+ @ValidateNested()` `+ @Type(...)` | ✅ Rejects `evil` and the too-short `firstName`; valid data goes through |
 
   `@ValidateNested()` says "check inside this object". `@Type()` says "and here's which class to check it against".
+
 - **`UsersModule` imports `ProfileModule`.** That's how UsersService gets ProfileService injected. ProfileModule does **not** import UsersModule, so there's no circular dependency and no `forwardRef()` is needed.
 - **Soft delete:** `softDelete` sets `deletedAt` instead of removing the row, and TypeORM then hides that user from normal queries. Because the row isn't really deleted, the profile stays. That's fine: if you ever restore the user, their profile is still there.
 
@@ -655,8 +666,7 @@ export class ProfilesSeedService {
       return;
     }
 
-    const profile =
-      adminUser.profile ?? this.profilesRepository.create({ userId: adminUser.id });
+    const profile = adminUser.profile ?? this.profilesRepository.create({ userId: adminUser.id });
     const isNew = !adminUser.profile;
 
     profile.firstName = "Admin";
@@ -721,23 +731,47 @@ This compares your entities to the database and writes the differences into a ne
 In the `up()` method, find these three lines:
 
 ```ts
-        await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "role"`);
-        await queryRunner.query(`CREATE TYPE "public"."user_role_enum" AS ENUM('admin', 'user')`);
-        await queryRunner.query(`ALTER TABLE "user" ADD "role" "public"."user_role_enum" NOT NULL DEFAULT 'user'`);
+await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "role"`);
+await queryRunner.query(`CREATE TYPE "public"."user_role_enum" AS ENUM('admin', 'user')`);
+await queryRunner.query(
+  `ALTER TABLE "user" ADD "role" "public"."user_role_enum" NOT NULL DEFAULT 'user'`,
+);
 ```
 
 **Replace them** with:
 
 ```ts
-        // EDITED BY HAND: TypeORM generated DROP COLUMN + ADD COLUMN here, which would
-        // wipe every user's role. Converting the column in place keeps the data.
-        await queryRunner.query(`CREATE TYPE "public"."user_role_enum" AS ENUM('admin', 'user')`);
-        await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" DROP DEFAULT`);
-        await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" TYPE "public"."user_role_enum" USING "role"::"public"."user_role_enum"`);
-        await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" SET DEFAULT 'user'`);
+// EDITED BY HAND: TypeORM generated DROP COLUMN + ADD COLUMN here, which would
+// wipe every user's role. Converting the column in place keeps the data.
+await queryRunner.query(`CREATE TYPE "public"."user_role_enum" AS ENUM('admin', 'user')`);
+await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" DROP DEFAULT`);
+await queryRunner.query(
+  `ALTER TABLE "user" ALTER COLUMN "role" TYPE "public"."user_role_enum" USING "role"::"public"."user_role_enum"`,
+);
+await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" SET DEFAULT 'user'`);
 ```
 
 Leave the other lines as they are. They only rename indexes and the foreign key to TypeORM's naming style.
+
+`down()` has the same problem in reverse. It's what runs if you ever `pnpm migration:revert`. Find:
+
+```ts
+await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "role"`);
+await queryRunner.query(`DROP TYPE "public"."user_role_enum"`);
+await queryRunner.query(`ALTER TABLE "user" ADD "role" character varying NOT NULL DEFAULT 'user'`);
+```
+
+and replace it with:
+
+```ts
+// EDITED BY HAND: same fix in reverse — convert back to varchar without losing roles.
+await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" DROP DEFAULT`);
+await queryRunner.query(
+  `ALTER TABLE "user" ALTER COLUMN "role" TYPE character varying USING "role"::text`,
+);
+await queryRunner.query(`ALTER TABLE "user" ALTER COLUMN "role" SET DEFAULT 'user'`);
+await queryRunner.query(`DROP TYPE "public"."user_role_enum"`);
+```
 
 ### Step 5.6 — Run it, then confirm nothing is left
 

@@ -1,14 +1,32 @@
-import { Column, Entity, PrimaryGeneratedColumn, Unique } from "typeorm";
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  type Relation,
+} from "typeorm";
 
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
 import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
 import { UtcColumn } from "../shared/decorators/utc-column.decorator.js";
+import { User } from "../users/user.entity.js";
 
 @Entity("profile")
-@Unique(["userId"])
 export class Profile {
   @PrimaryGeneratedColumn()
   id: number;
+
+  // The foreign key column. It lives on this table because Profile is the "owning side".
+  @Column({ type: "int" })
+  userId: number;
+
+  @OneToOne(() => User, (user) => user.profile, {
+    onDelete: "CASCADE", // when the user row is deleted, Postgres deletes this row too
+    nullable: false, // a profile can never exist without a user
+  })
+  @JoinColumn({ name: "userId" })
+  user: Relation<User>;
 
   @Column({ type: "varchar", nullable: true, length: 100 })
   firstName: string | null;

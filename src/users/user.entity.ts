@@ -1,5 +1,5 @@
 import { Exclude } from "class-transformer";
-import { Column, Entity, Index, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
 
 import { Profile } from "../profile/profile.entity.js";
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
@@ -40,11 +40,8 @@ export class User {
   @Column({ type: "simple-enum", enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @OneToOne(() => Profile, {
-    cascade: ["insert", "remove"], // cascade operations to the profile entity
-  })
-  @JoinColumn() // this adds a profileId to the user column because it's the owning side
-  profile?: Profile;
+  @OneToOne(() => Profile, (profile) => profile.user)
+  profile?: Relation<Profile>;
 
   // Auto-set once on row creation
   @CreateUtcColumn()

@@ -1,4 +1,13 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from "class-validator";
 
 import { CreateProfileDto } from "../../profile/dto/create-profile-dto.js";
 
@@ -21,7 +30,11 @@ export class CreateUserDto {
   @MaxLength(20)
   password: string;
 
-  // a default profile is created when creating a user
+  // Optional. A profile is always created; these are its starting values.
+  // @ValidateNested + @Type are BOTH needed for the nested fields to be validated.
+  // NOTE - the confusing here is that on teh actual User table, the profile is a relation, not a column.
   @IsOptional()
-  profile: CreateProfileDto | null;
+  @ValidateNested()
+  @Type(() => CreateProfileDto)
+  profile?: CreateProfileDto;
 }
