@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (v24 recommended, v22 or v20 acceptable)
-- [pnpm](https://pnpm.io/installation)
+- [Node.js](https://nodejs.org/) v26 — the version in `.node-version`. With fnm, run `fnm use` in the repo root.
+- [pnpm](https://pnpm.io/installation) 12 — Node 26 dropped corepack, so install pnpm yourself: `npm i -g pnpm@12.8.1`
 - [Docker](https://www.docker.com/) (for databases)
 
 ## Setup

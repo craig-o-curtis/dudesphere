@@ -448,7 +448,9 @@ export class UsersService {
     // If anything throws, both inserts are rolled back.
     // Rule: inside here, use `manager` for every query — never this.usersRepository.
     return this.dataSource.transaction(async (manager) => {
-      const existing = await manager.findOne(User, { where: { email: createUserDto.email } });
+      const existing = await manager.findOne(User, {
+        where: { email: createUserDto.email },
+      });
       if (existing) {
         throw new ConflictException("Email already registered");
       }
@@ -949,11 +951,17 @@ describe("ProfileService", () => {
   });
 
   it("returns the profile for a user", async () => {
-    profileRepository.findOne.mockResolvedValue({ id: 7, userId: 3, isDude: true });
+    profileRepository.findOne.mockResolvedValue({
+      id: 7,
+      userId: 3,
+      isDude: true,
+    });
 
     const result = await service.getProfileByUserId(3);
 
-    expect(profileRepository.findOne).toHaveBeenCalledWith({ where: { userId: 3 } });
+    expect(profileRepository.findOne).toHaveBeenCalledWith({
+      where: { userId: 3 },
+    });
     expect(result.id).toBe(7);
   });
 
@@ -1022,8 +1030,16 @@ describe("UsersService", () => {
 
   it("creates the user and the profile using the SAME transaction manager", async () => {
     manager.findOne.mockResolvedValue(null);
-    manager.save.mockResolvedValue({ id: 42, username: "dude", email: "d@x.com" });
-    profileService.createForUser.mockResolvedValue({ id: 1, userId: 42, isDude: true });
+    manager.save.mockResolvedValue({
+      id: 42,
+      username: "dude",
+      email: "d@x.com",
+    });
+    profileService.createForUser.mockResolvedValue({
+      id: 1,
+      userId: 42,
+      isDude: true,
+    });
 
     const result = await service.createUser({
       username: "dude",
@@ -1034,7 +1050,9 @@ describe("UsersService", () => {
 
     // This is the important assertion: the profile was created with the
     // transaction's manager, so it rolls back together with the user.
-    expect(profileService.createForUser).toHaveBeenCalledWith(manager, 42, { firstName: "The" });
+    expect(profileService.createForUser).toHaveBeenCalledWith(manager, 42, {
+      firstName: "The",
+    });
     expect(result.id).toBe(42);
     expect(result.profile?.userId).toBe(42);
   });
@@ -1043,7 +1061,11 @@ describe("UsersService", () => {
     manager.findOne.mockResolvedValue({ id: 1 });
 
     await expect(
-      service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+      service.createUser({
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+      }),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(manager.save).not.toHaveBeenCalled();
