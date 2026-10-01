@@ -148,7 +148,7 @@ To catch failures before pushing, run the same commands locally:
 pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
 ```
 
-- **Versions** come from `package.json`: `engines.node` sets the Node version and `packageManager` sets the pnpm version. To upgrade either, change it there.
+- **Versions** are pinned in two places: `.node-version` sets the Node version, and `packageManager` in `package.json` sets the pnpm version. Both CI and fnm read `.node-version`, so one file covers local and CI. To upgrade either, change it there.
 - **E2E tests (`test:e2e`) don't run in CI.** They boot the whole app, which needs MongoDB and the Nest Observe keys.
 - **No secrets are needed.** The Postgres used by the migrations job exists only for the length of the run.
 

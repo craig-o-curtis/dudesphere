@@ -1,9 +1,22 @@
 {
   "editor.formatOnSave": true,
+  // oxfmt owns every file type it can format in this repo: ts, md, json/jsonc, yaml.
+  // Without an entry here the type falls through to the user's global
+  // editor.defaultFormatter (often Prettier), which disagrees with oxfmt and
+  // makes `pnpm format:check` fail in CI after a save.
   "[typescript]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[yaml]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "editor.codeActionsOnSave": {
