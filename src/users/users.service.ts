@@ -1,8 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { getUtcNow } from "@northguild/gmt";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
 
+import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
+import { Profile } from "../profile/profile.entity.js";
+import { ProfileService } from "../profile/profile.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
@@ -10,18 +12,31 @@ import { User } from "./user.entity.js";
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectRepository(User) private readonly usersRepository: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly usersRepository: Repository<User>,
+    private readonly dataSource: DataSource,
+    private readonly profileService: ProfileService,
+  ) {}
 
   async getUsers(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: undefined }, limit, page);
+    const pageSize = limit ?? 20;
+    const pageNum = page ?? 1;
+    const users = await this.usersRepository.find({
+      skip: (pageNum - 1) * pageSize,
+      take: pageSize,
+    });
+    return users.map((user) => this.toResponseDto(user));
   }
 
   async getUserById(id: number): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: { profile: true },
+    });
     if (!user) {
-      throw new Error("User not found");
+      throw new NotFoundException(`User #${id} not found`);
     }
-    return this.toResponseDto(user);
+    return this.toResponseDto(user, user.profile);
   }
 
   async getUserByEmail(email: string): Promise<UserResponseDto | null> {
@@ -32,78 +47,71 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
-  async getDudes(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: true }, limit, page);
-  }
+  async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+    // Everything inside this callback is ONE transaction.
+    // If anything throws, both inserts are rolled back.
+    // Rule: inside here, use `manager` for every query — never this.usersRepository.
+    return this.dataSource.transaction(async (manager) => {
+      const existing = await manager.findOne(User, { where: { email: createUserDto.email } });
+      if (existing) {
+        throw new ConflictException("Email already registered");
+      }
 
-  async getNonDudes(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    return this.findAll({ isDude: false }, limit, page);
-  }
+      const user = await manager.save(
+        User,
+        manager.create(User, {
+          username: createUserDto.username,
+          email: createUserDto.email,
+          password: createUserDto.password,
+        }),
+      );
 
-  async createUser(createUserDto: CreateUserDto): Promise<number> {
-    const now = getUtcNow();
-    const newUser = this.usersRepository.create({
-      name: createUserDto.name,
-      email: createUserDto.email,
-      password: createUserDto.password,
-      isDude: createUserDto.isDude ?? false,
-      createdAt: now,
-      updatedAt: now,
+      const profile = await this.profileService.createForUser(
+        manager,
+        user.id,
+        createUserDto.profile,
+      );
+
+      return this.toResponseDto(user, profile);
     });
-
-    const savedUser = await this.usersRepository.save(newUser);
-    return savedUser.id;
   }
 
-  async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<string> {
-    await this.usersRepository.update(id, updateUserDto);
-    return `User with id: ${id} updated`;
-  }
+  async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+    if (updateUserDto.email) {
+      const existing = await this.usersRepository.findOne({
+        where: { email: updateUserDto.email },
+      });
+      if (existing && existing.id !== id) {
+        throw new ConflictException("Email already registered");
+      }
+    }
 
-  async deleteUser(id: number): Promise<string> {
-    const result = await this.usersRepository.delete(id);
+    // Profile fields are updated through PATCH /profiles/:id, not here
+    const { profile: _profile, ...userFields } = updateUserDto;
+    const result = await this.usersRepository.update(id, userFields);
     if (result.affected === 0) {
-      throw new Error("User not found");
+      throw new NotFoundException(`User #${id} not found`);
     }
-    return `User with id: ${id} deleted`;
+    return this.getUserById(id);
   }
 
-  // --- Private helpers ---
-
-  private async findAll(
-    where: Partial<User>,
-    limit?: number,
-    page?: number,
-  ): Promise<UserResponseDto[]> {
-    // Filter out undefined values from where clause
-    const filteredWhere = Object.fromEntries(
-      Object.entries(where).filter(([_, v]) => v !== undefined),
-    );
-
-    let query = this.usersRepository.createQueryBuilder("user");
-    if (Object.keys(filteredWhere).length > 0) {
-      query = query.where(filteredWhere);
+  async deleteUser(id: number): Promise<void> {
+    // Soft delete: sets deletedAt instead of removing the row.
+    const result = await this.usersRepository.softDelete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`User #${id} not found`);
     }
-
-    if (limit || page) {
-      const pageSize = limit ?? 20;
-      const pageNum = page ?? 1;
-      query.skip((pageNum - 1) * pageSize).take(pageSize);
-    }
-
-    const users = await query.getMany();
-    return users.map((user) => this.toResponseDto(user));
   }
 
-  private toResponseDto(user: User): UserResponseDto {
-    return {
+  private toResponseDto(user: User, profile?: Profile | null): UserResponseDto {
+    return new UserResponseDto({
       id: user.id,
-      name: user.name,
+      username: user.username,
       email: user.email,
       role: user.role,
-      isDude: user.isDude,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-    };
+      profile: profile ? ProfileResponseDto.fromEntity(profile) : undefined,
+    });
   }
 }

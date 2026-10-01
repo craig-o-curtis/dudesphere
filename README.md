@@ -83,6 +83,12 @@ Credentials are configured in `.env`:
 # Lint code (oxlint with GMT plugin)
 pnpm run lint
 
+# Typecheck everything, including tests (pnpm run build skips spec files)
+pnpm run typecheck
+
+# Check formatting without changing files (pnpm run format fixes it)
+pnpm run format:check
+
 # Run unit tests
 pnpm run test
 
@@ -95,6 +101,56 @@ pnpm run test:cov
 # Build the project
 pnpm run build
 ```
+
+## Database Migrations
+
+The PostgreSQL schema is managed by migrations in `src/database/migrations/`. `synchronize` is turned off, so the app never changes tables on its own.
+
+```bash
+# Apply any migrations that haven't run yet (run this after pulling)
+pnpm run migration:run
+
+# Check whether your entities and the database disagree.
+# Exits 0 with "No changes in database schema were found" if they match.
+# Exits 1 if a migration is needed. Writes no files.
+pnpm run migration:check
+
+# Generate a migration from the differences (replace AddSomething with a name)
+pnpm run migration:generate src/database/migrations/AddSomething
+
+# Undo the most recent migration
+pnpm run migration:revert
+```
+
+### Changing an entity
+
+1. Edit the entity (`*.entity.ts`).
+2. Run `pnpm run migration:check`. If it reports changes, continue.
+3. Run `pnpm run migration:generate src/database/migrations/<DescriptiveName>`.
+4. **Read the generated file before running it.** TypeORM can't tell a type change from a delete-and-recreate, so it sometimes writes `DROP COLUMN` + `ADD COLUMN`, which loses data. Replace those with `ALTER COLUMN ... TYPE ... USING ...`, in both `up()` and `down()`.
+5. Run `pnpm run migration:run`, then `pnpm run migration:check` again. It should report no changes.
+6. Commit the migration file together with the entity change.
+
+Never edit a migration that has already been committed. Databases that have already run it won't run it again. Add a new migration instead.
+
+## Continuous Integration
+
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has two jobs, which run in parallel:
+
+| Job                                                 | Steps                                                                                                                               |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Format, lint, typecheck, test, build**            | `format:check` → `lint` → `typecheck` → `test` → `build`                                                                            |
+| **Migrations apply, match entities, and roll back** | Starts a throwaway Postgres 18, then `migration:run` → `migration:check` → `migration:revert` → `migration:run` → `migration:check` |
+
+To catch failures before pushing, run the same commands locally:
+
+```bash
+pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
+```
+
+- **Versions** come from `package.json`: `engines.node` sets the Node version and `packageManager` sets the pnpm version. To upgrade either, change it there.
+- **E2E tests (`test:e2e`) don't run in CI.** They boot the whole app, which needs MongoDB and the Nest Observe keys.
+- **No secrets are needed.** The Postgres used by the migrations job exists only for the length of the run.
 
 ## API Endpoints
 

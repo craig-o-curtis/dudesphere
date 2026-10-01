@@ -11,7 +11,7 @@ export class AuthService {
     private readonly usersService: UsersService,
   ) {}
 
-  public get isAuthenticated(): boolean {
+  get isAuthenticated(): boolean {
     return this.authStateService.isAuthenticated;
   }
 
@@ -20,7 +20,7 @@ export class AuthService {
 
     if (user) {
       this.authStateService.isAuthenticated = true;
-      return { token: "MY_TOKEN", userId: user.id, name: user.name };
+      return { token: "MY_TOKEN", userId: user.id, name: user.username };
     }
     throw new Error("User does not exist");
   }
