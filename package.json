@@ -53,7 +53,7 @@
     "@nestjs/testing": "^12.0.1",
     "@northguild/gmt-oxlint": "^1.2.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.0.0",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "dotenv": "^18.0.4",
@@ -69,7 +69,7 @@
     "vitest": "^4.1.2"
   },
   "engines": {
-    "node": "^24"
+    "node": "^26"
   },
-  "packageManager": "pnpm@10.33.2"
+  "packageManager": "pnpm@12.8.1"
 }
