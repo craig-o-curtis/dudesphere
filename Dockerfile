@@ -1,13 +1,16 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy package files and install all deps (skip native build scripts in Docker)
+# Copy package files first: the pnpm version is read from "packageManager"
 COPY package.json pnpm-lock.yaml ./
+
+# Node 26 no longer ships corepack, so install pnpm directly.
+# The version comes from "packageManager" in package.json, so it lives in one place.
+RUN npm i -g "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")"
+
+# Install all deps (skip native build scripts in Docker)
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source and build
@@ -15,7 +18,7 @@ COPY . .
 RUN pnpm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
