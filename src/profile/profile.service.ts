@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { EntityManager, Repository } from "typeorm";
 
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -15,70 +15,56 @@ export class ProfileService {
   ) {}
 
   async getProfiles(limit?: number, page?: number): Promise<ProfileResponseDto[]> {
-    return this.findAll(limit, page);
+    const pageSize = limit ?? 20;
+    const pageNum = page ?? 1;
+    const profiles = await this.profileRepository.find({
+      skip: (pageNum - 1) * pageSize,
+      take: pageSize,
+    });
+    return profiles.map((profile) => ProfileResponseDto.fromEntity(profile));
   }
 
   async getProfileById(id: number): Promise<ProfileResponseDto> {
     const profile = await this.profileRepository.findOne({ where: { id } });
     if (!profile) {
-      throw new Error("Profile not found");
+      throw new NotFoundException(`Profile #${id} not found`);
     }
-    return this.toResponseDto(profile);
+    return ProfileResponseDto.fromEntity(profile);
   }
 
-  async createProfile(createProfileDto: CreateProfileDto): Promise<number> {
-    const newProfile = this.profileRepository.create({
-      firstName: createProfileDto.firstName ?? null,
-      lastName: createProfileDto.lastName ?? null,
-      bio: createProfileDto.bio ?? null,
-      profileImageUrl: createProfileDto.profileImageUrl ?? null,
-      isDude: createProfileDto.isDude ?? false,
-      ordainedDate: createProfileDto.ordainedDate ?? null,
+  async getProfileByUserId(userId: number): Promise<ProfileResponseDto> {
+    const profile = await this.profileRepository.findOne({ where: { userId } });
+    if (!profile) {
+      throw new NotFoundException(`Profile for user #${userId} not found`);
+    }
+    return ProfileResponseDto.fromEntity(profile);
+  }
+
+  // Called by UsersService inside its transaction.
+  // It uses the `manager` it is given, NOT this.profileRepository,
+  // so the insert is part of the same transaction as the user insert.
+  async createForUser(
+    manager: EntityManager,
+    userId: number,
+    dto?: CreateProfileDto,
+  ): Promise<Profile> {
+    const profile = manager.create(Profile, {
+      userId,
+      firstName: dto?.firstName ?? null,
+      lastName: dto?.lastName ?? null,
+      bio: dto?.bio ?? null,
+      profileImageUrl: dto?.profileImageUrl ?? null,
+      isDude: dto?.isDude ?? false,
+      ordainedDate: dto?.ordainedDate ?? null,
     });
-
-    const savedProfile = await this.profileRepository.save(newProfile);
-    return savedProfile.id;
+    return manager.save(Profile, profile);
   }
 
-  async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<string> {
-    await this.profileRepository.update(id, updateProfileDto);
-    return `Profile with id: ${id} updated`;
-  }
-
-  async deleteProfile(id: number): Promise<string> {
-    const result = await this.profileRepository.delete(id);
+  async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {
+    const result = await this.profileRepository.update(id, updateProfileDto);
     if (result.affected === 0) {
-      throw new Error("Profile not found");
+      throw new NotFoundException(`Profile #${id} not found`);
     }
-    return `Profile with id: ${id} deleted`;
-  }
-
-  // --- Private helpers ---
-
-  private async findAll(limit?: number, page?: number): Promise<ProfileResponseDto[]> {
-    let query = this.profileRepository.createQueryBuilder("profile");
-
-    if (limit || page) {
-      const pageSize = limit ?? 20;
-      const pageNum = page ?? 1;
-      query.skip((pageNum - 1) * pageSize).take(pageSize);
-    }
-
-    const profiles = await query.getMany();
-    return profiles.map((profile) => this.toResponseDto(profile));
-  }
-
-  private toResponseDto(profile: Profile): ProfileResponseDto {
-    return {
-      id: profile.id,
-      firstName: profile.firstName ?? null,
-      lastName: profile.lastName ?? null,
-      bio: profile.bio ?? null,
-      profileImageUrl: profile.profileImageUrl ?? null,
-      isDude: profile.isDude,
-      ordainedDate: profile.ordainedDate ?? null,
-      createdAt: profile.createdAt,
-      updatedAt: profile.updatedAt,
-    };
+    return this.getProfileById(id);
   }
 }

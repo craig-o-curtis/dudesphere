@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
 import { User } from "../users/user.entity.js";
@@ -23,9 +22,11 @@ export class ProfilesSeedService {
       return;
     }
 
-    // Find the admin user
+    // relations: { profile: true } loads the admin's profile along with the user.
+    // Without it, adminUser.profile is always undefined.
     const adminUser = await this.usersRepository.findOne({
       where: { email: adminEmail },
+      relations: { profile: true },
     });
 
     if (!adminUser) {
@@ -33,32 +34,15 @@ export class ProfilesSeedService {
       return;
     }
 
-    const nowUtc = getUtcNow();
+    const profile = adminUser.profile ?? this.profilesRepository.create({ userId: adminUser.id });
+    const isNew = !adminUser.profile;
 
-    let profile = adminUser.profile;
+    profile.firstName = "Admin";
+    profile.lastName = "Dude";
+    profile.bio = "bio breaking";
+    profile.isDude = true;
+    await this.profilesRepository.save(profile);
 
-    if (profile) {
-      // Update existing profile
-      profile.firstName = "Admin";
-      profile.lastName = "Dude";
-      profile.bio = "bio breaking";
-      profile.isDude = true;
-      profile.updatedAt = nowUtc;
-      await this.profilesRepository.save(profile);
-      this.logger.log(`Updated admin profile for user ${adminEmail}`);
-    } else {
-      // Create new admin profile
-      profile = this.profilesRepository.create({
-        firstName: "Admin",
-        lastName: "Dude",
-        bio: "bio breaking",
-        isDude: true,
-        createdAt: nowUtc,
-        updatedAt: nowUtc,
-      });
-
-      await this.profilesRepository.save(profile);
-      this.logger.log(`Seeded admin profile for user ${adminEmail}`);
-    }
+    this.logger.log(`${isNew ? "Seeded" : "Updated"} admin profile for user ${adminEmail}`);
   }
 }

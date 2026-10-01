@@ -12,5 +12,6 @@ import { ProfilesSeedService } from "./profiles.seed.js";
   imports: [ConfigModule, TypeOrmModule.forFeature([Profile, User])],
   controllers: [ProfileController],
   providers: [ProfileService, ProfilesSeedService],
+  exports: [ProfileService],
 })
 export class ProfileModule {}

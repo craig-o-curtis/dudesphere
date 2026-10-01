@@ -1,12 +1,4 @@
-import {
-  IsBoolean,
-  IsInt,
-  IsISO8601,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from "class-validator";
+import { IsBoolean, IsISO8601, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class CreateProfileDto {
   @IsString()
