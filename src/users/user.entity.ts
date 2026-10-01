@@ -1,12 +1,10 @@
 import { Exclude } from "class-transformer";
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { Column, Entity, Index, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
+
+import { Profile } from "../profile/profile.entity.js";
+import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
+import { SoftDeleteUtcColumn } from "../shared/decorators/soft-delete-utc-column.decorator.js";
+import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
 
 export enum UserRole {
   ADMIN = "admin",
@@ -22,39 +20,38 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({
+    type: "varchar",
+    nullable: false,
+    length: 24,
+    unique: true,
+  })
   @Index()
-  name: string;
+  username: string;
 
-  @Column({ unique: true })
+  @Column({ type: "varchar", nullable: false, length: 100, unique: true })
   @Index()
   email: string;
 
-  @Column()
+  @Column({ type: "varchar", length: 255 })
   @Exclude()
   password: string;
 
   @Column({ type: "simple-enum", enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @Column({ default: false })
-  isDude: boolean;
+  @OneToOne(() => Profile, (profile) => profile.user)
+  profile?: Relation<Profile>;
 
-  @CreateDateColumn({
-    type: "timestamp",
-    transformer: {
-      to: (value: string) => new Date(value),
-      from: (value: Date) => value.toISOString(),
-    },
-  })
+  // Auto-set once on row creation
+  @CreateUtcColumn()
   createdAt: string;
 
-  @UpdateDateColumn({
-    type: "timestamp",
-    transformer: {
-      to: (value: string) => new Date(value),
-      from: (value: Date) => value.toISOString(),
-    },
-  })
+  // Auto-set on creation, auto-update on every change
+  @UpdateUtcColumn()
   updatedAt: string;
+
+  // Soft delete column — set by TypeORM softDelete(), transformer prevents Date leakage
+  @SoftDeleteUtcColumn()
+  deletedAt: string | null;
 }

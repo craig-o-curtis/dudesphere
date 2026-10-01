@@ -23,7 +23,7 @@ export class AbidingController {
           id: a.id,
           userId: a.userId,
           message: a.message,
-          userName: users.find((u) => u.id === a.userId)?.name || "Unknown",
+          username: users.find((u) => u.id === a.userId)?.username || "Unknown",
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
         }),
@@ -42,7 +42,7 @@ export class AbidingController {
       message: newAbiding.message,
       createdAt: newAbiding.createdAt,
       replyToId: newAbiding.replyToId ?? null,
-      userName: users.find((u) => u.id === newAbiding.userId)?.name || "Unknown",
+      username: users.find((u) => u.id === newAbiding.userId)?.username || "Unknown",
     });
   }
 
@@ -59,7 +59,7 @@ export class AbidingController {
       message: updatedAbiding.message,
       createdAt: updatedAbiding.createdAt,
       replyToId: updatedAbiding.replyToId ?? null,
-      userName: users.find((u) => u.id === updatedAbiding.userId)?.name || "Unknown",
+      username: users.find((u) => u.id === updatedAbiding.userId)?.username || "Unknown",
     });
   }
 

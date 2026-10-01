@@ -9,6 +9,7 @@ import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ProfileModule } from "./profile/profile.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -36,14 +37,14 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         database: config.getOrThrow("PG_DATABASE"),
         autoLoadEntities: true,
         // TODO see if need entities array with [User]
-        synchronize: config.get("NODE_ENV") !== "production", // synchronize creates, updates, and deletes tables - only use in development
+        synchronize: false, // migrations are the single source of truth for the schema
       }),
       inject: [ConfigService],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        uri: config.get("MONGO_URI", "mongodb://localhost:27017/dude-tweets"),
+        uri: config.get("MONGO_URI", "mongodb://localhost:27017/dude-abidings"),
       }),
       inject: [ConfigService],
     }),
@@ -51,6 +52,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AuthStateModule,
     AbidingModule,
     AuthModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],
