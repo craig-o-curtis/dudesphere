@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { EntityManager, IsNull } from "typeorm";
+import { EntityManager, IsNull, Not } from "typeorm";
 
 import { Profile } from "./profile.entity.js";
 import { ProfileService } from "./profile.service.js";
@@ -214,6 +214,24 @@ describe("ProfileService", () => {
         deletedAt: IsNull(),
       });
       expect(profileRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("restoreForUser", () => {
+    it("restores the user's profile through the manager it is given", async () => {
+      // Kept as its own variable so the assertion reads the mock directly,
+      // not a method off the EntityManager-typed object.
+      const restore = vi.fn().mockResolvedValue({ affected: 1 });
+      const mockManager = { restore } as unknown as EntityManager;
+
+      await service.restoreForUser(mockManager, 42);
+
+      // The caller's manager, so this runs inside the caller's transaction.
+      // Scoped to a profile that is actually soft-deleted.
+      expect(restore).toHaveBeenCalledWith(Profile, {
+        userId: 42,
+        deletedAt: Not(IsNull()),
+      });
     });
   });
 

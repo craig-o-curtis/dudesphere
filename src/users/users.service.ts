@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, IsNull, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
 import { Profile } from "../profile/profile.entity.js";
@@ -121,6 +121,25 @@ export class UsersService {
       }
       await this.profileService.softDeleteForUser(manager, id);
     });
+  }
+
+  async restoreUser(id: number): Promise<UserResponseDto> {
+    // The reverse of deleteUser: the user and its profile come back together,
+    // in one transaction.
+    //
+    // Restoring cannot collide with another account. createUser and updateUser
+    // check soft-deleted rows for conflicts, so nobody can take a deleted
+    // user's email or username while it is gone.
+    await this.dataSource.transaction(async (manager) => {
+      // Not(IsNull()) so only a soft-deleted user can be restored. An active
+      // or missing user is a 404, matching deleteUser on an already-deleted one.
+      const result = await manager.restore(User, { id, deletedAt: Not(IsNull()) });
+      if (result.affected === 0) {
+        throw new NotFoundException(`Deleted user #${id} not found`);
+      }
+      await this.profileService.restoreForUser(manager, id);
+    });
+    return this.getUserById(id);
   }
 
   private toResponseDto(user: User, profile?: Profile | null): UserResponseDto {

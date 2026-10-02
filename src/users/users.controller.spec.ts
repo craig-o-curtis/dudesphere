@@ -15,6 +15,7 @@ describe("UsersController", () => {
     createUser: vi.fn(),
     updateUser: vi.fn(),
     deleteUser: vi.fn(),
+    restoreUser: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -95,4 +96,15 @@ describe("UsersController", () => {
     });
   });
 
+  describe("restoreUser", () => {
+    it("passes the id to the service and returns the restored user", async () => {
+      const restored = { id: 7, username: "walter" };
+      usersService.restoreUser.mockResolvedValue(restored);
+
+      const result = await controller.restoreUser(7);
+
+      expect(usersService.restoreUser).toHaveBeenCalledWith(7);
+      expect(result).toBe(restored);
+    });
+  });
 });
