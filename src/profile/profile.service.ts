@@ -14,9 +14,9 @@ export class ProfileService {
     private readonly profileRepository: Repository<Profile>,
   ) {}
 
-  async getProfiles(limit?: number, page?: number): Promise<ProfileResponseDto[]> {
-    const pageSize = limit ?? 20;
-    const pageNum = page ?? 1;
+  async getProfiles(limit: number = 10, page: number = 1): Promise<ProfileResponseDto[]> {
+    const pageSize = limit;
+    const pageNum = page;
     const profiles = await this.profileRepository.find({
       skip: (pageNum - 1) * pageSize,
       take: pageSize,
