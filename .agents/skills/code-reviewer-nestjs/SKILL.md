@@ -66,19 +66,19 @@ If the diff touches services, entities, migrations, DTOs, module imports, contro
 
 Don't load the whole rule set. Read only the rules that match what the diff touches. Each rule is `.agents/skills/nestjs-best-practices/rules/<rule>.md`.
 
-| Diff touches | Rules |
-|---|---|
-| `*.module.ts`, imports between features | `arch-avoid-circular-deps`, `arch-module-sharing`, `arch-feature-modules` |
-| `*.controller.ts` | `security-use-guards`, `api-use-pipes`, `security-validate-all-input`, `api-use-dto-serialization` |
-| `*.service.ts` | `arch-single-responsibility`, `error-throw-http-exceptions`, `error-handle-async-errors`, `db-use-transactions`, `db-avoid-n-plus-one` |
-| `dto/` | `security-validate-all-input`, `api-use-dto-serialization` |
-| `*.entity.ts`, `*.schema.ts`, `migrations/` | `db-use-migrations`, `perf-optimize-database` |
-| providers, constructors | `di-prefer-constructor-injection`, `di-scope-awareness`, `di-avoid-service-locator` |
-| `main.ts`, filters, interceptors | `error-use-exception-filters`, `api-use-interceptors` |
-| `src/auth/`, guards | `security-auth-jwt`, `security-use-guards` |
-| config, env | `devops-use-config-module` |
-| logging | `devops-use-logging`, `security-sanitize-output` |
-| `*.spec.ts`, `test/` | `test-use-testing-module`, `test-mock-external-services`, `test-e2e-supertest` |
+| Diff touches                                | Rules                                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `*.module.ts`, imports between features     | `arch-avoid-circular-deps`, `arch-module-sharing`, `arch-feature-modules`                                                              |
+| `*.controller.ts`                           | `security-use-guards`, `api-use-pipes`, `security-validate-all-input`, `api-use-dto-serialization`                                     |
+| `*.service.ts`                              | `arch-single-responsibility`, `error-throw-http-exceptions`, `error-handle-async-errors`, `db-use-transactions`, `db-avoid-n-plus-one` |
+| `dto/`                                      | `security-validate-all-input`, `api-use-dto-serialization`                                                                             |
+| `*.entity.ts`, `*.schema.ts`, `migrations/` | `db-use-migrations`, `perf-optimize-database`                                                                                          |
+| providers, constructors                     | `di-prefer-constructor-injection`, `di-scope-awareness`, `di-avoid-service-locator`                                                    |
+| `main.ts`, filters, interceptors            | `error-use-exception-filters`, `api-use-interceptors`                                                                                  |
+| `src/auth/`, guards                         | `security-auth-jwt`, `security-use-guards`                                                                                             |
+| config, env                                 | `devops-use-config-module`                                                                                                             |
+| logging                                     | `devops-use-logging`, `security-sanitize-output`                                                                                       |
+| `*.spec.ts`, `test/`                        | `test-use-testing-module`, `test-mock-external-services`, `test-e2e-supertest`                                                         |
 
 When the date rule or a project check disagrees with a best-practices rule, follow the project.
 
@@ -137,12 +137,15 @@ Write the report in plain English, following `.agents/skills/plain-english`. Eac
 ## Standards
 
 ### Hard
+
 - `src/orders/orders.service.ts:42`: `update(id, dto)` skips the soft-delete filter, so a deleted order can be edited. Rule: project-checks › Soft delete. Fix: add `deletedAt: IsNull()` to the criteria.
 
 ### Judgement calls
+
 - `src/orders/orders.controller.ts:58`: possible Duplicated Code. The customer lookup is repeated in three handlers. Fix: one private helper.
 
 ## Spec
+
 - "Cancelling returns the order" — `cancelOrder` returns nothing. Fix: return `getOrderById(id)`.
 
 Standards: 1 hard, 1 judgement. Worst: the soft-delete update. Spec: 1. Worst: cancel's return value.
