@@ -15,15 +15,18 @@ export class AbidingController {
 
   @Get()
   public async getAbidings(@Query("userId") userId?: number): Promise<AbidingResponseDto[]> {
-    const users = await this.usersService.getUsers();
     const abidings = await this.abidingService.getAbidings(userId);
+    const authorIds = [...new Set(abidings.map((a) => a.userId))];
+    const users = await this.usersService.getUsersByIds(authorIds);
+    const usernames = new Map(users.map((u) => [u.id, u.username]));
+
     return abidings.map(
       (a) =>
         new AbidingResponseDto({
           id: a.id,
           userId: a.userId,
           message: a.message,
-          username: users.find((u) => u.id === a.userId)?.username || "Unknown",
+          username: usernames.get(a.userId) || "Unknown",
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
         }),
@@ -35,14 +38,14 @@ export class AbidingController {
     @Body() createAbidingDto: CreateAbidingDto,
   ): Promise<AbidingResponseDto> {
     const newAbiding = await this.abidingService.createAbiding(createAbidingDto);
-    const users = await this.usersService.getUsers();
+    const [author] = await this.usersService.getUsersByIds([newAbiding.userId]);
     return new AbidingResponseDto({
       id: newAbiding.id,
       userId: newAbiding.userId,
       message: newAbiding.message,
       createdAt: newAbiding.createdAt,
       replyToId: newAbiding.replyToId ?? null,
-      username: users.find((u) => u.id === newAbiding.userId)?.username || "Unknown",
+      username: author?.username || "Unknown",
     });
   }
 
@@ -52,14 +55,14 @@ export class AbidingController {
     @Body() updateAbidingDto: UpdateAbidingDto,
   ): Promise<AbidingResponseDto> {
     const updatedAbiding = await this.abidingService.patchAbiding(id, updateAbidingDto);
-    const users = await this.usersService.getUsers();
+    const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
     return new AbidingResponseDto({
       id: updatedAbiding.id,
       userId: updatedAbiding.userId,
       message: updatedAbiding.message,
       createdAt: updatedAbiding.createdAt,
       replyToId: updatedAbiding.replyToId ?? null,
-      username: users.find((u) => u.id === updatedAbiding.userId)?.username || "Unknown",
+      username: author?.username || "Unknown",
     });
   }
 

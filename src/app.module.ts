@@ -36,8 +36,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         password: config.getOrThrow("PG_ADMIN_PW"),
         database: config.getOrThrow("PG_DATABASE"),
         autoLoadEntities: true,
-        // TODO see if need entities array with [User]
         synchronize: false, // migrations are the single source of truth for the schema
+        // logging: ["query", "error"],
+        // logger: "formatted-console", // ← puts each part of the query on its own line
       }),
       inject: [ConfigService],
     }),

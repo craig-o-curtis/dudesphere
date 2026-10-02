@@ -52,4 +52,13 @@ export class UsersController {
   deleteUser(@Param("id", ParseIntPipe) id: number): Promise<void> {
     return this.usersService.deleteUser(id);
   }
+
+  // 200, not POST's default 201: this brings back an existing user rather
+  // than creating one. Unguarded like DELETE above; both need an admin guard
+  // once auth carries a role.
+  @Post(":id/restore")
+  @HttpCode(200)
+  restoreUser(@Param("id", ParseIntPipe) id: number): Promise<UserResponseDto> {
+    return this.usersService.restoreUser(id);
+  }
 }

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { EntityManager, Repository } from "typeorm";
+import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -14,9 +14,9 @@ export class ProfileService {
     private readonly profileRepository: Repository<Profile>,
   ) {}
 
-  async getProfiles(limit?: number, page?: number): Promise<ProfileResponseDto[]> {
-    const pageSize = limit ?? 20;
-    const pageNum = page ?? 1;
+  async getProfiles(limit: number = 10, page: number = 1): Promise<ProfileResponseDto[]> {
+    const pageSize = limit;
+    const pageNum = page;
     const profiles = await this.profileRepository.find({
       skip: (pageNum - 1) * pageSize,
       take: pageSize,
@@ -60,8 +60,27 @@ export class ProfileService {
     return manager.save(Profile, profile);
   }
 
+  // Called by UsersService inside its transaction, like createForUser
+  async softDeleteForUser(manager: EntityManager, userId: number): Promise<void> {
+    // IsNull() here is to ensure we only soft-delete the profile if it hasn't already been soft-deleted.
+    // it is not `null`, but rather the `deletedAt` column is `null` (meaning it is not deleted yet).
+    await manager.softDelete(Profile, { userId, deletedAt: IsNull() });
+  }
+
+  // Called by UsersService inside its transaction, the reverse of softDeleteForUser.
+  async restoreForUser(manager: EntityManager, userId: number): Promise<void> {
+    // Not(IsNull()) so only a soft-deleted profile is touched.
+    await manager.restore(Profile, { userId, deletedAt: Not(IsNull()) });
+  }
+
   async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {
-    const result = await this.profileRepository.update(id, updateProfileDto);
+    // deletedAt: IsNull() because update() does not apply the soft-delete
+    // filter that find() does. Without it a deleted profile gets edited and
+    // the caller still gets a 404 from getProfileById below.
+    const result = await this.profileRepository.update(
+      { id, deletedAt: IsNull() },
+      updateProfileDto,
+    );
     if (result.affected === 0) {
       throw new NotFoundException(`Profile #${id} not found`);
     }

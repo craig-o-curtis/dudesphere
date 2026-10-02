@@ -44,7 +44,8 @@ export class ProfileController {
     return this.profileService.updateProfile(id, updateProfileDto);
   }
 
-  // We do not need a deleteProfile method, final deletion happens when
-  // the user account is deleted. This is enabled through
-  // the cascade option in the User entity.
+  // No deleteProfile endpoint. A profile is soft-deleted together with its
+  // user, in the same transaction, by UsersService.deleteUser. The
+  // ON DELETE CASCADE on the foreign key only fires on a real DELETE, which
+  // this app never runs.
 }
