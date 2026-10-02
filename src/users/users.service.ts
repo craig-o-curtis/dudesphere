@@ -18,9 +18,9 @@ export class UsersService {
     private readonly profileService: ProfileService,
   ) {}
 
-  async getUsers(limit?: number, page?: number): Promise<UserResponseDto[]> {
-    const pageSize = limit ?? 20;
-    const pageNum = page ?? 1;
+  async getUsers(limit: number = 10, page: number = 1): Promise<UserResponseDto[]> {
+    const pageSize = limit;
+    const pageNum = page;
     const users = await this.usersRepository.find({
       skip: (pageNum - 1) * pageSize,
       take: pageSize,
