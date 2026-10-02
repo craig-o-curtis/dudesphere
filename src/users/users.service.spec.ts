@@ -221,11 +221,15 @@ describe("UsersService", () => {
     // your own row and hide the conflict. And it searches soft-deleted rows,
     // because the unique indexes still cover them.
     it("searches other users' rows, deleted ones included, for the email and username", async () => {
-      usersRepository.findOne.mockResolvedValueOnce({ id: 9, email: "o@x.com", username: "walter" });
+      usersRepository.findOne.mockResolvedValueOnce({
+        id: 9,
+        email: "o@x.com",
+        username: "walter",
+      });
 
-      await expect(
-        service.updateUser(3, { email: "d@x.com", username: "walter" }),
-      ).rejects.toThrow("Username already taken");
+      await expect(service.updateUser(3, { email: "d@x.com", username: "walter" })).rejects.toThrow(
+        "Username already taken",
+      );
 
       expect(usersRepository.findOne).toHaveBeenCalledWith({
         where: [
