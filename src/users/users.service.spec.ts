@@ -52,6 +52,28 @@ describe("UsersService", () => {
     service = module.get(UsersService);
   });
 
+  describe("getUsers", () => {
+    // The defaults match the controller's: 10 per page, starting at page 1.
+    it("returns the first 10 users by default", async () => {
+      usersRepository.find.mockResolvedValue([
+        { id: 4, username: "walter", email: "w@x.com", role: "user" },
+      ]);
+
+      const result = await service.getUsers();
+
+      expect(usersRepository.find).toHaveBeenCalledWith({ skip: 0, take: 10 });
+      expect(result.map((u) => u.username)).toEqual(["walter"]);
+    });
+
+    it("skips the earlier pages when given a limit and a page", async () => {
+      usersRepository.find.mockResolvedValue([]);
+
+      await service.getUsers(5, 3);
+
+      expect(usersRepository.find).toHaveBeenCalledWith({ skip: 10, take: 5 });
+    });
+  });
+
   describe("createUser", () => {
     it("creates the user and the profile using the SAME transaction manager", async () => {
       // By `SAME transaction manager` we mean the user insert and the profile
