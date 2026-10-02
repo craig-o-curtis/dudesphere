@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, IsNull, Not, Repository } from "typeorm";
+import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
 import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
 import { Profile } from "../profile/profile.entity.js";
@@ -37,6 +37,14 @@ export class UsersService {
       throw new NotFoundException(`User #${id} not found`);
     }
     return this.toResponseDto(user, user.profile);
+  }
+
+  async getUsersByIds(ids: number[]): Promise<UserResponseDto[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const users = await this.usersRepository.findBy({ id: In(ids) });
+    return users.map((user) => this.toResponseDto(user));
   }
 
   async getUserByEmail(email: string): Promise<UserResponseDto | null> {
