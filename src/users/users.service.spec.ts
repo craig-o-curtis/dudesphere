@@ -26,7 +26,6 @@ describe("UsersService", () => {
 
   const usersRepository = {
     find: vi.fn(),
-    findBy: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
   };
@@ -280,19 +279,23 @@ describe("UsersService", () => {
 
   describe("getUsersByIds", () => {
     it("loads only the requested users in one query", async () => {
-      usersRepository.findBy.mockResolvedValue([
+      usersRepository.find.mockResolvedValue([
         { id: 4, username: "walter", email: "w@x.com", role: "user" },
       ]);
 
       const result = await service.getUsersByIds([4]);
 
-      expect(usersRepository.findBy).toHaveBeenCalledWith({ id: In([4]) });
+      // withDeleted: a soft-deleted author still gets their name shown.
+      expect(usersRepository.find).toHaveBeenCalledWith({
+        where: { id: In([4]) },
+        withDeleted: true,
+      });
       expect(result.map((u) => u.username)).toEqual(["walter"]);
     });
 
     it("skips the query when there are no ids", async () => {
       await expect(service.getUsersByIds([])).resolves.toEqual([]);
-      expect(usersRepository.findBy).not.toHaveBeenCalled();
+      expect(usersRepository.find).not.toHaveBeenCalled();
     });
   });
 });
