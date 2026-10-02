@@ -15,7 +15,9 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
-  @MaxLength(100)
+  // 24 to match varchar(24) on the column. A longer value used to pass
+  // validation and then fail in Postgres as a 500.
+  @MaxLength(24)
   username: string;
 
   @IsString()

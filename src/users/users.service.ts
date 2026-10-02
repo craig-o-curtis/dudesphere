@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, IsNull, Repository } from "typeorm";
 
 import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
 import { Profile } from "../profile/profile.entity.js";
@@ -52,9 +52,15 @@ export class UsersService {
     // If anything throws, both inserts are rolled back.
     // Rule: inside here, use `manager` for every query — never this.usersRepository.
     return this.dataSource.transaction(async (manager) => {
-      const existing = await manager.findOne(User, { where: { email: createUserDto.email } });
+      // withDeleted: the unique indexes on email and username still cover
+      // soft-deleted rows, so the check has to see them too. Without it a
+      // deleted user's email passes here and then fails on the index as a 500.
+      const existing = await manager.findOne(User, {
+        where: [{ email: createUserDto.email }, { username: createUserDto.username }],
+        withDeleted: true,
+      });
       if (existing) {
-        throw new ConflictException("Email already registered");
+        throw new ConflictException(takenFieldMessage(existing, createUserDto));
       }
 
       const user = await manager.save(
@@ -77,18 +83,27 @@ export class UsersService {
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
-    if (updateUserDto.email) {
+    const claimed = [
+      ...(updateUserDto.email ? [{ email: updateUserDto.email }] : []),
+      ...(updateUserDto.username ? [{ username: updateUserDto.username }] : []),
+    ];
+
+    if (claimed.length > 0) {
       const existing = await this.usersRepository.findOne({
-        where: { email: updateUserDto.email },
+        where: claimed,
+        withDeleted: true,
       });
       if (existing && existing.id !== id) {
-        throw new ConflictException("Email already registered");
+        throw new ConflictException(takenFieldMessage(existing, updateUserDto));
       }
     }
 
     // Profile fields are updated through PATCH /profiles/:id, not here
     const { profile: _profile, ...userFields } = updateUserDto;
-    const result = await this.usersRepository.update(id, userFields);
+    // deletedAt: IsNull() because update() does not apply the soft-delete
+    // filter that find() does. Without it a deleted row gets mutated and
+    // the caller still gets a 404 from getUserById below.
+    const result = await this.usersRepository.update({ id, deletedAt: IsNull() }, userFields);
     if (result.affected === 0) {
       throw new NotFoundException(`User #${id} not found`);
     }
@@ -97,7 +112,9 @@ export class UsersService {
 
   async deleteUser(id: number): Promise<void> {
     // Soft delete: sets deletedAt instead of removing the row.
-    const result = await this.usersRepository.softDelete(id);
+    // deletedAt: IsNull() so deleting an already-deleted user is a 404,
+    // not a second 204 that quietly moves the timestamp forward.
+    const result = await this.usersRepository.softDelete({ id, deletedAt: IsNull() });
     if (result.affected === 0) {
       throw new NotFoundException(`User #${id} not found`);
     }
@@ -114,4 +131,20 @@ export class UsersService {
       profile: profile ? ProfileResponseDto.fromEntity(profile) : undefined,
     });
   }
+}
+
+/**
+ * Names the field that collided so a 409 tells the caller what to change.
+ * Only email is compared directly — a row that came back without matching the
+ * attempted email must have matched on username, because those are the two
+ * fields the lookup searched.
+ */
+function takenFieldMessage(
+  existing: Pick<User, "email" | "username">,
+  attempted: { email?: string; username?: string },
+): string {
+  if (attempted.email && existing.email === attempted.email) {
+    return "Email already registered";
+  }
+  return "Username already taken";
 }
