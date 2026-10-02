@@ -6,11 +6,32 @@ import { ProfileService } from "./profile.service.js";
 describe("ProfileController", () => {
   let controller: ProfileController;
 
+  const mockProfile = {
+    id: 1,
+    userId: 42,
+    firstName: "John",
+    lastName: "Doe",
+    bio: "Hello world",
+    profileImageUrl: "https://example.com/avatar.jpg",
+    isDude: true,
+    ordainedDate: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  };
+
+  const profileServiceMock = {
+    getProfiles: vi.fn(),
+    getProfileById: vi.fn(),
+    getProfileByUserId: vi.fn(),
+    updateProfile: vi.fn(),
+  };
+
   beforeEach(async () => {
+    vi.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProfileController],
-      // The controller needs a ProfileService. Give it an empty fake.
-      providers: [{ provide: ProfileService, useValue: {} }],
+      providers: [{ provide: ProfileService, useValue: profileServiceMock }],
     }).compile();
 
     controller = module.get<ProfileController>(ProfileController);
@@ -18,5 +39,53 @@ describe("ProfileController", () => {
 
   it("should be defined", () => {
     expect(controller).toBeDefined();
+  });
+
+  describe("getProfiles", () => {
+    // The defaults come from DefaultValuePipe, which only runs on a real
+    // request, so a unit test can't cover them.
+    it("delegates to profileService.getProfiles with the limit and page", async () => {
+      const profiles = [mockProfile];
+      profileServiceMock.getProfiles.mockResolvedValue(profiles);
+
+      const result = await controller.getProfiles(5, 3);
+
+      expect(profileServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
+      expect(result).toBe(profiles);
+    });
+  });
+
+  describe("getProfileById", () => {
+    it("delegates to profileService.getProfileById", async () => {
+      profileServiceMock.getProfileById.mockResolvedValue(mockProfile);
+
+      const result = await controller.getProfileById(1);
+
+      expect(profileServiceMock.getProfileById).toHaveBeenCalledWith(1);
+      expect(result).toBe(mockProfile);
+    });
+  });
+
+  describe("getProfileByUserId", () => {
+    it("delegates to profileService.getProfileByUserId", async () => {
+      profileServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
+
+      const result = await controller.getProfileByUserId(42);
+
+      expect(profileServiceMock.getProfileByUserId).toHaveBeenCalledWith(42);
+      expect(result).toBe(mockProfile);
+    });
+  });
+
+  describe("updateProfile", () => {
+    it("delegates to profileService.updateProfile", async () => {
+      const updateDto = { bio: "Updated bio" };
+      profileServiceMock.updateProfile.mockResolvedValue(mockProfile);
+
+      const result = await controller.updateProfile(1, updateDto);
+
+      expect(profileServiceMock.updateProfile).toHaveBeenCalledWith(1, updateDto);
+      expect(result).toBe(mockProfile);
+    });
   });
 });
