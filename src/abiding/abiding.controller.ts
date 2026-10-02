@@ -15,15 +15,18 @@ export class AbidingController {
 
   @Get()
   public async getAbidings(@Query("userId") userId?: number): Promise<AbidingResponseDto[]> {
-    const users = await this.usersService.getUsers();
     const abidings = await this.abidingService.getAbidings(userId);
+    const authorIds = [...new Set(abidings.map((a) => a.userId))];
+    const users = await this.usersService.getUsersByIds(authorIds);
+    const usernames = new Map(users.map((u) => [u.id, u.username]));
+
     return abidings.map(
       (a) =>
         new AbidingResponseDto({
           id: a.id,
           userId: a.userId,
           message: a.message,
-          username: users.find((u) => u.id === a.userId)?.username || "Unknown",
+          username: usernames.get(a.userId) || "Unknown",
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
         }),
