@@ -127,14 +127,13 @@ describe("ProfileService", () => {
 
   describe("createForUser", () => {
     it("creates a profile with minimal data (no DTO)", async () => {
-      const mockManager = {
-        create: vi.fn().mockReturnValue(mockProfile),
-        save: vi.fn().mockResolvedValue(mockProfile),
-      } as unknown as EntityManager;
+      const create = vi.fn().mockReturnValue(mockProfile);
+      const save = vi.fn().mockResolvedValue(mockProfile);
+      const mockManager = { create, save } as unknown as EntityManager;
 
       const result = await service.createForUser(mockManager, 42);
 
-      expect(mockManager.create).toHaveBeenCalledWith(Profile, {
+      expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
         firstName: null,
         lastName: null,
@@ -143,15 +142,14 @@ describe("ProfileService", () => {
         isDude: false,
         ordainedDate: null,
       });
-      expect(mockManager.save).toHaveBeenCalledWith(Profile, mockProfile);
+      expect(save).toHaveBeenCalledWith(Profile, mockProfile);
       expect(result.id).toBe(1);
     });
 
     it("creates a profile with full DTO data", async () => {
-      const mockManager = {
-        create: vi.fn().mockReturnValue(mockProfile),
-        save: vi.fn().mockResolvedValue(mockProfile),
-      } as unknown as EntityManager;
+      const create = vi.fn().mockReturnValue(mockProfile);
+      const save = vi.fn().mockResolvedValue(mockProfile);
+      const mockManager = { create, save } as unknown as EntityManager;
 
       const dto = {
         firstName: "Jane",
@@ -164,7 +162,7 @@ describe("ProfileService", () => {
 
       const result = await service.createForUser(mockManager, 42, dto);
 
-      expect(mockManager.create).toHaveBeenCalledWith(Profile, {
+      expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
         firstName: "Jane",
         lastName: "Smith",
@@ -177,16 +175,15 @@ describe("ProfileService", () => {
     });
 
     it("creates a profile with partial DTO data", async () => {
-      const mockManager = {
-        create: vi.fn().mockReturnValue(mockProfile),
-        save: vi.fn().mockResolvedValue(mockProfile),
-      } as unknown as EntityManager;
+      const create = vi.fn().mockReturnValue(mockProfile);
+      const save = vi.fn().mockResolvedValue(mockProfile);
+      const mockManager = { create, save } as unknown as EntityManager;
 
       const dto = { bio: "Just a bio" };
 
       await service.createForUser(mockManager, 42, dto);
 
-      expect(mockManager.create).toHaveBeenCalledWith(Profile, {
+      expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
         firstName: null,
         lastName: null,

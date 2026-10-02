@@ -23,7 +23,6 @@ describe("ProfileController", () => {
     getProfiles: vi.fn(),
     getProfileById: vi.fn(),
     getProfileByUserId: vi.fn(),
-    createForUser: vi.fn(),
     updateProfile: vi.fn(),
   };
 
@@ -43,22 +42,16 @@ describe("ProfileController", () => {
   });
 
   describe("getProfiles", () => {
-    it("delegates to profileService.getProfiles with default values", async () => {
-      profileServiceMock.getProfiles.mockResolvedValue([mockProfile]);
+    // The defaults come from DefaultValuePipe, which only runs on a real
+    // request, so a unit test can't cover them.
+    it("delegates to profileService.getProfiles with the limit and page", async () => {
+      const profiles = [mockProfile];
+      profileServiceMock.getProfiles.mockResolvedValue(profiles);
 
       const result = await controller.getProfiles(5, 3);
 
-      // DefaultValuePipe doesn't apply in test context; service defaults handle it
       expect(profileServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
-      expect(result).toEqual([mockProfile]);
-    });
-
-    it("delegates to profileService.getProfiles with custom limit and page", async () => {
-      profileServiceMock.getProfiles.mockResolvedValue([mockProfile]);
-
-      await controller.getProfiles(5, 3);
-
-      expect(profileServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
+      expect(result).toBe(profiles);
     });
   });
 
@@ -69,7 +62,7 @@ describe("ProfileController", () => {
       const result = await controller.getProfileById(1);
 
       expect(profileServiceMock.getProfileById).toHaveBeenCalledWith(1);
-      expect(result).toEqual(mockProfile);
+      expect(result).toBe(mockProfile);
     });
   });
 
@@ -80,7 +73,7 @@ describe("ProfileController", () => {
       const result = await controller.getProfileByUserId(42);
 
       expect(profileServiceMock.getProfileByUserId).toHaveBeenCalledWith(42);
-      expect(result).toEqual(mockProfile);
+      expect(result).toBe(mockProfile);
     });
   });
 
@@ -92,7 +85,7 @@ describe("ProfileController", () => {
       const result = await controller.updateProfile(1, updateDto);
 
       expect(profileServiceMock.updateProfile).toHaveBeenCalledWith(1, updateDto);
-      expect(result).toEqual(mockProfile);
+      expect(result).toBe(mockProfile);
     });
   });
 });

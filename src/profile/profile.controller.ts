@@ -22,7 +22,7 @@ export class ProfileController {
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
   ): Promise<ProfileResponseDto[]> {
-    return this.profileService.getProfiles(limit ?? 10, page ?? 1);
+    return this.profileService.getProfiles(limit, page);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
