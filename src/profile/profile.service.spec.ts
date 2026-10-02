@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { EntityManager } from "typeorm";
+import { EntityManager, IsNull } from "typeorm";
 
 import { Profile } from "./profile.entity.js";
 import { ProfileService } from "./profile.service.js";
@@ -198,6 +198,25 @@ describe("ProfileService", () => {
     });
   });
 
+  describe("softDeleteForUser", () => {
+    it("soft-deletes the user's profile through the manager it is given", async () => {
+      // Kept as its own variable so the assertion reads the mock directly,
+      // not a method off the EntityManager-typed object.
+      const softDelete = vi.fn().mockResolvedValue({ affected: 1 });
+      const mockManager = { softDelete } as unknown as EntityManager;
+
+      await service.softDeleteForUser(mockManager, 42);
+
+      // The caller's manager, not profileRepository, so this runs inside the
+      // caller's transaction. Scoped to a profile not already deleted.
+      expect(softDelete).toHaveBeenCalledWith(Profile, {
+        userId: 42,
+        deletedAt: IsNull(),
+      });
+      expect(profileRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe("updateProfile", () => {
     it("updates a profile and returns the updated profile", async () => {
       profileRepository.update.mockResolvedValue({ affected: 1 });
@@ -205,8 +224,22 @@ describe("ProfileService", () => {
 
       const result = await service.updateProfile(1, { bio: "Updated bio" });
 
-      expect(profileRepository.update).toHaveBeenCalledWith(1, { bio: "Updated bio" });
+      expect(profileRepository.update).toHaveBeenCalledWith(
+        { id: 1, deletedAt: IsNull() },
+        { bio: "Updated bio" },
+      );
       expect(result.bio).toBe("Hello world");
+    });
+
+    // update() skips the soft-delete filter that find() applies, so the
+    // criteria has to carry it or a deleted profile gets edited.
+    it("throws NotFoundException when the profile is soft-deleted", async () => {
+      profileRepository.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.updateProfile(1, { bio: "x" })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(profileRepository.findOne).not.toHaveBeenCalled();
     });
 
     it("throws NotFoundException when updating a profile that does not exist", async () => {
@@ -226,7 +259,10 @@ describe("ProfileService", () => {
 
       await service.updateProfile(1, { firstName: "Johnny" });
 
-      expect(profileRepository.update).toHaveBeenCalledWith(1, { firstName: "Johnny" });
+      expect(profileRepository.update).toHaveBeenCalledWith(
+        { id: 1, deletedAt: IsNull() },
+        { firstName: "Johnny" },
+      );
     });
   });
 });

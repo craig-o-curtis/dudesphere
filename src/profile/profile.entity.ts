@@ -8,6 +8,7 @@ import {
 } from "typeorm";
 
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
+import { SoftDeleteUtcColumn } from "../shared/decorators/soft-delete-utc-column.decorator.js";
 import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
 import { UtcColumn } from "../shared/decorators/utc-column.decorator.js";
 import { User } from "../users/user.entity.js";
@@ -54,4 +55,8 @@ export class Profile {
   // Auto-set on creation, auto-update on every change
   @UpdateUtcColumn()
   updatedAt: string;
+
+  // Auto-set on deletion
+  @SoftDeleteUtcColumn()
+  deletedAt: string | null;
 }
