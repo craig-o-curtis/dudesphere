@@ -9,6 +9,8 @@ describe("AbidingController", () => {
 
   const abidingService = {
     getAbidings: vi.fn(),
+    createAbiding: vi.fn(),
+    patchAbiding: vi.fn(),
   };
 
   const usersService = {
@@ -71,6 +73,41 @@ describe("AbidingController", () => {
       const result = await controller.getAbidings();
 
       expect(result[0].username).toBe("Unknown");
+    });
+  });
+
+  // These used to load the first page of users and search it, so an author
+  // past that page came back as "Unknown".
+  describe("postAbiding", () => {
+    it("looks up the author by id and returns their username", async () => {
+      abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "new" });
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+
+      const result = await controller.postAbiding({ userId: "25", message: "new" });
+
+      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
+      expect(result.username).toBe("walter");
+    });
+
+    it("falls back to Unknown when the author is not found", async () => {
+      abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 99, message: "new" });
+      usersService.getUsersByIds.mockResolvedValue([]);
+
+      const result = await controller.postAbiding({ userId: "99", message: "new" });
+
+      expect(result.username).toBe("Unknown");
+    });
+  });
+
+  describe("patchAbiding", () => {
+    it("looks up the author by id and returns their username", async () => {
+      abidingService.patchAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "edited" });
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+
+      const result = await controller.patchAbiding("a1", { message: "edited" });
+
+      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
+      expect(result.username).toBe("walter");
     });
   });
 });
