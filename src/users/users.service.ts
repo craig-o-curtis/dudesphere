@@ -93,9 +93,12 @@ export class UsersService {
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+    // id: Not(id) leaves the caller's own row out. findOne returns one row, so
+    // without it a user sending their own email plus a taken username could
+    // get their own row back and slip past the check.
     const claimed = [
-      ...(updateUserDto.email ? [{ email: updateUserDto.email }] : []),
-      ...(updateUserDto.username ? [{ username: updateUserDto.username }] : []),
+      ...(updateUserDto.email ? [{ email: updateUserDto.email, id: Not(id) }] : []),
+      ...(updateUserDto.username ? [{ username: updateUserDto.username, id: Not(id) }] : []),
     ];
 
     if (claimed.length > 0) {
@@ -103,7 +106,7 @@ export class UsersService {
         where: claimed,
         withDeleted: true,
       });
-      if (existing && existing.id !== id) {
+      if (existing) {
         throw new ConflictException(takenFieldMessage(existing, updateUserDto));
       }
     }

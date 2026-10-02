@@ -194,8 +194,30 @@ describe("UsersService", () => {
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 
+    // Two things the conflict lookup must do. It leaves the caller's own row
+    // out, so sending your own email with someone else's username can't return
+    // your own row and hide the conflict. And it searches soft-deleted rows,
+    // because the unique indexes still cover them.
+    it("searches other users' rows, deleted ones included, for the email and username", async () => {
+      usersRepository.findOne.mockResolvedValueOnce({ id: 9, email: "o@x.com", username: "walter" });
+
+      await expect(
+        service.updateUser(3, { email: "d@x.com", username: "walter" }),
+      ).rejects.toThrow("Username already taken");
+
+      expect(usersRepository.findOne).toHaveBeenCalledWith({
+        where: [
+          { email: "d@x.com", id: Not(3) },
+          { username: "walter", id: Not(3) },
+        ],
+        withDeleted: true,
+      });
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
     it("allows a user to keep its own email", async () => {
-      usersRepository.findOne.mockResolvedValueOnce({ id: 3, email: "d@x.com", username: "dude" });
+      // The lookup leaves out the user's own row, so it finds nothing.
+      usersRepository.findOne.mockResolvedValueOnce(null);
       usersRepository.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValueOnce({
         id: 3,
