@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { EntityManager, IsNull, Repository } from "typeorm";
+import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -65,6 +65,12 @@ export class ProfileService {
     // IsNull() here is to ensure we only soft-delete the profile if it hasn't already been soft-deleted.
     // it is not `null`, but rather the `deletedAt` column is `null` (meaning it is not deleted yet).
     await manager.softDelete(Profile, { userId, deletedAt: IsNull() });
+  }
+
+  // Called by UsersService inside its transaction, the reverse of softDeleteForUser.
+  async restoreForUser(manager: EntityManager, userId: number): Promise<void> {
+    // Not(IsNull()) so only a soft-deleted profile is touched.
+    await manager.restore(Profile, { userId, deletedAt: Not(IsNull()) });
   }
 
   async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {

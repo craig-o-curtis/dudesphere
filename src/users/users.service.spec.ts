@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { DataSource, IsNull } from "typeorm";
+import { DataSource, IsNull, Not } from "typeorm";
 
 import { ProfileService } from "../profile/profile.service.js";
 import { User } from "./user.entity.js";
@@ -16,6 +16,7 @@ describe("UsersService", () => {
     create: vi.fn(),
     save: vi.fn(),
     softDelete: vi.fn(),
+    restore: vi.fn(),
   };
 
   // A fake DataSource whose transaction() just runs the callback with our fake manager.
@@ -32,6 +33,7 @@ describe("UsersService", () => {
   const profileService = {
     createForUser: vi.fn(),
     softDeleteForUser: vi.fn(),
+    restoreForUser: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -234,6 +236,44 @@ describe("UsersService", () => {
       profileService.softDeleteForUser.mockRejectedValue(new Error("profile update failed"));
 
       await expect(service.deleteUser(3)).rejects.toThrow("profile update failed");
+    });
+  });
+
+  describe("restoreUser", () => {
+    it("restores the user and its profile using the SAME transaction manager", async () => {
+      const restoredUser = { id: 3, username: "dude", email: "d@x.com", role: "user" };
+      manager.restore.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue(restoredUser);
+
+      const result = await service.restoreUser(3);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      // Scoped to a soft-deleted row, so restoring an active user is a 404.
+      expect(manager.restore).toHaveBeenCalledWith(User, { id: 3, deletedAt: Not(IsNull()) });
+      // The profile goes through the same manager, so both commit or roll back together.
+      expect(profileService.restoreForUser).toHaveBeenCalledWith(manager, 3);
+      // The response is the restored user, read back after the transaction.
+      expect(result).toMatchObject({ id: 3, username: "dude" });
+    });
+
+    it("throws 404 and leaves the profile alone when the user is not soft-deleted", async () => {
+      manager.restore.mockResolvedValue({ affected: 0 });
+
+      await expect(service.restoreUser(3)).rejects.toThrow("Deleted user #3 not found");
+
+      expect(profileService.restoreForUser).not.toHaveBeenCalled();
+      expect(usersRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    // As with deleteUser: the error has to escape the transaction callback,
+    // because that is what tells TypeORM to undo the user's restore.
+    it("rejects when the profile restore fails, so the user restore rolls back", async () => {
+      manager.restore.mockResolvedValue({ affected: 1 });
+      profileService.restoreForUser.mockRejectedValue(new Error("profile restore failed"));
+
+      await expect(service.restoreUser(3)).rejects.toThrow("profile restore failed");
+
+      expect(usersRepository.findOne).not.toHaveBeenCalled();
     });
   });
 
