@@ -22,11 +22,34 @@ Keep the axes apart all the way to the report. Code can follow every rule and st
 
 ## 2. Run the tooling first
 
-```bash
-pnpm lint; pnpm typecheck; pnpm format:check; pnpm test
-```
+Run every check on every review, before you read the diff. Don't skip one because the diff looks small or the PR body says it passes. Run each as its own command, so one failure doesn't hide the rest:
 
-Report each failure as a hard Standards finding that cites the tool. After that, don't flag by hand what the tooling already enforces. Dates are the exception, because lint is switched off in some files (section 4).
+| Check     | Command             | Passes when                          |
+| --------- | ------------------- | ------------------------------------ |
+| Lint      | `pnpm lint`         | exit 0, with 0 errors and 0 warnings |
+| Typecheck | `pnpm typecheck`    | exit 0                               |
+| Format    | `pnpm format:check` | exit 0                               |
+| Tests     | `pnpm test`         | every test passes                    |
+| Build     | `pnpm build`        | exit 0                               |
+
+Two more checks need the databases in `.env` to be running:
+
+| Check           | Command                | Passes when                               |
+| --------------- | ---------------------- | ----------------------------------------- |
+| End-to-end      | `pnpm test:e2e`        | every test passes                         |
+| Migration drift | `pnpm migration:check` | exit 0: the entities match the migrations |
+
+Run these two as well. If one fails because it can't connect, report it as "not run: no database". Never report a check as passing when it didn't run.
+
+Rules for the results:
+
+- Report each failure as a hard Standards finding that cites the tool and quotes its output.
+- The bar is zero issues. A lint warning fails the check the same as an error, whether this diff added it or it was there before. Report every one as a hard finding. Never write "pass" beside a check that printed a warning.
+- Note the test count. If the spec states one, compare them in the Spec axis.
+- These commands only read the code. Never run `pnpm format`, `oxlint --fix` or `pnpm migration:run` during a review.
+- With sub-agents (section 9), run the tooling yourself, once, and tell the Standards agent not to. Two runs at once slow each other down and tell you nothing new.
+
+After that, don't flag by hand what the tooling already enforces. Dates are the exception, because lint is switched off in some files (section 4).
 
 ## 3. Find the spec
 
@@ -114,7 +137,7 @@ Quote the spec line behind each finding.
 If you can spawn sub-agents, run Standards and Spec as two parallel sub-agents, so neither sees the other's reasoning.
 
 - Give each the diff command and the commit list.
-- Give the Standards agent this skill's path, so it can load sections 2 to 7 and their references.
+- Give the Standards agent this skill's path, so it can load sections 4 to 7 and their references. Tell it you are running the section 2 tooling and it must not.
 - Give the Spec agent the spec.
 - End both briefs with: "Do not invoke code-reviewer-nestjs or any other review skill, and do not spawn agents. Do the review directly." Without that line, a sub-agent can find this skill again and fan out.
 
@@ -133,10 +156,26 @@ Write the report in plain English, following `.agents/skills/plain-english`. Eac
 - the rule it breaks: a rule id, a `project-checks` section, a gmt rule, a tool, or a smell name
 - the fix
 
+Open the report with one line per check from section 2, so the reader can see that each one ran and how it ended.
+
 ```markdown
+## Tooling
+
+- Lint: FAIL, 2 warnings
+- Typecheck: pass
+- Format: FAIL, 1 file
+- Tests: pass, 64 of 64
+- Build: pass
+- End-to-end: not run: no database
+- Migration drift: not run: no database
+
 ## Standards
 
 ### Hard
+
+- `src/orders/orders.service.spec.ts:31`: `pnpm lint` warns `unbound-method`. Rule: tool (`oxlint`). Fix: hold the mock in its own variable.
+- `src/orders/orders.service.spec.ts:48`: the same warning. Rule: tool (`oxlint`). Fix: as above.
+- `src/orders/orders.controller.ts`: `pnpm format:check` fails on this file. Rule: tool (`oxfmt`). Fix: run `pnpm format`.
 
 - `src/orders/orders.service.ts:42`: `update(id, dto)` skips the soft-delete filter, so a deleted order can be edited. Rule: project-checks › Soft delete. Fix: add `deletedAt: IsNull()` to the criteria.
 
@@ -148,7 +187,7 @@ Write the report in plain English, following `.agents/skills/plain-english`. Eac
 
 - "Cancelling returns the order" — `cancelOrder` returns nothing. Fix: return `getOrderById(id)`.
 
-Standards: 1 hard, 1 judgement. Worst: the soft-delete update. Spec: 1. Worst: cancel's return value.
+Standards: 4 hard, 1 judgement. Worst: the soft-delete update. Spec: 1. Worst: cancel's return value.
 ```
 
 Don't merge or re-rank the two axes. Name the worst finding in each axis, not one overall.
