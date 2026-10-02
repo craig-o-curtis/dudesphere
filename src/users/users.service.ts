@@ -43,7 +43,9 @@ export class UsersService {
     if (ids.length === 0) {
       return [];
     }
-    const users = await this.usersRepository.findBy({ id: In(ids) });
+    // withDeleted: callers use this to name the author of existing content.
+    // A soft-deleted user still wrote what they wrote.
+    const users = await this.usersRepository.find({ where: { id: In(ids) }, withDeleted: true });
     return users.map((user) => this.toResponseDto(user));
   }
 
