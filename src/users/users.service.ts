@@ -111,13 +111,16 @@ export class UsersService {
   }
 
   async deleteUser(id: number): Promise<void> {
-    // Soft delete: sets deletedAt instead of removing the row.
-    // deletedAt: IsNull() so deleting an already-deleted user is a 404,
-    // not a second 204 that quietly moves the timestamp forward.
-    const result = await this.usersRepository.softDelete({ id, deletedAt: IsNull() });
-    if (result.affected === 0) {
-      throw new NotFoundException(`User #${id} not found`);
-    }
+    // Soft delete: sets deletedAt instead of removing the row. The profile is
+    // soft-deleted in the same transaction, because ON DELETE CASCADE only
+    // fires on a real DELETE.
+    await this.dataSource.transaction(async (manager) => {
+      const result = await manager.softDelete(User, { id, deletedAt: IsNull() });
+      if (result.affected === 0) {
+        throw new NotFoundException(`User #${id} not found`);
+      }
+      await this.profileService.softDeleteForUser(manager, id);
+    });
   }
 
   private toResponseDto(user: User, profile?: Profile | null): UserResponseDto {

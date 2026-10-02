@@ -15,6 +15,7 @@ describe("UsersService", () => {
     findOne: vi.fn(),
     create: vi.fn(),
     save: vi.fn(),
+    softDelete: vi.fn(),
   };
 
   // A fake DataSource whose transaction() just runs the callback with our fake manager.
@@ -26,11 +27,11 @@ describe("UsersService", () => {
     find: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
-    softDelete: vi.fn(),
   };
 
   const profileService = {
     createForUser: vi.fn(),
+    softDeleteForUser: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -206,18 +207,34 @@ describe("UsersService", () => {
   });
 
   describe("deleteUser", () => {
-    it("scopes the soft delete to rows that are not already deleted", async () => {
-      usersRepository.softDelete.mockResolvedValue({ affected: 1 });
+    it("soft-deletes the user and its profile using the SAME transaction manager", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
 
       await service.deleteUser(3);
 
-      expect(usersRepository.softDelete).toHaveBeenCalledWith({ id: 3, deletedAt: IsNull() });
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      // Scoped to rows not already deleted, so a second delete is a 404.
+      expect(manager.softDelete).toHaveBeenCalledWith(User, { id: 3, deletedAt: IsNull() });
+      // The profile goes through the same manager, so both commit or roll back together.
+      expect(profileService.softDeleteForUser).toHaveBeenCalledWith(manager, 3);
     });
 
-    it("throws 404 when the user is already soft-deleted", async () => {
-      usersRepository.softDelete.mockResolvedValue({ affected: 0 });
+    it("throws 404 and leaves the profile alone when the user is already soft-deleted", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 0 });
 
       await expect(service.deleteUser(3)).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(profileService.softDeleteForUser).not.toHaveBeenCalled();
+    });
+
+    // As with createUser: the error has to escape the transaction callback,
+    // because that is what tells TypeORM to undo the user's soft delete.
+    it("rejects when the profile soft delete fails, so the user soft delete rolls back", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+      profileService.softDeleteForUser.mockRejectedValue(new Error("profile update failed"));
+
+      await expect(service.deleteUser(3)).rejects.toThrow("profile update failed");
     });
   });
+
 });

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { EntityManager, Repository } from "typeorm";
+import { EntityManager, IsNull, Repository } from "typeorm";
 
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -60,8 +60,21 @@ export class ProfileService {
     return manager.save(Profile, profile);
   }
 
+  // Called by UsersService inside its transaction, like createForUser
+  async softDeleteForUser(manager: EntityManager, userId: number): Promise<void> {
+    // IsNull() here is to ensure we only soft-delete the profile if it hasn't already been soft-deleted.
+    // it is not `null`, but rather the `deletedAt` column is `null` (meaning it is not deleted yet).
+    await manager.softDelete(Profile, { userId, deletedAt: IsNull() });
+  }
+
   async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {
-    const result = await this.profileRepository.update(id, updateProfileDto);
+    // deletedAt: IsNull() because update() does not apply the soft-delete
+    // filter that find() does. Without it a deleted profile gets edited and
+    // the caller still gets a 404 from getProfileById below.
+    const result = await this.profileRepository.update(
+      { id, deletedAt: IsNull() },
+      updateProfileDto,
+    );
     if (result.affected === 0) {
       throw new NotFoundException(`Profile #${id} not found`);
     }
