@@ -144,6 +144,10 @@ export class UsersService {
     // transaction and the profile soft-delete could fail after the user was already soft-deleted.
     await this.dataSource.transaction(async (manager) => {
       // first soft-delete the user, then soft-delete the profile. If the user is not found, throw a 404.
+      // must first delete the user because the profile has a foreign key constraint on userId,
+      // so if we try to delete the profile first, it will fail if the user is not found.
+      // but if we delete the profile second, since the user is already soft-deleted,
+      // the profile will be soft-deleted as well.
       const result = await manager.softDelete(User, { id, deletedAt: IsNull() });
       if (result.affected === 0) {
         throw new NotFoundException(`User #${id} not found`);
