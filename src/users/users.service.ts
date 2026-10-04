@@ -139,7 +139,11 @@ export class UsersService {
     // Soft delete: sets deletedAt instead of removing the row. The profile is
     // soft-deleted in the same transaction, because ON DELETE CASCADE only
     // fires on a real DELETE.
+    // Here we don't use usersRepository.softDelete() because we need to do the profile soft-delete
+    // in the same transaction. If we used usersRepository.softDelete(), it would be a separate
+    // transaction and the profile soft-delete could fail after the user was already soft-deleted.
     await this.dataSource.transaction(async (manager) => {
+      // first soft-delete the user, then soft-delete the profile. If the user is not found, throw a 404.
       const result = await manager.softDelete(User, { id, deletedAt: IsNull() });
       if (result.affected === 0) {
         throw new NotFoundException(`User #${id} not found`);
