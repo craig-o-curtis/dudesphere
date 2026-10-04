@@ -74,6 +74,39 @@ describe("UsersService", () => {
     });
   });
 
+  describe("getUserByCredentials", () => {
+    const storedUser = {
+      id: 4,
+      username: "walter",
+      email: "w@x.com",
+      password: "secret1",
+      role: "user",
+    };
+
+    it("returns the user, without the password, when the password matches", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserByCredentials("w@x.com", "secret1");
+
+      // No withDeleted, so a soft-deleted user is not found and can't log in.
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
+      expect(result).toMatchObject({ id: 4, username: "walter" });
+      expect(result?.password).toBeUndefined();
+    });
+
+    it("returns null when the password is wrong", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      await expect(service.getUserByCredentials("w@x.com", "wrong-one")).resolves.toBeNull();
+    });
+
+    it("returns null when no user has that email", async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getUserByCredentials("no@x.com", "secret1")).resolves.toBeNull();
+    });
+  });
+
   describe("createUser", () => {
     it("creates the user and the profile using the SAME transaction manager", async () => {
       // By `SAME transaction manager` we mean the user insert and the profile
