@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { UsersController } from "./users.controller.js";
 import { UsersService } from "./users.service.js";
 
@@ -24,7 +25,10 @@ describe("UsersController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [{ provide: UsersService, useValue: usersService }],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: vi.fn(() => true) })
+      .compile();
 
     controller = module.get<UsersController>(UsersController);
   });
@@ -82,6 +86,18 @@ describe("UsersController", () => {
 
       expect(usersService.updateUser).toHaveBeenCalledWith(7, body);
       expect(result).toBe(updated);
+    });
+  });
+
+  describe("deleteMe", () => {
+    it("deletes the user on the request, not one from the URL", async () => {
+      // resolve as undefined because the return type is void
+      usersService.deleteUser.mockResolvedValue(undefined);
+      const mockUser = { userId: 25, username: "walter", role: "user" };
+
+      await controller.deleteMe(mockUser);
+
+      expect(usersService.deleteUser).toHaveBeenCalledWith(mockUser.userId);
     });
   });
 

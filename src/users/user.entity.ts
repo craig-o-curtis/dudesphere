@@ -40,7 +40,12 @@ export class User {
   @Column({ type: "simple-enum", enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @OneToOne(() => Profile, (profile) => profile.user)
+  @OneToOne(() => Profile, (profile) => profile.user) // one-to-one relation with Profile entity, Profile is the owner of the relation
+  // THe SQL equivalent here is `FOREIGN KEY (profileId) REFERENCES profile(id) ON DELETE CASCADE`
+  // the user object actually returns the profile object,
+  // but the profile object does not return the user object.
+  // This is because the profile object is the owner of the relation,
+  // and the user object is the inverse side of the relation.
   profile?: Relation<Profile>;
 
   // Auto-set once on row creation
