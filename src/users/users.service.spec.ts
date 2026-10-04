@@ -74,6 +74,39 @@ describe("UsersService", () => {
     });
   });
 
+  describe("getUserByCredentials", () => {
+    const storedUser = {
+      id: 4,
+      username: "walter",
+      email: "w@x.com",
+      password: "secret1",
+      role: "user",
+    };
+
+    it("returns the user, without the password, when the password matches", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserByCredentials("w@x.com", "secret1");
+
+      // No withDeleted, so a soft-deleted user is not found and can't log in.
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
+      expect(result).toMatchObject({ id: 4, username: "walter" });
+      expect(result?.password).toBeUndefined();
+    });
+
+    it("returns null when the password is wrong", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      await expect(service.getUserByCredentials("w@x.com", "wrong-one")).resolves.toBeNull();
+    });
+
+    it("returns null when no user has that email", async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getUserByCredentials("no@x.com", "secret1")).resolves.toBeNull();
+    });
+  });
+
   describe("createUser", () => {
     it("creates the user and the profile using the SAME transaction manager", async () => {
       // By `SAME transaction manager` we mean the user insert and the profile
@@ -258,15 +291,16 @@ describe("UsersService", () => {
 
   describe("deleteUser", () => {
     it("soft-deletes the user and its profile using the SAME transaction manager", async () => {
+      const mockUserId = 3;
       manager.softDelete.mockResolvedValue({ affected: 1 });
 
-      await service.deleteUser(3);
+      await service.deleteUser(mockUserId);
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       // Scoped to rows not already deleted, so a second delete is a 404.
       expect(manager.softDelete).toHaveBeenCalledWith(User, { id: 3, deletedAt: IsNull() });
       // The profile goes through the same manager, so both commit or roll back together.
-      expect(profileService.softDeleteForUser).toHaveBeenCalledWith(manager, 3);
+      expect(profileService.softDeleteForUser).toHaveBeenCalledWith(manager, mockUserId);
     });
 
     it("throws 404 and leaves the profile alone when the user is already soft-deleted", async () => {
@@ -293,7 +327,7 @@ describe("UsersService", () => {
       manager.restore.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue(restoredUser);
 
-      const result = await service.restoreUser(3);
+      const result = await service.restoreUser(restoredUser.id);
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       // Scoped to a soft-deleted row, so restoring an active user is a 404.
@@ -301,7 +335,7 @@ describe("UsersService", () => {
       // The profile goes through the same manager, so both commit or roll back together.
       expect(profileService.restoreForUser).toHaveBeenCalledWith(manager, 3);
       // The response is the restored user, read back after the transaction.
-      expect(result).toMatchObject({ id: 3, username: "dude" });
+      expect(result).toMatchObject(restoredUser);
     });
 
     it("throws 404 and leaves the profile alone when the user is not soft-deleted", async () => {

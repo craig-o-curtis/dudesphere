@@ -1,10 +1,12 @@
-import { IsEmail, IsString, MinLength } from "class-validator";
+import { IsEmail, IsNotEmpty, IsString } from "class-validator";
 
 export class LoginUserDto {
   @IsEmail()
   email: string;
 
+  // No length rule here. Sign-up decides what a valid password is; a rule
+  // here that differs from it locks out users with a valid password.
   @IsString()
-  @MinLength(8)
+  @IsNotEmpty()
   password: string;
 }

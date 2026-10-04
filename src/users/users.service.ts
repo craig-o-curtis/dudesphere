@@ -57,6 +57,18 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
+  // For login. Returns null for an unknown email and for a wrong password
+  // alike, so the caller can't tell which it was. A soft-deleted user is not
+  // found, so they can't log in.
+  async getUserByCredentials(email: string, password: string): Promise<UserResponseDto | null> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    // Passwords are stored as plain text today, so this is a plain compare.
+    if (!user || user.password !== password) {
+      return null;
+    }
+    return this.toResponseDto(user);
+  }
+
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     // Everything inside this callback is ONE transaction.
     // If anything throws, both inserts are rolled back.
@@ -127,7 +139,12 @@ export class UsersService {
     // Soft delete: sets deletedAt instead of removing the row. The profile is
     // soft-deleted in the same transaction, because ON DELETE CASCADE only
     // fires on a real DELETE.
+    // Here we don't use usersRepository.softDelete() because we need to do the profile soft-delete
+    // in the same transaction. If we used usersRepository.softDelete(), it would be a separate
+    // transaction and the profile soft-delete could fail after the user was already soft-deleted.
     await this.dataSource.transaction(async (manager) => {
+      // The user goes first so that a missing or already-deleted user throws the
+      // 404 before the profile is touched. Throwing rolls the transaction back.
       const result = await manager.softDelete(User, { id, deletedAt: IsNull() });
       if (result.affected === 0) {
         throw new NotFoundException(`User #${id} not found`);
