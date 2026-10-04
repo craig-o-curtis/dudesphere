@@ -142,6 +142,7 @@ export class UsersService {
     // Here we don't use usersRepository.softDelete() because we need to do the profile soft-delete
     // in the same transaction. If we used usersRepository.softDelete(), it would be a separate
     // transaction and the profile soft-delete could fail after the user was already soft-deleted.
+    // Note - under the hood, the softDelete only adds the deletedAt timestamp to the user row
     await this.dataSource.transaction(async (manager) => {
       // The user goes first so that a missing or already-deleted user throws the
       // 404 before the profile is touched. Throwing rolls the transaction back.
