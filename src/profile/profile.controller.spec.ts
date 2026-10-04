@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { ProfileController } from "./profile.controller.js";
 import { ProfileService } from "./profile.service.js";
 
@@ -32,7 +33,11 @@ describe("ProfileController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProfileController],
       providers: [{ provide: ProfileService, useValue: profileServiceMock }],
-    }).compile();
+    })
+      // Guards only run on real requests. The e2e test covers this one.
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ProfileController>(ProfileController);
   });
@@ -52,6 +57,21 @@ describe("ProfileController", () => {
 
       expect(profileServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
       expect(result).toBe(profiles);
+    });
+  });
+
+  describe("getMyProfile", () => {
+    it("asks for the profile of the user on the request", async () => {
+      profileServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
+
+      const result = await controller.getMyProfile({
+        userId: 25,
+        username: "walter",
+        role: "user",
+      });
+
+      expect(profileServiceMock.getProfileByUserId).toHaveBeenCalledWith(25);
+      expect(result).toBe(mockProfile);
     });
   });
 

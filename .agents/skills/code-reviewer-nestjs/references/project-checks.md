@@ -63,7 +63,7 @@ Prefer `relations: { x: true }` on the query that needs it. Flag `eager: true` u
 
 ## Module boundaries
 
-The current imports are `UsersModule → ProfileModule` and `AbidingModule → UsersModule`.
+The current imports are `UsersModule → ProfileModule`, `AbidingModule → UsersModule` and `AuthModule → UsersModule`.
 
 - **Cycles.** A new import that closes a cycle is a hard finding (`arch-avoid-circular-deps`). Don't accept `forwardRef` as the fix; it hides the cycle.
 - **Combining services.** Code that combines several services' results may live in the controller, because `arch-single-responsibility` allows orchestration there. Rules about one entity belong in that entity's service.
@@ -71,10 +71,12 @@ The current imports are `UsersModule → ProfileModule` and `AbidingModule → U
 
 ## Auth and guards
 
-Check `src/auth/auth.service.ts` first. When this was written, auth was a stub. `validateToken` accepted one hard-coded token, which carried no role, and `JwtAuthGuard` wasn't applied to any route.
+Login (`POST /auth`) checks the email and password and returns a signed JWT. `JwtAuthGuard` verifies it and puts `{ userId, username, role }` on the request. Read it with `@CurrentUser()`.
 
-- **While it's still a stub:** flag new destructive or admin routes (delete, restore, role changes) as unguarded, noting they need an admin guard once tokens carry a role. That's a known gap, not a blocker. Don't re-report routes that already existed.
-- **Once auth is real:** check that every mutating route has a guard, and drop the stub notes above.
+- **"Mine" comes from the token.** A route for the caller's own data (for example `GET /profiles/me`) takes the user id from `@CurrentUser()`, never from the URL or the body.
+- **Don't import `AuthModule` into a feature.** `AuthModule → UsersModule → ProfileModule`, so that import closes a cycle. The guard needs only `JwtService`, which is registered globally. Use `@UseGuards(JwtAuthGuard)` directly.
+- **Guards are tested in e2e.** A controller spec overrides the guard. The 401 cases live in `test/`.
+- **Known gaps, not blockers.** Only `GET /profiles/me` is guarded so far, and nothing checks `role`. Flag new destructive or admin routes (delete, restore, role changes) as unguarded. Don't re-report routes that already existed. Passwords are stored as plain text.
 
 ## Errors
 
