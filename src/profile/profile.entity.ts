@@ -25,8 +25,9 @@ export class Profile {
   @OneToOne(() => User, (user) => user.profile, {
     onDelete: "CASCADE", // when the user row is deleted, Postgres deletes this row too
     nullable: false, // a profile can never exist without a user
-  })
-  @JoinColumn({ name: "userId" })
+  }) // one-to-one relation with User entity, User is the owner of the relation
+  @JoinColumn({ name: "userId" }) // creates FK on this table, so the userId column is the FK to user.id
+  // the SQL equivalent here is `FOREIGN KEY (userId) REFERENCES user(id) ON DELETE CASCADE`
   user: Relation<User>;
 
   @Column({ type: "varchar", nullable: true, length: 100 })

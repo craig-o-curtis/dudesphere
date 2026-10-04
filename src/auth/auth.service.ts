@@ -17,7 +17,6 @@ export class AuthService {
   get isAuthenticated(): boolean {
     return this.authStateService.isAuthenticated;
   }
-
   async login(loginUser: LoginUserDto) {
     const user = await this.usersService.getUserByCredentials(loginUser.email, loginUser.password);
 
