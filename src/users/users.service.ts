@@ -57,6 +57,18 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
+  // For login. Returns null for an unknown email and for a wrong password
+  // alike, so the caller can't tell which it was. A soft-deleted user is not
+  // found, so they can't log in.
+  async getUserByCredentials(email: string, password: string): Promise<UserResponseDto | null> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    // Passwords are stored as plain text today, so this is a plain compare.
+    if (!user || user.password !== password) {
+      return null;
+    }
+    return this.toResponseDto(user);
+  }
+
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     // Everything inside this callback is ONE transaction.
     // If anything throws, both inserts are rolled back.
