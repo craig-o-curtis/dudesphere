@@ -44,7 +44,7 @@ describe("UsersController", () => {
       const users = [{ id: 1, username: "dude" }];
       usersService.getUsers.mockResolvedValue(users);
 
-      const result = await controller.getUsers(5, 2);
+      const result = await controller.getUsers({ limit: 5, page: 2 });
 
       expect(usersService.getUsers).toHaveBeenCalledWith(5, 2);
       expect(result).toBe(users);
@@ -85,6 +85,23 @@ describe("UsersController", () => {
       const result = await controller.updateUser(7, body);
 
       expect(usersService.updateUser).toHaveBeenCalledWith(7, body);
+      expect(result).toBe(updated);
+    });
+  });
+
+  describe("updateMyUser", () => {
+    it("passes the user id from the token and the body to the service and returns its result", async () => {
+      const body = { username: "newdude" };
+      const updated = { id: 25, username: "newdude" };
+      usersService.updateUser.mockResolvedValue(updated);
+
+      const result = await controller.updateMyUser(body, {
+        userId: 25,
+        username: "dude",
+        role: "user",
+      });
+
+      expect(usersService.updateUser).toHaveBeenCalledWith(25, body);
       expect(result).toBe(updated);
     });
   });
