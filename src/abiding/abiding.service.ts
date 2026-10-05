@@ -30,6 +30,11 @@ export class AbidingService {
     return this.toResponseDto(abiding);
   }
 
+  async getAbidingsByUserId(userId: number): Promise<AbidingResponseDto[]> {
+    const abidings = await this.abidingModel.find({ userId, deletedAt: null }).exec();
+    return abidings.map((abiding) => this.toResponseDto(abiding));
+  }
+
   async createAbiding(createAbidingDto: CreateAbidingDto): Promise<AbidingResponseDto> {
     const newAbiding = await this.abidingModel.create({
       userId: Number(createAbidingDto.userId),

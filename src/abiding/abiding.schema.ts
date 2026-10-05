@@ -5,7 +5,7 @@ export type AbidingDocument = Abiding & Document;
 
 @Schema({ timestamps: true })
 export class Abiding extends Document {
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, required: true }) // FK to User.id, not MongoDB ObjectId
   userId: number;
 
   @Prop({
@@ -16,6 +16,10 @@ export class Abiding extends Document {
   })
   message: string;
 
+  // image url
+  @Prop({ type: String, default: null })
+  imageUrl: string | null;
+
   // Optional reply chain — reference to parent abiding (MongoDB ObjectId)
   @Prop({ type: String, default: null })
   replyToId: string | null;
@@ -24,16 +28,16 @@ export class Abiding extends Document {
   @Prop({ type: String, default: null })
   username: string | null;
 
+  // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
+  createdAt: string | null;
+  updatedAt: string | null;
+
   // Soft delete, stored as a UTC ISO 8601 string. Set when the author's user is
   // soft-deleted, cleared when they are restored. Reads filter on
   // `deletedAt: null`, which also matches older documents that have no
   // deletedAt field at all.
   @Prop({ type: String, default: null })
   deletedAt: string | null;
-
-  // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
-  createdAt: string | null;
-  updatedAt: string | null;
 }
 
 export const AbidingSchema = SchemaFactory.createForClass(Abiding);
