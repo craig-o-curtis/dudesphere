@@ -9,7 +9,7 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { CreateProfileDto } from "../../profile/dto/create-profile-dto.js";
+import { CreateProfileDto } from "../../profiles/dto/create-profile-dto.js";
 
 export class CreateUserDto {
   @IsString()

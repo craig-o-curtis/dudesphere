@@ -4,13 +4,13 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not } from "typeorm";
 
 import { Profile } from "./profile.entity.js";
-import { ProfileService } from "./profile.service.js";
+import { ProfilesService } from "./profiles.service.js";
 
-describe("ProfileService", () => {
-  let service: ProfileService;
+describe("ProfilesService", () => {
+  let service: ProfilesService;
   let module: TestingModule;
 
-  // A fake repository: only the methods ProfileService actually calls.
+  // A fake repository: only the methods ProfilesService actually calls.
   const profileRepository = {
     find: vi.fn(),
     findOne: vi.fn(),
@@ -37,12 +37,12 @@ describe("ProfileService", () => {
 
     module = await Test.createTestingModule({
       providers: [
-        ProfileService,
+        ProfilesService,
         { provide: getRepositoryToken(Profile), useValue: profileRepository },
       ],
     }).compile();
 
-    service = module.get(ProfileService);
+    service = module.get(ProfilesService);
   });
 
   afterEach(async () => {

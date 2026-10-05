@@ -3,7 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
-import { Abiding } from "../../abiding/abiding.schema.js";
+import { Abiding } from "../../abidings/abiding.schema.js";
 
 // Plain type for seed data (without Mongoose Document methods)
 type AbidingSeedData = {

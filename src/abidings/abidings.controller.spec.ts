@@ -2,11 +2,11 @@ import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { UsersService } from "../users/users.service.js";
-import { AbidingController } from "./abiding.controller.js";
-import { AbidingService } from "./abiding.service.js";
+import { AbidingsController } from "./abidings.controller.js";
+import { AbidingsService } from "./abidings.service.js";
 
-describe("AbidingController", () => {
-  let controller: AbidingController;
+describe("AbidingsController", () => {
+  let controller: AbidingsController;
 
   const abidingService = {
     getAbidings: vi.fn(),
@@ -23,9 +23,9 @@ describe("AbidingController", () => {
     vi.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AbidingController],
+      controllers: [AbidingsController],
       providers: [
-        { provide: AbidingService, useValue: abidingService },
+        { provide: AbidingsService, useValue: abidingService },
         { provide: UsersService, useValue: usersService },
       ],
     })
@@ -33,7 +33,7 @@ describe("AbidingController", () => {
       .useValue({ canActivate: vi.fn(() => true) })
       .compile();
 
-    controller = module.get<AbidingController>(AbidingController);
+    controller = module.get<AbidingsController>(AbidingsController);
   });
 
   it("should be defined", () => {
