@@ -29,9 +29,19 @@ export class ProfileController {
     return this.profileService.getProfiles(limit, page);
   }
 
-  // The profile of the logged-in user. The user id comes from the token, never
-  // from the URL, so a caller can only ever read their own.
-  // Must come BEFORE @Get(":id"), or "me" gets matched as an :id
+  // The profile of the logged-in user. The user id comes from the JWT token
+  // in the Authorization header, never from the URL, so a caller can only
+  // ever read their own.
+  // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
+  //
+  // Auth flow:
+  //   1. Frontend calls POST /auth/login with email + password.
+  //   2. Backend validates credentials and returns a signed JWT token.
+  //   3. Frontend stores the token and sends it on every protected request:
+  //        Authorization: Bearer <token>
+  //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
+  //      then populates request.user with { userId, username, role }.
+  //   5. @CurrentUser() reads that user object from the request.
   @Get("me")
   @UseGuards(JwtAuthGuard)
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {
