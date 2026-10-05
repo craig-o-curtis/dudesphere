@@ -213,7 +213,7 @@ export class ProfileService {
   // Called by UsersService inside its transaction.
   // It uses the `manager` it is given, NOT this.profileRepository,
   // so the insert is part of the same transaction as the user insert.
-  async createForUser(
+  async createProfileForUser(
     manager: EntityManager,
     userId: number,
     dto?: CreateProfileDto,
@@ -464,7 +464,7 @@ export class UsersService {
         }),
       );
 
-      const profile = await this.profileService.createForUser(
+      const profile = await this.profileService.createProfileForUser(
         manager,
         user.id,
         createUserDto.profile,
@@ -608,7 +608,7 @@ No errors. You'll try the endpoints for real in Lesson 6, after the database is 
 ### 💡 Why
 
 - **Why a transaction?** Creating a user with a profile is two inserts. If the second one fails, a transaction undoes the first, so you never get a user without a profile.
-- **The one rule:** inside `dataSource.transaction(async (manager) => { ... })`, use `manager` for **every** query. `this.usersRepository` runs outside the transaction and won't be rolled back. That's also why `createForUser` takes `manager` as a parameter: the profile insert joins the same transaction.
+- **The one rule:** inside `dataSource.transaction(async (manager) => { ... })`, use `manager` for **every** query. `this.usersRepository` runs outside the transaction and won't be rolled back. That's also why `createProfileForUser` takes `manager` as a parameter: the profile insert joins the same transaction.
 - **Why not TypeORM's `cascade: ["insert"]`?** It works, but it hides what's being saved. TypeORM's own docs warn that cascades can cause "unintended side effects, bugs, and security issues". An explicit transaction is easier to read and to test.
 - **Why `@ValidateNested()` and `@Type()`?** I tested all three versions against your validation settings:
 
@@ -1009,7 +1009,7 @@ describe("UsersService", () => {
   };
 
   const profileService = {
-    createForUser: vi.fn(),
+    createProfileForUser: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -1035,7 +1035,7 @@ describe("UsersService", () => {
       username: "dude",
       email: "d@x.com",
     });
-    profileService.createForUser.mockResolvedValue({
+    profileService.createProfileForUser.mockResolvedValue({
       id: 1,
       userId: 42,
       isDude: true,
@@ -1050,7 +1050,7 @@ describe("UsersService", () => {
 
     // This is the important assertion: the profile was created with the
     // transaction's manager, so it rolls back together with the user.
-    expect(profileService.createForUser).toHaveBeenCalledWith(manager, 42, {
+    expect(profileService.createProfileForUser).toHaveBeenCalledWith(manager, 42, {
       firstName: "The",
     });
     expect(result.id).toBe(42);
@@ -1069,7 +1069,7 @@ describe("UsersService", () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(manager.save).not.toHaveBeenCalled();
-    expect(profileService.createForUser).not.toHaveBeenCalled();
+    expect(profileService.createProfileForUser).not.toHaveBeenCalled();
   });
 });
 ```
@@ -1101,7 +1101,7 @@ Every test in `users/` and `profile/` passes. **4 tests still fail**, in `auth/`
 ### 💡 Why
 
 - **Unit tests shouldn't need a database.** You give Nest fakes under the **same token** the real code asks for. `getRepositoryToken(Profile)` is the token that `@InjectRepository(Profile)` uses.
-- **The first `UsersService` test is the valuable one.** It proves the profile is created with the **transaction's** `manager`. If someone later changes `createForUser` to use its own repository, the transaction silently breaks, and this test catches it.
+- **The first `UsersService` test is the valuable one.** It proves the profile is created with the **transaction's** `manager`. If someone later changes `createProfileForUser` to use its own repository, the transaction silently breaks, and this test catches it.
 
 ---
 

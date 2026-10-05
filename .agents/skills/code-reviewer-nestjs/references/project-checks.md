@@ -28,7 +28,7 @@ Read only the sections the diff touches.
 
 ## Transactions across services
 
-The pattern: `UsersService.createUser`, `deleteUser` and `restoreUser` each open `dataSource.transaction`. They pass its `manager` to `ProfileService.createForUser`, `softDeleteForUser` and `restoreForUser`.
+The pattern: `UsersService.createUser`, `deleteUser` and `restoreUser` each open `dataSource.transaction`. They pass its `manager` to `ProfileService.createProfileForUser`, `softDeleteForUser` and `restoreForUser`.
 
 - **Use `manager` for everything.** Inside the callback, every query goes through `manager`. An injected repository runs outside the transaction and won't roll back.
 - **Let errors escape.** A `try`/`catch` or `.catch()` that swallows an error commits half the work.
