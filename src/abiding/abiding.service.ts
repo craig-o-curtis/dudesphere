@@ -12,7 +12,8 @@ export class AbidingService {
   constructor(@InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>) {}
 
   async getAbidings(userId?: number): Promise<AbidingResponseDto[]> {
-    const query: Record<string, any> = {};
+    // deletedAt: null hides abidings of soft-deleted users
+    const query: Record<string, any> = { deletedAt: null };
     if (userId) {
       query.userId = userId;
     }
@@ -22,7 +23,7 @@ export class AbidingService {
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
-    const abiding = await this.abidingModel.findById(id).exec();
+    const abiding = await this.abidingModel.findOne({ _id: id, deletedAt: null }).exec();
     if (!abiding) {
       throw new Error("Abiding not found");
     }
@@ -41,8 +42,8 @@ export class AbidingService {
 
   async patchAbiding(id: string, updateAbidingDto: UpdateAbidingDto): Promise<AbidingResponseDto> {
     const updatedAbiding = await this.abidingModel
-      .findByIdAndUpdate(
-        id,
+      .findOneAndUpdate(
+        { _id: id, deletedAt: null },
         Object.assign({}, updateAbidingDto, {
           replyToId: updateAbidingDto.replyToId || undefined,
         }),
@@ -58,7 +59,11 @@ export class AbidingService {
   }
 
   async deleteAbiding(abidingId: string): Promise<void> {
-    const result = await this.abidingModel.findByIdAndDelete(abidingId).exec();
+    // deletedAt: null so an abiding hidden with its deleted user is a 404 here
+    // too, and comes back intact if the user is restored.
+    const result = await this.abidingModel
+      .findOneAndDelete({ _id: abidingId, deletedAt: null })
+      .exec();
     if (!result) {
       throw new Error("Abiding not found");
     }
