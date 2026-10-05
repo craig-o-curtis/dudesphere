@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
@@ -43,7 +43,7 @@ export class ProfileService {
   // Called by UsersService inside its transaction.
   // It uses the `manager` it is given, NOT this.profileRepository,
   // so the insert is part of the same transaction as the user insert.
-  async createForUser(
+  async createProfileForUser(
     manager: EntityManager,
     userId: number,
     dto?: CreateProfileDto,
@@ -60,7 +60,7 @@ export class ProfileService {
     return manager.save(Profile, profile);
   }
 
-  // Called by UsersService inside its transaction, like createForUser
+  // Called by UsersService inside its transaction, like createProfileForUser
   async softDeleteForUser(manager: EntityManager, userId: number): Promise<void> {
     // IsNull() here is to ensure we only soft-delete the profile if it hasn't already been soft-deleted.
     // it is not `null`, but rather the `deletedAt` column is `null` (meaning it is not deleted yet).
@@ -74,6 +74,13 @@ export class ProfileService {
   }
 
   async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {
+    // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
+    // that is not a QueryFailedError, so QueryFailedFilter lets it through as
+    // a 500. Every field on UpdateProfileDto is optional, so an empty body
+    // reaches here through PATCH /profiles/me and PATCH /profiles/:id alike.
+    if (Object.keys(updateProfileDto).length === 0) {
+      throw new BadRequestException("No profile fields to update");
+    }
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted profile gets edited and
     // the caller still gets a 404 from getProfileById below.
