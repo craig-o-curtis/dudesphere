@@ -59,6 +59,22 @@ export class ProfileController {
     return this.profileService.getProfileById(id);
   }
 
+  // The logged-in user updates their own profile. The id comes from the JWT
+  // token, never from the URL, so a user can only ever update their own
+  // profile. Must come BEFORE @Patch(":id"), or "me" gets matched as that
+  // param.
+  //
+  // Auth flow: same as GET /profiles/me — see that comment above.
+  @Patch("me")
+  @UseGuards(JwtAuthGuard)
+  async updateMyProfile(
+    @Body() updateProfileDto: UpdateProfileDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<ProfileResponseDto> {
+    const profile = await this.profileService.getProfileByUserId(user.userId);
+    return this.profileService.updateProfile(profile.id, updateProfileDto);
+  }
+
   @Patch(":id")
   updateProfile(
     @Param("id", ParseIntPipe) id: number,
