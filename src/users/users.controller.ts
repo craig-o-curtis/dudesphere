@@ -55,10 +55,20 @@ export class UsersController {
     return this.usersService.updateUser(id, updateUserDto);
   }
 
-  // Closes the caller's own account. The id comes from the token, never the
-  // URL, so a user can only delete themselves. Soft-deletes the user and
-  // profile together, through the same deleteUser as the admin route.
-  // Must come BEFORE @Delete(":id"), or "me" gets matched as an :id
+  // Closes the caller's own account. The user id comes from the JWT token in
+  // the Authorization header, never from the URL, so a user can only delete
+  // themselves. Soft-deletes the user and profile together, through the same
+  // deleteUser as the admin route.
+  // Must come BEFORE @Delete(":id"), or "me" gets matched as an :id.
+  //
+  // Auth flow:
+  //   1. Frontend calls POST /auth/login with email + password.
+  //   2. Backend validates credentials and returns a signed JWT token.
+  //   3. Frontend stores the token and sends it on every protected request:
+  //        Authorization: Bearer <token>
+  //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
+  //      then populates request.user with { userId, username, role }.
+  //   5. @CurrentUser() reads that user object from the request.
   @Delete("me")
   @UseGuards(JwtAuthGuard)
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
