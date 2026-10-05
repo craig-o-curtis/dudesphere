@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
@@ -32,7 +32,7 @@ describe("UsersService", () => {
   };
 
   const profileService = {
-    createForUser: vi.fn(),
+    createProfileForUser: vi.fn(),
     softDeleteForUser: vi.fn(),
     restoreForUser: vi.fn(),
   };
@@ -81,6 +81,28 @@ describe("UsersService", () => {
     });
   });
 
+  describe("getUsersByIds", () => {
+    it("loads only the requested users in one query", async () => {
+      usersRepository.find.mockResolvedValue([
+        { id: 4, username: "walter", email: "w@x.com", role: "user" },
+      ]);
+
+      const result = await service.getUsersByIds([4]);
+
+      // withDeleted: a soft-deleted author still gets their name shown.
+      expect(usersRepository.find).toHaveBeenCalledWith({
+        where: { id: In([4]) },
+        withDeleted: true,
+      });
+      expect(result.map((u) => u.username)).toEqual(["walter"]);
+    });
+
+    it("skips the query when there are no ids", async () => {
+      await expect(service.getUsersByIds([])).resolves.toEqual([]);
+      expect(usersRepository.find).not.toHaveBeenCalled();
+    });
+  });
+
   describe("getUserByCredentials", () => {
     const storedUser = {
       id: 4,
@@ -123,7 +145,7 @@ describe("UsersService", () => {
       const mockProfile = { id: 1, userId: mockUserId, isDude: true };
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: mockUserId, username: "dude", email: "d@x.com" });
-      profileService.createForUser.mockResolvedValue(mockProfile);
+      profileService.createProfileForUser.mockResolvedValue(mockProfile);
 
       const result = await service.createUser({
         username: "dude",
@@ -141,7 +163,7 @@ describe("UsersService", () => {
         password: "secret1",
       });
       // The profile is created with that same manager, for the id the insert returned.
-      expect(profileService.createForUser).toHaveBeenCalledWith(manager, mockUserId, {
+      expect(profileService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
         firstName: "The",
       });
       // The response carries the new user and the profile created for it, and
@@ -157,7 +179,7 @@ describe("UsersService", () => {
     it("rejects when the profile insert fails, so the user insert rolls back", async () => {
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: 42, username: "dude", email: "d@x.com" });
-      profileService.createForUser.mockRejectedValue(new Error("profile insert failed"));
+      profileService.createProfileForUser.mockRejectedValue(new Error("profile insert failed"));
 
       await expect(
         service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
@@ -172,7 +194,7 @@ describe("UsersService", () => {
       ).rejects.toThrow("Email already registered");
 
       expect(manager.save).not.toHaveBeenCalled();
-      expect(profileService.createForUser).not.toHaveBeenCalled();
+      expect(profileService.createProfileForUser).not.toHaveBeenCalled();
     });
 
     it("throws 409 when the username is taken", async () => {
@@ -190,7 +212,7 @@ describe("UsersService", () => {
     it("searches soft-deleted rows for both email and username", async () => {
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
-      profileService.createForUser.mockResolvedValue({ id: 1, userId: 7 });
+      profileService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
 
       await service.createUser({ username: "dude", email: "d@x.com", password: "secret1" });
 
@@ -236,6 +258,18 @@ describe("UsersService", () => {
           password: "secret2",
         },
       );
+    });
+
+    it("throws 400 when the body carries no user fields", async () => {
+      await expect(service.updateUser(3, {})).rejects.toBeInstanceOf(BadRequestException);
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("throws 400 when the body carries only profile fields", async () => {
+      await expect(
+        service.updateUser(3, { profile: { firstName: "Dude" } }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(usersRepository.update).not.toHaveBeenCalled();
     });
 
     it("throws 404 when the user is already soft-deleted", async () => {
@@ -401,28 +435,6 @@ describe("UsersService", () => {
       await expect(service.restoreUser(3)).rejects.toThrow("mongo down");
 
       expect(usersRepository.findOne).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("getUsersByIds", () => {
-    it("loads only the requested users in one query", async () => {
-      usersRepository.find.mockResolvedValue([
-        { id: 4, username: "walter", email: "w@x.com", role: "user" },
-      ]);
-
-      const result = await service.getUsersByIds([4]);
-
-      // withDeleted: a soft-deleted author still gets their name shown.
-      expect(usersRepository.find).toHaveBeenCalledWith({
-        where: { id: In([4]) },
-        withDeleted: true,
-      });
-      expect(result.map((u) => u.username)).toEqual(["walter"]);
-    });
-
-    it("skips the query when there are no ids", async () => {
-      await expect(service.getUsersByIds([])).resolves.toEqual([]);
-      expect(usersRepository.find).not.toHaveBeenCalled();
     });
   });
 });

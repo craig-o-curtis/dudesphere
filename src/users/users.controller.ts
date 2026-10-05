@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  DefaultValuePipe,
   Delete,
   Get,
   HttpCode,
@@ -17,6 +16,7 @@ import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
+import { ListUsersQueryDto } from "./dto/list-users-query.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { UsersService } from "./users.service.js";
@@ -27,11 +27,14 @@ export class UsersController {
 
   @Get()
   // @HttpCode(200)
-  getUsers(
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-  ): Promise<UserResponseDto[]> {
-    return this.usersService.getUsers(limit, page);
+  getUsers(@Query() query: ListUsersQueryDto): Promise<UserResponseDto[]> {
+    return this.usersService.getUsers(query.limit, query.page);
+  }
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  getMyUser(@CurrentUser() user: AuthUser): Promise<UserResponseDto> {
+    return this.usersService.getUserById(user.userId);
   }
 
   @Get(":id")
@@ -44,6 +47,21 @@ export class UsersController {
   // @HttpCode(201)
   createUser(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
     return this.usersService.createUser(createUserDto);
+  }
+
+  // The logged-in user updates their own account. The id comes from the JWT
+  // token in the Authorization header, never from the URL, so a user can only
+  // ever update themselves. Must come BEFORE @Patch(":id"), or "me" gets
+  // matched as that param.
+  //
+  // Auth flow: same as GET /users/me — see that comment above.
+  @Patch("me")
+  @UseGuards(JwtAuthGuard)
+  updateMyUser(
+    @Body() updateUserDto: UpdateUserDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<UserResponseDto> {
+    return this.usersService.updateUser(user.userId, updateUserDto);
   }
 
   @Patch(":id")
