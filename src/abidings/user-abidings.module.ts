@@ -21,4 +21,4 @@ import { UserAbidingsService } from "./user-abidings.service.js";
   providers: [UserAbidingsService],
   exports: [MongooseModule, UserAbidingsService],
 })
-export class AbidingModelModule {}
+export class UserAbidingsModule {}
