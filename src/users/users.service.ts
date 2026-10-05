@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
+import { UserAbidingsService } from "../abiding/user-abidings.service.js";
 import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
 import { Profile } from "../profile/profile.entity.js";
 import { ProfileService } from "../profile/profile.service.js";
@@ -16,6 +17,7 @@ export class UsersService {
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly profileService: ProfileService,
+    private readonly userAbidingsService: UserAbidingsService,
   ) {}
 
   async getUsers(limit: number = 10, page: number = 1): Promise<UserResponseDto[]> {
@@ -151,6 +153,10 @@ export class UsersService {
         throw new NotFoundException(`User #${id} not found`);
       }
       await this.profileService.softDeleteForUser(manager, id);
+      // Abidings live in Mongo, outside this transaction. They go last so any
+      // earlier failure rolls back before Mongo is touched, and a Mongo
+      // failure throws and rolls back the user and profile.
+      await this.userAbidingsService.softDeleteForUser(id);
     });
   }
 
@@ -169,6 +175,8 @@ export class UsersService {
         throw new NotFoundException(`Deleted user #${id} not found`);
       }
       await this.profileService.restoreForUser(manager, id);
+      // Last, for the same reason as in deleteUser.
+      await this.userAbidingsService.restoreForUser(id);
     });
     return this.getUserById(id);
   }

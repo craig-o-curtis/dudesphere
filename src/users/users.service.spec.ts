@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
 
+import { UserAbidingsService } from "../abiding/user-abidings.service.js";
 import { ProfileService } from "../profile/profile.service.js";
 import { User } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
@@ -36,6 +37,11 @@ describe("UsersService", () => {
     restoreForUser: vi.fn(),
   };
 
+  const userAbidingsService = {
+    softDeleteForUser: vi.fn(),
+    restoreForUser: vi.fn(),
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
     manager.create.mockImplementation((_entity: unknown, values: object) => values);
@@ -46,6 +52,7 @@ describe("UsersService", () => {
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: DataSource, useValue: dataSource },
         { provide: ProfileService, useValue: profileService },
+        { provide: UserAbidingsService, useValue: userAbidingsService },
       ],
     }).compile();
 
@@ -301,6 +308,19 @@ describe("UsersService", () => {
       expect(manager.softDelete).toHaveBeenCalledWith(User, { id: 3, deletedAt: IsNull() });
       // The profile goes through the same manager, so both commit or roll back together.
       expect(profileService.softDeleteForUser).toHaveBeenCalledWith(manager, mockUserId);
+      expect(userAbidingsService.softDeleteForUser).toHaveBeenCalledWith(mockUserId);
+    });
+
+    // Mongo is outside the Postgres transaction, so it has to run last: a
+    // failure before it must not leave the abidings hidden.
+    it("soft-deletes the abidings after the user and profile", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+
+      await service.deleteUser(3);
+
+      expect(userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        profileService.softDeleteForUser.mock.invocationCallOrder[0],
+      );
     });
 
     it("throws 404 and leaves the profile alone when the user is already soft-deleted", async () => {
@@ -309,15 +329,25 @@ describe("UsersService", () => {
       await expect(service.deleteUser(3)).rejects.toBeInstanceOf(NotFoundException);
 
       expect(profileService.softDeleteForUser).not.toHaveBeenCalled();
+      expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
     });
 
     // As with createUser: the error has to escape the transaction callback,
     // because that is what tells TypeORM to undo the user's soft delete.
     it("rejects when the profile soft delete fails, so the user soft delete rolls back", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
-      profileService.softDeleteForUser.mockRejectedValue(new Error("profile update failed"));
+      profileService.softDeleteForUser.mockRejectedValueOnce(new Error("profile update failed"));
 
       await expect(service.deleteUser(3)).rejects.toThrow("profile update failed");
+
+      expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
+    });
+
+    it("rejects when the abidings soft delete fails, so the user soft delete rolls back", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+      userAbidingsService.softDeleteForUser.mockRejectedValueOnce(new Error("mongo down"));
+
+      await expect(service.deleteUser(3)).rejects.toThrow("mongo down");
     });
   });
 
@@ -334,6 +364,10 @@ describe("UsersService", () => {
       expect(manager.restore).toHaveBeenCalledWith(User, { id: 3, deletedAt: Not(IsNull()) });
       // The profile goes through the same manager, so both commit or roll back together.
       expect(profileService.restoreForUser).toHaveBeenCalledWith(manager, 3);
+      expect(userAbidingsService.restoreForUser).toHaveBeenCalledWith(3);
+      expect(userAbidingsService.restoreForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        profileService.restoreForUser.mock.invocationCallOrder[0],
+      );
       // The response is the restored user, read back after the transaction.
       expect(result).toMatchObject(restoredUser);
     });
@@ -344,6 +378,7 @@ describe("UsersService", () => {
       await expect(service.restoreUser(3)).rejects.toThrow("Deleted user #3 not found");
 
       expect(profileService.restoreForUser).not.toHaveBeenCalled();
+      expect(userAbidingsService.restoreForUser).not.toHaveBeenCalled();
       expect(usersRepository.findOne).not.toHaveBeenCalled();
     });
 
@@ -351,9 +386,19 @@ describe("UsersService", () => {
     // because that is what tells TypeORM to undo the user's restore.
     it("rejects when the profile restore fails, so the user restore rolls back", async () => {
       manager.restore.mockResolvedValue({ affected: 1 });
-      profileService.restoreForUser.mockRejectedValue(new Error("profile restore failed"));
+      profileService.restoreForUser.mockRejectedValueOnce(new Error("profile restore failed"));
 
       await expect(service.restoreUser(3)).rejects.toThrow("profile restore failed");
+
+      expect(userAbidingsService.restoreForUser).not.toHaveBeenCalled();
+      expect(usersRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it("rejects when the abidings restore fails, so the user restore rolls back", async () => {
+      manager.restore.mockResolvedValue({ affected: 1 });
+      userAbidingsService.restoreForUser.mockRejectedValueOnce(new Error("mongo down"));
+
+      await expect(service.restoreUser(3)).rejects.toThrow("mongo down");
 
       expect(usersRepository.findOne).not.toHaveBeenCalled();
     });
