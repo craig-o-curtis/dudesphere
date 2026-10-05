@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingController } from "./abiding.controller.js";
 import { AbidingService } from "./abiding.service.js";
@@ -9,6 +10,7 @@ describe("AbidingController", () => {
 
   const abidingService = {
     getAbidings: vi.fn(),
+    getAbidingsByUserId: vi.fn(),
     createAbiding: vi.fn(),
     patchAbiding: vi.fn(),
   };
@@ -26,7 +28,10 @@ describe("AbidingController", () => {
         { provide: AbidingService, useValue: abidingService },
         { provide: UsersService, useValue: usersService },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: vi.fn(() => true) })
+      .compile();
 
     controller = module.get<AbidingController>(AbidingController);
   });
@@ -73,6 +78,21 @@ describe("AbidingController", () => {
       const result = await controller.getAbidings();
 
       expect(result[0].username).toBe("Unknown");
+    });
+  });
+
+  describe("getMyAbidings", () => {
+    it("passes the id from the token, not a request param, and fills in usernames", async () => {
+      abidingService.getAbidingsByUserId.mockResolvedValue([
+        { id: "a1", userId: 25, message: "mine" },
+      ]);
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      const mockUser = { userId: 25, username: "walter", role: "user" };
+
+      const result = await controller.getMyAbidings(mockUser);
+
+      expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25);
+      expect(result[0].username).toBe("walter");
     });
   });
 

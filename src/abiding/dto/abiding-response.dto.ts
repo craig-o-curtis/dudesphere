@@ -11,6 +11,9 @@ export class AbidingResponseDto {
   message: string;
 
   @Expose()
+  imageUrl?: string | null;
+
+  @Expose()
   username?: string | null;
 
   @Expose()

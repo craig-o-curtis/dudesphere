@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not } from "typeorm";
@@ -125,13 +125,13 @@ describe("ProfileService", () => {
     });
   });
 
-  describe("createForUser", () => {
+  describe("createProfileForUser", () => {
     it("creates a profile with minimal data (no DTO)", async () => {
       const create = vi.fn().mockReturnValue(mockProfile);
       const save = vi.fn().mockResolvedValue(mockProfile);
       const mockManager = { create, save } as unknown as EntityManager;
 
-      const result = await service.createForUser(mockManager, 42);
+      const result = await service.createProfileForUser(mockManager, 42);
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
@@ -160,7 +160,7 @@ describe("ProfileService", () => {
         ordainedDate: "2026-06-15T12:00:00.000Z",
       };
 
-      const result = await service.createForUser(mockManager, 42, dto);
+      const result = await service.createProfileForUser(mockManager, 42, dto);
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
@@ -181,7 +181,7 @@ describe("ProfileService", () => {
 
       const dto = { bio: "Just a bio" };
 
-      await service.createForUser(mockManager, 42, dto);
+      await service.createProfileForUser(mockManager, 42, dto);
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
@@ -244,6 +244,13 @@ describe("ProfileService", () => {
         { bio: "Updated bio" },
       );
       expect(result.bio).toBe("Hello world");
+    });
+
+    // not.toHaveBeenCalled() is the point: the guard has to run before
+    // TypeORM gets an empty set and throws UpdateValuesMissingError as a 500.
+    it("throws 400 when the body carries no fields", async () => {
+      await expect(service.updateProfile(1, {})).rejects.toBeInstanceOf(BadRequestException);
+      expect(profileRepository.update).not.toHaveBeenCalled();
     });
 
     // update() skips the soft-delete filter that find() applies, so the
