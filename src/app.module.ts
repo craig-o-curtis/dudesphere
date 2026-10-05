@@ -27,6 +27,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       }),
     }),
     TypeOrmModule.forRootAsync({
+      // This entire forRootAsync call gets config from ConfigService
+      // it also registers the TypeOrmModule globally,
+      // so any feature can use @InjectRepository without importing TypeOrmModule.forFeature
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         type: "postgres",
