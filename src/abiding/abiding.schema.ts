@@ -24,6 +24,13 @@ export class Abiding extends Document {
   @Prop({ type: String, default: null })
   username: string | null;
 
+  // Soft delete, stored as a UTC ISO 8601 string. Set when the author's user is
+  // soft-deleted, cleared when they are restored. Reads filter on
+  // `deletedAt: null`, which also matches older documents that have no
+  // deletedAt field at all.
+  @Prop({ type: String, default: null })
+  deletedAt: string | null;
+
   // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
   createdAt: string | null;
   updatedAt: string | null;
@@ -32,6 +39,7 @@ export class Abiding extends Document {
 export const AbidingSchema = SchemaFactory.createForClass(Abiding);
 
 // Indexes
+// also serves the soft delete and restore of a user's abidings
 AbidingSchema.index({ userId: 1 });
 AbidingSchema.index({ replyToId: 1 });
 // get latest abidings for a user
