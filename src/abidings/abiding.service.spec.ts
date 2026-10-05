@@ -5,10 +5,10 @@ import { getUtcNow } from "@northguild/gmt";
 import mongoose from "mongoose";
 
 import { Abiding } from "./abiding.schema.js";
-import { AbidingService } from "./abiding.service.js";
+import { AbidingsService } from "./abidings.service.js";
 
-describe("AbidingService", () => {
-  let service: AbidingService;
+describe("AbidingsService", () => {
+  let service: AbidingsService;
 
   // Mongoose query methods return a Query, and the service calls .exec() on it.
   // create() is the exception: it returns a promise directly.
@@ -29,10 +29,13 @@ describe("AbidingService", () => {
     abidingModel.find.mockReturnValue(queryOf([]));
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AbidingService, { provide: getModelToken(Abiding.name), useValue: abidingModel }],
+      providers: [
+        AbidingsService,
+        { provide: getModelToken(Abiding.name), useValue: abidingModel },
+      ],
     }).compile();
 
-    service = module.get<AbidingService>(AbidingService);
+    service = module.get<AbidingsService>(AbidingsService);
   });
 
   it("should be defined", () => {

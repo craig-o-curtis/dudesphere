@@ -8,7 +8,7 @@ import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
 @Injectable()
-export class AbidingService {
+export class AbidingsService {
   constructor(@InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>) {}
 
   async getAbidings(userId?: number): Promise<AbidingResponseDto[]> {

@@ -1,6 +1,6 @@
 import { Exclude } from "class-transformer";
 
-import { ProfileResponseDto } from "../../profile/dto/profile-response.dto.js";
+import { ProfileResponseDto } from "../../profiles/dto/profile-response.dto.js";
 
 export class UserResponseDto {
   id: number;
