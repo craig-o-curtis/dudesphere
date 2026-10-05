@@ -4,7 +4,7 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not } from "typeorm";
 
 import { Profile } from "./profile.entity.js";
-import { ProfileService } from "./profile.service.js";
+import { ProfileService } from "./profiles.service.js";
 
 describe("ProfileService", () => {
   let service: ProfileService;

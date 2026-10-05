@@ -15,18 +15,18 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
-import { ProfileService } from "./profile.service.js";
+import { ProfilesService } from "./profiles.service.js";
 
 @Controller("profiles")
-export class ProfileController {
-  constructor(private readonly profileService: ProfileService) {}
+export class ProfilesController {
+  constructor(private readonly profilesService: ProfilesService) {}
 
   @Get()
   getProfiles(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
   ): Promise<ProfileResponseDto[]> {
-    return this.profileService.getProfiles(limit, page);
+    return this.profilesService.getProfiles(limit, page);
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token
@@ -45,18 +45,18 @@ export class ProfileController {
   @Get("me")
   @UseGuards(JwtAuthGuard)
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileByUserId(user.userId);
+    return this.profilesService.getProfileByUserId(user.userId);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
   @Get("user/:userId")
   getProfileByUserId(@Param("userId", ParseIntPipe) userId: number): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileByUserId(userId);
+    return this.profilesService.getProfileByUserId(userId);
   }
 
   @Get(":id")
   getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileById(id);
+    return this.profilesService.getProfileById(id);
   }
 
   // The logged-in user updates their own profile. The id comes from the JWT
@@ -71,8 +71,8 @@ export class ProfileController {
     @Body() updateProfileDto: UpdateProfileDto,
     @CurrentUser() user: AuthUser,
   ): Promise<ProfileResponseDto> {
-    const profile = await this.profileService.getProfileByUserId(user.userId);
-    return this.profileService.updateProfile(profile.id, updateProfileDto);
+    const profile = await this.profilesService.getProfileByUserId(user.userId);
+    return this.profilesService.updateProfile(profile.id, updateProfileDto);
   }
 
   @Patch(":id")
@@ -80,7 +80,7 @@ export class ProfileController {
     @Param("id", ParseIntPipe) id: number,
     @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<ProfileResponseDto> {
-    return this.profileService.updateProfile(id, updateProfileDto);
+    return this.profilesService.updateProfile(id, updateProfileDto);
   }
 
   // No deleteProfile endpoint. A profile is soft-deleted together with its

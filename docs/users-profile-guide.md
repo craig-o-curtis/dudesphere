@@ -259,26 +259,26 @@ import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfileService } from "./profile.service.js";
 
 @Controller("profiles")
-export class ProfileController {
-  constructor(private readonly profileService: ProfileService) {}
+export class ProfilesController {
+  constructor(private readonly ProfileService: ProfileService) {}
 
   @Get()
   getProfiles(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
   ): Promise<ProfileResponseDto[]> {
-    return this.profileService.getProfiles(limit, page);
+    return this.ProfileService.getProfiles(limit, page);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
   @Get("user/:userId")
   getProfileByUserId(@Param("userId", ParseIntPipe) userId: number): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileByUserId(userId);
+    return this.ProfileService.getProfileByUserId(userId);
   }
 
   @Get(":id")
   getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
-    return this.profileService.getProfileById(id);
+    return this.ProfileService.getProfileById(id);
   }
 
   @Patch(":id")
@@ -286,7 +286,7 @@ export class ProfileController {
     @Param("id", ParseIntPipe) id: number,
     @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<ProfileResponseDto> {
-    return this.profileService.updateProfile(id, updateProfileDto);
+    return this.ProfileService.updateProfile(id, updateProfileDto);
   }
 }
 ```
@@ -312,7 +312,7 @@ pnpm build
 - **`NotFoundException` instead of `throw new Error()`:** Nest turns `NotFoundException` into a **404**. A plain `Error` becomes a **500**, which tells the client your server crashed when really the thing just doesn't exist.
 - **Route order matters.** Nest checks routes from top to bottom. When `@Get(":id")` came first, `GET /profiles/user/5` matched it, `ParseIntPipe` tried to turn `"user"` into a number, and you got a 400. Put fixed paths (`user/...`) above parameter paths (`:id`).
 - **`POST /profiles` and `DELETE /profiles/:id` are gone on purpose.** A profile belongs to a user. It's created along with the user (Lesson 3) and deleted along with the user (the cascade). If clients could create profiles directly, they'd have to send a `userId`, and then anyone could attach a profile to anyone's account.
-- **`exports: [ProfileService]`** lets other modules (UsersModule, next lesson) use `ProfileService`. Without it, the service is private to ProfileModule.
+- **`exports: [ProfileService]`** lets other modules (UsersModule, next lesson) use `ProfileService`. Without it, the service is private to ProfilesModule.
 - **`fromEntity` returns a real class instance.** Nest's `ClassSerializerInterceptor` (in `main.ts`) only works on class instances, not plain `{ }` objects. That's what makes `@Exclude()` work.
 
 ---
@@ -411,7 +411,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly dataSource: DataSource,
-    private readonly profileService: ProfileService,
+    private readonly ProfileService: ProfileService,
   ) {}
 
   async getUsers(limit?: number, page?: number): Promise<UserResponseDto[]> {
@@ -464,7 +464,7 @@ export class UsersService {
         }),
       );
 
-      const profile = await this.profileService.createProfileForUser(
+      const profile = await this.ProfileService.createProfileForUser(
         manager,
         user.id,
         createUserDto.profile,
@@ -522,14 +522,14 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { ProfileModule } from "../profile/profile.module.js";
+import { ProfilesModule } from "../profile/profile.module.js";
 import { User } from "./user.entity.js";
 import { UsersController } from "./users.controller.js";
 import { UsersSeedService } from "./users.seed.js";
 import { UsersService } from "./users.service.js";
 
 @Module({
-  imports: [ConfigModule, TypeOrmModule.forFeature([User]), ProfileModule],
+  imports: [ConfigModule, TypeOrmModule.forFeature([User]), ProfilesModule],
   controllers: [UsersController],
   providers: [UsersService, UsersSeedService],
   exports: [UsersService],
@@ -620,7 +620,7 @@ No errors. You'll try the endpoints for real in Lesson 6, after the database is 
 
   `@ValidateNested()` says "check inside this object". `@Type()` says "and here's which class to check it against".
 
-- **`UsersModule` imports `ProfileModule`.** That's how UsersService gets ProfileService injected. ProfileModule does **not** import UsersModule, so there's no circular dependency and no `forwardRef()` is needed.
+- **`UsersModule` imports `ProfilesModule`.** That's how UsersService gets ProfileService injected. ProfilesModule does **not** import UsersModule, so there's no circular dependency and no `forwardRef()` is needed.
 - **Soft delete:** `softDelete` sets `deletedAt` instead of removing the row, and TypeORM then hides that user from normal queries. Because the row isn't really deleted, the profile stays. That's fine: if you ever restore the user, their profile is still there.
 
 ---
@@ -1008,7 +1008,7 @@ describe("UsersService", () => {
     transaction: vi.fn((callback: (m: typeof manager) => unknown) => callback(manager)),
   };
 
-  const profileService = {
+  const ProfileService = {
     createProfileForUser: vi.fn(),
   };
 
@@ -1021,7 +1021,7 @@ describe("UsersService", () => {
         UsersService,
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: DataSource, useValue: dataSource },
-        { provide: ProfileService, useValue: profileService },
+        { provide: ProfileService, useValue: ProfileService },
       ],
     }).compile();
 
@@ -1035,7 +1035,7 @@ describe("UsersService", () => {
       username: "dude",
       email: "d@x.com",
     });
-    profileService.createProfileForUser.mockResolvedValue({
+    ProfileService.createProfileForUser.mockResolvedValue({
       id: 1,
       userId: 42,
       isDude: true,
@@ -1050,7 +1050,7 @@ describe("UsersService", () => {
 
     // This is the important assertion: the profile was created with the
     // transaction's manager, so it rolls back together with the user.
-    expect(profileService.createProfileForUser).toHaveBeenCalledWith(manager, 42, {
+    expect(ProfileService.createProfileForUser).toHaveBeenCalledWith(manager, 42, {
       firstName: "The",
     });
     expect(result.id).toBe(42);
@@ -1069,7 +1069,7 @@ describe("UsersService", () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(manager.save).not.toHaveBeenCalled();
-    expect(profileService.createProfileForUser).not.toHaveBeenCalled();
+    expect(ProfileService.createProfileForUser).not.toHaveBeenCalled();
   });
 });
 ```

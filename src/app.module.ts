@@ -4,12 +4,12 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { createObserveModule } from "@nestjs/observe";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { AbidingModule } from "./abiding/abiding.module.js";
+import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { ProfileModule } from "./profile/profile.module.js";
+import { ProfilesModule } from "./profiles/profiles.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -54,9 +54,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     UsersModule,
     AuthStateModule,
-    AbidingModule,
+    AbidingsModule,
     AuthModule,
-    ProfileModule,
+    ProfilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
