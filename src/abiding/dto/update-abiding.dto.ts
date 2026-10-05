@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsOptional, IsString, IsUrl, MaxLength, MinLength } from "class-validator";
 
 export class UpdateAbidingDto {
   @IsOptional()
@@ -6,6 +6,10 @@ export class UpdateAbidingDto {
   @MinLength(1)
   @MaxLength(280)
   message?: string;
+
+  @IsOptional()
+  @IsUrl()
+  imageUrl?: string;
 
   @IsOptional()
   @IsString()
