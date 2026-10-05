@@ -7,10 +7,10 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
-import { UserAbidingsService } from "../abiding/user-abidings.service.js";
-import { ProfileResponseDto } from "../profile/dto/profile-response.dto.js";
-import { Profile } from "../profile/profile.entity.js";
-import { ProfileService } from "../profile/profile.service.js";
+import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
+import { Profile } from "../profiles/profile.entity.js";
+import { ProfilesService } from "../profiles/profiles.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
@@ -21,7 +21,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly dataSource: DataSource,
-    private readonly profileService: ProfileService,
+    private readonly profilesService: ProfilesService,
     private readonly userAbidingsService: UserAbidingsService,
   ) {}
 
@@ -112,7 +112,7 @@ export class UsersService {
         }),
       );
 
-      const profile = await this.profileService.createProfileForUser(
+      const profile = await this.profilesService.createProfileForUser(
         manager,
         user.id,
         createUserDto.profile,
@@ -182,7 +182,7 @@ export class UsersService {
       if (result.affected === 0) {
         throw new NotFoundException(`User #${id} not found`);
       }
-      await this.profileService.softDeleteForUser(manager, id);
+      await this.profilesService.softDeleteForUser(manager, id);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
       // failure throws and rolls back the user and profile.
@@ -206,7 +206,7 @@ export class UsersService {
       if (result.affected === 0) {
         throw new NotFoundException(`Deleted user #${id} not found`);
       }
-      await this.profileService.restoreForUser(manager, id);
+      await this.profilesService.restoreForUser(manager, id);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });

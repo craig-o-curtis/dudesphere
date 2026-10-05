@@ -1,7 +1,7 @@
 import { Exclude } from "class-transformer";
 import { Column, Entity, Index, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
 
-import { Profile } from "../profile/profile.entity.js";
+import { Profile } from "../profiles/profile.entity.js";
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
 import { SoftDeleteUtcColumn } from "../shared/decorators/soft-delete-utc-column.decorator.js";
 import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";

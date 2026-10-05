@@ -3,15 +3,15 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { User } from "../users/user.entity.js";
-import { ProfileController } from "./profile.controller.js";
 import { Profile } from "./profile.entity.js";
-import { ProfileService } from "./profile.service.js";
+import { ProfilesController } from "./profiles.controller.js";
 import { ProfilesSeedService } from "./profiles.seed.js";
+import { ProfilesService } from "./profiles.service.js";
 
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([Profile, User])],
-  controllers: [ProfileController],
-  providers: [ProfileService, ProfilesSeedService],
-  exports: [ProfileService],
+  controllers: [ProfilesController],
+  providers: [ProfilesService, ProfilesSeedService],
+  exports: [ProfilesService],
 })
-export class ProfileModule {}
+export class ProfilesModule {}

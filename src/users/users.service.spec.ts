@@ -3,8 +3,8 @@ import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
 
-import { UserAbidingsService } from "../abiding/user-abidings.service.js";
-import { ProfileService } from "../profile/profile.service.js";
+import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { ProfilesService } from "../profiles/profiles.service.js";
 import { User } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
@@ -31,7 +31,7 @@ describe("UsersService", () => {
     update: vi.fn(),
   };
 
-  const profileService = {
+  const profilesService = {
     createProfileForUser: vi.fn(),
     softDeleteForUser: vi.fn(),
     restoreForUser: vi.fn(),
@@ -51,7 +51,7 @@ describe("UsersService", () => {
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: DataSource, useValue: dataSource },
-        { provide: ProfileService, useValue: profileService },
+        { provide: ProfilesService, useValue: profilesService },
         { provide: UserAbidingsService, useValue: userAbidingsService },
       ],
     }).compile();
@@ -145,7 +145,7 @@ describe("UsersService", () => {
       const mockProfile = { id: 1, userId: mockUserId, isDude: true };
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: mockUserId, username: "dude", email: "d@x.com" });
-      profileService.createProfileForUser.mockResolvedValue(mockProfile);
+      profilesService.createProfileForUser.mockResolvedValue(mockProfile);
 
       const result = await service.createUser({
         username: "dude",
@@ -163,7 +163,7 @@ describe("UsersService", () => {
         password: "secret1",
       });
       // The profile is created with that same manager, for the id the insert returned.
-      expect(profileService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
+      expect(profilesService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
         firstName: "The",
       });
       // The response carries the new user and the profile created for it, and
@@ -179,7 +179,7 @@ describe("UsersService", () => {
     it("rejects when the profile insert fails, so the user insert rolls back", async () => {
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: 42, username: "dude", email: "d@x.com" });
-      profileService.createProfileForUser.mockRejectedValue(new Error("profile insert failed"));
+      profilesService.createProfileForUser.mockRejectedValue(new Error("profile insert failed"));
 
       await expect(
         service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
@@ -194,7 +194,7 @@ describe("UsersService", () => {
       ).rejects.toThrow("Email already registered");
 
       expect(manager.save).not.toHaveBeenCalled();
-      expect(profileService.createProfileForUser).not.toHaveBeenCalled();
+      expect(profilesService.createProfileForUser).not.toHaveBeenCalled();
     });
 
     it("throws 409 when the username is taken", async () => {
@@ -212,7 +212,7 @@ describe("UsersService", () => {
     it("searches soft-deleted rows for both email and username", async () => {
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
-      profileService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
+      profilesService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
 
       await service.createUser({ username: "dude", email: "d@x.com", password: "secret1" });
 
@@ -341,7 +341,7 @@ describe("UsersService", () => {
       // Scoped to rows not already deleted, so a second delete is a 404.
       expect(manager.softDelete).toHaveBeenCalledWith(User, { id: 3, deletedAt: IsNull() });
       // The profile goes through the same manager, so both commit or roll back together.
-      expect(profileService.softDeleteForUser).toHaveBeenCalledWith(manager, mockUserId);
+      expect(profilesService.softDeleteForUser).toHaveBeenCalledWith(manager, mockUserId);
       expect(userAbidingsService.softDeleteForUser).toHaveBeenCalledWith(mockUserId);
     });
 
@@ -353,7 +353,7 @@ describe("UsersService", () => {
       await service.deleteUser(3);
 
       expect(userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
-        profileService.softDeleteForUser.mock.invocationCallOrder[0],
+        profilesService.softDeleteForUser.mock.invocationCallOrder[0],
       );
     });
 
@@ -362,7 +362,7 @@ describe("UsersService", () => {
 
       await expect(service.deleteUser(3)).rejects.toBeInstanceOf(NotFoundException);
 
-      expect(profileService.softDeleteForUser).not.toHaveBeenCalled();
+      expect(profilesService.softDeleteForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
     });
 
@@ -370,7 +370,7 @@ describe("UsersService", () => {
     // because that is what tells TypeORM to undo the user's soft delete.
     it("rejects when the profile soft delete fails, so the user soft delete rolls back", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
-      profileService.softDeleteForUser.mockRejectedValueOnce(new Error("profile update failed"));
+      profilesService.softDeleteForUser.mockRejectedValueOnce(new Error("profile update failed"));
 
       await expect(service.deleteUser(3)).rejects.toThrow("profile update failed");
 
@@ -397,10 +397,10 @@ describe("UsersService", () => {
       // Scoped to a soft-deleted row, so restoring an active user is a 404.
       expect(manager.restore).toHaveBeenCalledWith(User, { id: 3, deletedAt: Not(IsNull()) });
       // The profile goes through the same manager, so both commit or roll back together.
-      expect(profileService.restoreForUser).toHaveBeenCalledWith(manager, 3);
+      expect(profilesService.restoreForUser).toHaveBeenCalledWith(manager, 3);
       expect(userAbidingsService.restoreForUser).toHaveBeenCalledWith(3);
       expect(userAbidingsService.restoreForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
-        profileService.restoreForUser.mock.invocationCallOrder[0],
+        profilesService.restoreForUser.mock.invocationCallOrder[0],
       );
       // The response is the restored user, read back after the transaction.
       expect(result).toMatchObject(restoredUser);
@@ -411,7 +411,7 @@ describe("UsersService", () => {
 
       await expect(service.restoreUser(3)).rejects.toThrow("Deleted user #3 not found");
 
-      expect(profileService.restoreForUser).not.toHaveBeenCalled();
+      expect(profilesService.restoreForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.restoreForUser).not.toHaveBeenCalled();
       expect(usersRepository.findOne).not.toHaveBeenCalled();
     });
@@ -420,7 +420,7 @@ describe("UsersService", () => {
     // because that is what tells TypeORM to undo the user's restore.
     it("rejects when the profile restore fails, so the user restore rolls back", async () => {
       manager.restore.mockResolvedValue({ affected: 1 });
-      profileService.restoreForUser.mockRejectedValueOnce(new Error("profile restore failed"));
+      profilesService.restoreForUser.mockRejectedValueOnce(new Error("profile restore failed"));
 
       await expect(service.restoreUser(3)).rejects.toThrow("profile restore failed");
 

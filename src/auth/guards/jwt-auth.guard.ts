@@ -10,7 +10,7 @@ interface RequestWithUser {
 
 // Depends only on JwtService, which AuthModule registers globally. So any
 // feature can use this guard without importing AuthModule. That matters:
-// AuthModule imports UsersModule, which imports ProfileModule, so an import
+// AuthModule imports UsersModule, which imports ProfilesModule, so an import
 // the other way would close a cycle.
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
