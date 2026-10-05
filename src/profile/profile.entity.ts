@@ -23,7 +23,7 @@ export class Profile {
   userId: number;
 
   @OneToOne(() => User, (user) => user.profile, {
-    onDelete: "CASCADE", // when the user row is deleted, Postgres deletes this row too
+    onDelete: "CASCADE", // when the user row is hard deleted, Postgres deletes this row too
     nullable: false, // a profile can never exist without a user
   }) // one-to-one relation with User entity, User is the owner of the relation
   @JoinColumn({ name: "userId" }) // creates FK on this table, so the userId column is the FK to user.id
