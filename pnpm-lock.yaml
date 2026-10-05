@@ -194,8 +194,8 @@ importers:
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@1.1.1(mongodb@7.6.0)(pg@8.23.0)(supports-color@8.1.1)(ts-node@10.9.2(@swc/core@1.16.2)(@types/node@26.6.3)(typescript@6.0.3)))
       '@northguild/gmt':
-        specifier: ^1.17.0
-        version: 1.17.0
+        specifier: ^1.18.0
+        version: 1.18.0
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -842,8 +842,8 @@ packages:
     peerDependencies:
       oxlint: '>=1.0.0'
 
-  '@northguild/gmt@1.17.0':
-    resolution: {integrity: sha512-I+pBuASzEqvEHPw5V8iIzg/XqNW7zptj+n4askXs1tZ71eciw9sYxcsF1MFohR1Ha4tOggBLy1q8U7BR+St3bw==}
+  '@northguild/gmt@1.18.0':
+    resolution: {integrity: sha512-PQU08YKSgFMHqs4QWppQ7Vy6cyrXxGHczzoQVEVEE2fz0vKtwhJ8ueWT6DUGUAHV5hHxDNwZJDsVG//Vrx+J/A==}
     engines: {node: '>=22.16.0'}
 
   '@oxc-project/types@0.150.0':
@@ -3637,7 +3637,7 @@ snapshots:
     dependencies:
       oxlint: 1.85.0(oxlint-tsgolint@7.0.2002)
 
-  '@northguild/gmt@1.17.0':
+  '@northguild/gmt@1.18.0':
     dependencies:
       '@js-temporal/polyfill': 0.5.1
 

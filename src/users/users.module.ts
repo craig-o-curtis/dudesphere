@@ -9,6 +9,10 @@ import { UsersController } from "./users.controller.js";
 import { UsersSeedService } from "./users.seed.js";
 import { UsersService } from "./users.service.js";
 
+// Imports AbidingModelModule, not AbidingModule, so UsersService can
+// soft-delete and restore a user's abidings on delete and restore. Importing
+// AbidingModule directly would be circular, because AbidingModule imports
+// this module to look up usernames. See AbidingModelModule's own comment.
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([User]), ProfileModule, AbidingModelModule],
   controllers: [UsersController],

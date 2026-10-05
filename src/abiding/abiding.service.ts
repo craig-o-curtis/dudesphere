@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 
@@ -25,9 +25,14 @@ export class AbidingService {
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
     const abiding = await this.abidingModel.findOne({ _id: id, deletedAt: null }).exec();
     if (!abiding) {
-      throw new Error("Abiding not found");
+      throw new NotFoundException("Abiding not found");
     }
     return this.toResponseDto(abiding);
+  }
+
+  async getAbidingsByUserId(userId: number): Promise<AbidingResponseDto[]> {
+    const abidings = await this.abidingModel.find({ userId, deletedAt: null }).exec();
+    return abidings.map((abiding) => this.toResponseDto(abiding));
   }
 
   async createAbiding(createAbidingDto: CreateAbidingDto): Promise<AbidingResponseDto> {
@@ -52,7 +57,7 @@ export class AbidingService {
       .exec();
 
     if (!updatedAbiding) {
-      throw new Error("Abiding not found");
+      throw new NotFoundException("Abiding not found");
     }
 
     return this.toResponseDto(updatedAbiding);
@@ -65,7 +70,7 @@ export class AbidingService {
       .findOneAndDelete({ _id: abidingId, deletedAt: null })
       .exec();
     if (!result) {
-      throw new Error("Abiding not found");
+      throw new NotFoundException("Abiding not found");
     }
   }
 

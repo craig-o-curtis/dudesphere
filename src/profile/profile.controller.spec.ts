@@ -97,6 +97,24 @@ describe("ProfileController", () => {
     });
   });
 
+  describe("updateMyProfile", () => {
+    it("fetches the profile by user id then updates it with the body", async () => {
+      const updateDto = { bio: "Updated bio" };
+      profileServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
+      profileServiceMock.updateProfile.mockResolvedValue({ ...mockProfile, bio: "Updated bio" });
+
+      const result = await controller.updateMyProfile(updateDto, {
+        userId: 42,
+        username: "dude",
+        role: "user",
+      });
+
+      expect(profileServiceMock.getProfileByUserId).toHaveBeenCalledWith(42);
+      expect(profileServiceMock.updateProfile).toHaveBeenCalledWith(mockProfile.id, updateDto);
+      expect(result).toEqual({ ...mockProfile, bio: "Updated bio" });
+    });
+  });
+
   describe("updateProfile", () => {
     it("delegates to profileService.updateProfile", async () => {
       const updateDto = { bio: "Updated bio" };
