@@ -28,6 +28,11 @@ export class Abiding extends Document {
   @Prop({ type: String, default: null })
   username: string | null;
 
+  // Normalized slugs derived from `message` by extractHashtags. Never set
+  // directly by a client — see context/hashtag-plan.md.
+  @Prop({ type: [String], default: [] })
+  hashtags: string[];
+
   // Added by Mongoose timestamps: true — converted to ISO strings by schema getters
   createdAt: string | null;
   updatedAt: string | null;
@@ -50,6 +55,10 @@ AbidingSchema.index({ replyToId: 1 });
 AbidingSchema.index({ userId: 1, createdAt: -1 });
 // get latest abidings
 AbidingSchema.index({ createdAt: -1 });
+// get latest abidings for a hashtag — the query this feature exists to serve
+AbidingSchema.index({ hashtags: 1, createdAt: -1 });
+// get a user's abidings for a hashtag
+AbidingSchema.index({ userId: 1, hashtags: 1 });
 
 // Convert Mongoose Date getters to ISO strings (no JS Date objects in app code)
 AbidingSchema.path("createdAt").get(function (this: AbidingDocument, v: Date) {

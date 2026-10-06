@@ -11,6 +11,8 @@ describe("AbidingsController", () => {
   const abidingService = {
     getAbidings: vi.fn(),
     getAbidingsByUserId: vi.fn(),
+    getAbidingsByHashtag: vi.fn(),
+    getAbidingsByHashtags: vi.fn(),
     createAbiding: vi.fn(),
     patchAbiding: vi.fn(),
   };
@@ -51,7 +53,7 @@ describe("AbidingsController", () => {
       ]);
       usersService.getUsersByIds.mockResolvedValue([]);
 
-      await controller.getAbidings();
+      await controller.getAbidings({});
 
       expect(usersService.getUsersByIds).toHaveBeenCalledWith([1, 25]);
     });
@@ -66,7 +68,7 @@ describe("AbidingsController", () => {
         { id: 25, username: "walter" },
       ]);
 
-      const result = await controller.getAbidings();
+      const result = await controller.getAbidings({});
 
       expect(result.map((a) => a.username)).toEqual(["Admin", "walter"]);
     });
@@ -75,9 +77,84 @@ describe("AbidingsController", () => {
       abidingService.getAbidings.mockResolvedValue([{ id: "a1", userId: 99, message: "orphan" }]);
       usersService.getUsersByIds.mockResolvedValue([]);
 
-      const result = await controller.getAbidings();
+      const result = await controller.getAbidings({});
 
       expect(result[0].username).toBe("Unknown");
+    });
+
+    // The response DTO is what a client actually receives, so the derived
+    // tags have to survive the mapping out of the service.
+    it("returns each abiding's hashtags in the response", async () => {
+      abidingService.getAbidings.mockResolvedValue([
+        { id: "a1", userId: 1, message: "easy #Sunday", hashtags: ["sunday"] },
+      ]);
+      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
+
+      const result = await controller.getAbidings({});
+
+      expect(result[0].hashtags).toEqual(["sunday"]);
+    });
+
+    it("returns an empty hashtags array for an abiding written before the field existed", async () => {
+      abidingService.getAbidings.mockResolvedValue([{ id: "a1", userId: 1, message: "old" }]);
+      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
+
+      const result = await controller.getAbidings({});
+
+      expect(result[0].hashtags).toEqual([]);
+    });
+
+    it("calls getAbidings, not a hashtag method, when no tag is given", async () => {
+      abidingService.getAbidings.mockResolvedValue([]);
+
+      await controller.getAbidings({});
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(undefined);
+      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
+      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+    });
+
+    // A param of only separators leaves nothing usable, so it must fall
+    // through to the unfiltered list rather than query for an empty tag.
+    it("ignores a hashtag param that is only commas and spaces", async () => {
+      abidingService.getAbidings.mockResolvedValue([]);
+
+      await controller.getAbidings({ hashtag: " , , " });
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(undefined);
+      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
+      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+    });
+
+    it("dispatches a single hashtag to getAbidingsByHashtag", async () => {
+      abidingService.getAbidingsByHashtag.mockResolvedValue([]);
+
+      await controller.getAbidings({ hashtag: "sunday" });
+
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", undefined);
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
+      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+    });
+
+    it("dispatches comma-separated hashtags to getAbidingsByHashtags", async () => {
+      abidingService.getAbidingsByHashtags.mockResolvedValue([]);
+
+      await controller.getAbidings({ hashtag: "sunday, dude" });
+
+      expect(abidingService.getAbidingsByHashtags).toHaveBeenCalledWith(
+        ["sunday", "dude"],
+        undefined,
+      );
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
+      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
+    });
+
+    it("passes userId through to getAbidingsByHashtag", async () => {
+      abidingService.getAbidingsByHashtag.mockResolvedValue([]);
+
+      await controller.getAbidings({ hashtag: "sunday", userId: "3" });
+
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", 3);
     });
   });
 

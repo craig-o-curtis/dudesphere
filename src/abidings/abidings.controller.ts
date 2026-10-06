@@ -17,6 +17,7 @@ import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
+import { ListAbidingsQueryDto } from "./dto/list-abidings-query.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
 @Controller("abidings")
@@ -27,8 +28,25 @@ export class AbidingsController {
   ) {}
 
   @Get()
-  public async getAbidings(@Query("userId") userId?: number): Promise<AbidingResponseDto[]> {
-    const abidings = await this.AbidingsService.getAbidings(userId);
+  public async getAbidings(@Query() query: ListAbidingsQueryDto): Promise<AbidingResponseDto[]> {
+    const userId = query.userId ? Number(query.userId) : undefined;
+    // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
+    // tag still goes through the dedicated single-tag call rather than the
+    // multi-tag one, since that's the call the rest of the service (and any
+    // future caller) should reach for when it only has one tag.
+    const tags = query.hashtag
+      ? query.hashtag
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [];
+
+    const abidings =
+      tags.length === 0
+        ? await this.AbidingsService.getAbidings(userId)
+        : tags.length === 1
+          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], userId)
+          : await this.AbidingsService.getAbidingsByHashtags(tags, userId);
     const authorIds = [...new Set(abidings.map((a) => a.userId))];
     const users = await this.usersService.getUsersByIds(authorIds);
     const usernames = new Map(users.map((u) => [u.id, u.username]));
@@ -42,6 +60,7 @@ export class AbidingsController {
           username: usernames.get(a.userId) || "Unknown",
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
+          hashtags: a.hashtags,
         }),
     );
   }
@@ -76,6 +95,7 @@ export class AbidingsController {
           username: usernames.get(a.userId) || "Unknown",
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
+          hashtags: a.hashtags,
         }),
     );
   }
@@ -91,6 +111,7 @@ export class AbidingsController {
       createdAt: abiding.createdAt,
       replyToId: abiding.replyToId ?? null,
       username: author?.username || "Unknown",
+      hashtags: abiding.hashtags,
     });
   }
 
@@ -107,6 +128,7 @@ export class AbidingsController {
       createdAt: newAbiding.createdAt,
       replyToId: newAbiding.replyToId ?? null,
       username: author?.username || "Unknown",
+      hashtags: newAbiding.hashtags,
     });
   }
 
@@ -124,6 +146,7 @@ export class AbidingsController {
       createdAt: updatedAbiding.createdAt,
       replyToId: updatedAbiding.replyToId ?? null,
       username: author?.username || "Unknown",
+      hashtags: updatedAbiding.hashtags,
     });
   }
 
