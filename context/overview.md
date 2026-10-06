@@ -30,15 +30,29 @@ A social network where Dudeist priests and members share **abidings** — short 
 
 ### MongoDB — `abidings` collection
 
-| Field       | Type       | Description                        |
-| ----------- | ---------- | ---------------------------------- |
-| `_id`       | ObjectId   | Auto-generated                     |
-| `userId`    | number     | Author reference                   |
-| `userName`  | string     | Snapshot of author name            |
-| `message`   | string     | The abiding (1–280 chars)          |
-| `replyToId` | string     | Parent abiding ObjectId (nullable) |
-| `createdAt` | ISO string | Auto-set by Mongoose               |
-| `updatedAt` | ISO string | Auto-set by Mongoose               |
+| Field       | Type       | Description                                                   |
+| ----------- | ---------- | ------------------------------------------------------------- |
+| `_id`       | ObjectId   | Auto-generated                                                |
+| `userId`    | number     | Author reference                                              |
+| `userName`  | string     | Snapshot of author name                                       |
+| `message`   | string     | The abiding (1–280 chars)                                     |
+| `replyToId` | string     | Parent abiding ObjectId (nullable)                            |
+| `hashtags`  | string[]   | Normalized slugs, derived from `message` — never set directly |
+| `createdAt` | ISO string | Auto-set by Mongoose                                          |
+| `updatedAt` | ISO string | Auto-set by Mongoose                                          |
+
+### MongoDB — `hashtags` collection
+
+The canonical list of every tag ever used, so a tag can be listed or looked up
+without scanning abidings. The relationship itself lives in `abidings.hashtags`
+— see [hashtag-plan.md](hashtag-plan.md).
+
+| Field         | Type       | Description                             |
+| ------------- | ---------- | --------------------------------------- |
+| `_id`         | ObjectId   | Auto-generated                          |
+| `slug`        | string     | Normalized tag, unique — the lookup key |
+| `display`     | string     | Casing as first written, e.g. "Sunday"  |
+| `firstUsedAt` | ISO string | Set once on insert                      |
 
 ## API Endpoints
 
@@ -61,13 +75,21 @@ A social network where Dudeist priests and members share **abidings** — short 
 
 ### Abidings (MongoDB)
 
-| Method | Endpoint             | Description                    |
-| ------ | -------------------- | ------------------------------ |
-| GET    | `/abidings`          | All abidings (latest first)    |
-| GET    | `/abidings?userId=X` | Filter by user                 |
-| POST   | `/abidings`          | Create abiding (auth required) |
-| PATCH  | `/abidings/:id`      | Reply to an abiding            |
-| DELETE | `/abidings/:id`      | Delete your own abiding        |
+| Method | Endpoint              | Description                          |
+| ------ | --------------------- | ------------------------------------ |
+| GET    | `/abidings`           | All abidings (latest first)          |
+| GET    | `/abidings?userId=X`  | Filter by user                       |
+| GET    | `/abidings?hashtag=X` | Filter by hashtag (case-insensitive) |
+| POST   | `/abidings`           | Create abiding (auth required)       |
+| PATCH  | `/abidings/:id`       | Reply to an abiding                  |
+| DELETE | `/abidings/:id`       | Delete your own abiding              |
+
+### Hashtags (MongoDB)
+
+| Method | Endpoint          | Description                           |
+| ------ | ----------------- | ------------------------------------- |
+| GET    | `/hashtags`       | Every tag ever used (dropdown source) |
+| GET    | `/hashtags/:slug` | One tag, or 404                       |
 
 ## Roles
 

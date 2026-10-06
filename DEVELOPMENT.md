@@ -66,6 +66,53 @@ pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
 Open http://localhost:8081 and log in with your MongoDB credentials from `.env`.
 
+## Seeds and Backfills
+
+### Seed data
+
+```bash
+pnpm seed:run
+```
+
+Creates the admin user and profile from `EMAIL` and `PASSWORD` in `.env`, and
+some sample abidings. The abidings seed only runs when `NODE_ENV` is
+`development`, and skips itself if the collection already has documents.
+
+### Hashtag backfill
+
+```bash
+pnpm backfill:hashtags
+```
+
+Re-reads every abiding's `message`, rewrites its `hashtags` array, and adds
+every tag it finds to the `hashtags` collection.
+
+Run it when any of these is true:
+
+- **You have abidings that predate hashtags.** They have no `hashtags` field,
+  so nothing finds them by tag and their tags are missing from the dropdown.
+  This is the one-time case, and it is already done on existing environments.
+- **You changed the tag rules** in `src/shared/utils/hashtag.ts` — the
+  character set, the 64-character limit, the 10-tag cap, the normalizing. Old
+  abidings keep the tags derived under the old rules until you re-run this.
+- **`GET /hashtags` is missing a tag** that abidings clearly use. A tag is
+  registered by a second write that is not in a transaction with the abiding,
+  so a failure there can leave a tag used but unregistered. This repairs it.
+- **You restored or imported abidings** by writing to Mongo directly, rather
+  than through `POST /abidings`.
+
+You do not need it after ordinary posting or editing. Both derive tags and
+register them as they go.
+
+Safe to run as many times as you like: it derives everything from `message`
+rather than checking what is already stored, and tag registration only inserts
+tags that are missing. Running it twice produces the same result as running it
+once.
+
+It walks the whole collection with a cursor, so it does not load every abiding
+into memory, but it does write to every abiding. On a large collection, expect
+it to take a while.
+
 ## Troubleshooting
 
 ### "role does not exist" error

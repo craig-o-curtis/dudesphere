@@ -4,6 +4,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
 import mongoose from "mongoose";
 
+import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -22,6 +23,12 @@ describe("AbidingsService", () => {
     findOneAndDelete: vi.fn(),
   };
 
+  // The registry write is a side effect of posting, not part of the abiding
+  // write — see HashtagsService.registerTags.
+  const hashtagsService = {
+    registerTags: vi.fn(),
+  };
+
   beforeEach(async () => {
     // resetAllMocks, not clearAllMocks: clearAllMocks keeps implementations, so
     // a mockResolvedValue set in one test leaks into the next.
@@ -32,6 +39,7 @@ describe("AbidingsService", () => {
       providers: [
         AbidingsService,
         { provide: getModelToken(Abiding.name), useValue: abidingModel },
+        { provide: HashtagsService, useValue: hashtagsService },
       ],
     }).compile();
 
@@ -80,6 +88,59 @@ describe("AbidingsService", () => {
     });
   });
 
+  describe("getAbidingsByHashtag", () => {
+    it("normalizes the tag before querying", async () => {
+      await service.getAbidingsByHashtag("SUNDAY");
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, hashtags: "sunday" });
+    });
+
+    it("narrows to a user when given one", async () => {
+      await service.getAbidingsByHashtag("sunday", 3);
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        hashtags: "sunday",
+        userId: 3,
+      });
+    });
+
+    it("returns an empty array for a tag that can't normalize, without querying", async () => {
+      const result = await service.getAbidingsByHashtag("###");
+
+      expect(result).toEqual([]);
+      expect(abidingModel.find).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getAbidingsByHashtags", () => {
+    it("normalizes, dedupes and queries with $in for OR matching", async () => {
+      await service.getAbidingsByHashtags(["Sunday", "sunday", "Dude"]);
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        hashtags: { $in: ["sunday", "dude"] },
+      });
+    });
+
+    it("narrows to a user when given one", async () => {
+      await service.getAbidingsByHashtags(["sunday"], 3);
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        hashtags: { $in: ["sunday"] },
+        userId: 3,
+      });
+    });
+
+    it("returns an empty array when no tag can normalize, without querying", async () => {
+      const result = await service.getAbidingsByHashtags(["###", ""]);
+
+      expect(result).toEqual([]);
+      expect(abidingModel.find).not.toHaveBeenCalled();
+    });
+  });
+
   describe("createAbiding", () => {
     it("creates and returns the abiding", async () => {
       const utcNow = getUtcNow();
@@ -98,8 +159,34 @@ describe("AbidingsService", () => {
         userId: 1,
         message: "new abiding",
         replyToId: null,
+        hashtags: [],
       });
       expect(result.message).toBe("new abiding");
+    });
+
+    it("derives hashtags from the message", async () => {
+      const mockAbiding = { _id: new mongoose.Types.ObjectId(), userId: 1, message: "#Sunday" };
+      abidingModel.create.mockResolvedValue(mockAbiding);
+
+      await service.createAbiding({ userId: "1", message: "Taking it easy #Sunday" });
+
+      expect(abidingModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ hashtags: ["sunday"] }),
+      );
+    });
+
+    // The registry is what GET /hashtags lists. Without this the tag would
+    // only exist inside the abiding, and a dropdown couldn't find it.
+    it("registers the tags, keeping the casing they were written with", async () => {
+      abidingModel.create.mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        userId: 1,
+        message: "#Sunday",
+      });
+
+      await service.createAbiding({ userId: "1", message: "Taking it easy #Sunday" });
+
+      expect(hashtagsService.registerTags).toHaveBeenCalledWith(new Map([["sunday", "Sunday"]]));
     });
   });
 
@@ -126,6 +213,46 @@ describe("AbidingsService", () => {
       await expect(
         service.patchAbiding("nonexistent", { message: "updated" }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("re-derives hashtags when the message changes", async () => {
+      abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", message: "#Dude" }));
+
+      await service.patchAbiding("x", { message: "New #Dude message" });
+
+      expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: "x", deletedAt: null },
+        expect.objectContaining({ message: "New #Dude message", hashtags: ["dude"] }),
+        { new: true },
+      );
+    });
+
+    it("registers tags an edit introduces", async () => {
+      abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", message: "#Walter" }));
+
+      await service.patchAbiding("x", { message: "Now about #Walter" });
+
+      expect(hashtagsService.registerTags).toHaveBeenCalledWith(new Map([["walter", "Walter"]]));
+    });
+
+    it("doesn't touch the registry when the message doesn't change", async () => {
+      abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", imageUrl: "a" }));
+
+      await service.patchAbiding("x", { imageUrl: "https://example.com/a.png" });
+
+      expect(hashtagsService.registerTags).not.toHaveBeenCalled();
+    });
+
+    it("leaves hashtags untouched when the message doesn't change", async () => {
+      abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", imageUrl: "a" }));
+
+      await service.patchAbiding("x", { imageUrl: "https://example.com/a.png" });
+
+      expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: "x", deletedAt: null },
+        expect.not.objectContaining({ hashtags: expect.anything() }),
+        { new: true },
+      );
     });
   });
 
