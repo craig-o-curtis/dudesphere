@@ -9,6 +9,7 @@ import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
 import { UsersModule } from "./users/users.module.js";
 
@@ -57,6 +58,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AbidingsModule,
     AuthModule,
     ProfilesModule,
+    HashtagsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

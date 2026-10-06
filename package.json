@@ -26,7 +26,8 @@
     "migration:run": "typeorm-ts-node-esm migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-esm migration:revert -d src/database/data-source.ts",
     "migration:check": "typeorm-ts-node-esm migration:generate -d src/database/data-source.ts --check src/database/migrations/Check",
-    "seed:run": "tsx src/database/seeds/run-seeds.ts"
+    "seed:run": "tsx src/database/seeds/run-seeds.ts",
+    "backfill:hashtags": "tsx src/database/seeds/backfill-hashtags.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
