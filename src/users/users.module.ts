@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { UserAbidingsModule } from "../abidings/user-abidings.module.js";
@@ -14,7 +13,7 @@ import { UsersService } from "./users.service.js";
 // AbidingsModule directly would be circular, because AbidingsModule imports
 // this module to look up usernames. See UserAbidingsModule's own comment.
 @Module({
-  imports: [ConfigModule, TypeOrmModule.forFeature([User]), ProfilesModule, UserAbidingsModule],
+  imports: [TypeOrmModule.forFeature([User]), ProfilesModule, UserAbidingsModule],
   controllers: [UsersController],
   providers: [UsersService, UsersSeedService],
   exports: [UsersService],
