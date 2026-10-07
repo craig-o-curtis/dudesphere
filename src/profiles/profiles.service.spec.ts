@@ -1,8 +1,10 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not } from "typeorm";
 
+import type { AuthUser } from "../auth/auth-user.js";
+import { UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
 import { ProfilesService } from "./profiles.service.js";
 
@@ -28,9 +30,14 @@ describe("ProfilesService", () => {
     profileImageUrl: "https://example.com/avatar.jpg",
     isDude: true,
     ordainedDate: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    createdAt: "2026-10-06T00:00:00.000Z",
+    updatedAt: "2026-10-06T23:59:59.999Z",
   };
+
+  // mockProfile.userId is 42, so `owner` owns it and `other` does not.
+  const owner: AuthUser = { userId: 42, username: "dude", role: UserRole.USER };
+  const other: AuthUser = { userId: 7, username: "donny", role: UserRole.USER };
+  const admin: AuthUser = { userId: 9, username: "maude", role: UserRole.ADMIN };
 
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -237,10 +244,10 @@ describe("ProfilesService", () => {
       profileRepository.update.mockResolvedValue({ affected: 1 });
       profileRepository.findOne.mockResolvedValue(mockProfile);
 
-      const result = await service.updateProfile(1, { bio: "Updated bio" });
+      const result = await service.updateProfile(1, { bio: "Updated bio" }, owner);
 
       expect(profileRepository.update).toHaveBeenCalledWith(
-        { id: 1, deletedAt: IsNull() },
+        { id: 1, deletedAt: IsNull(), userId: 42 },
         { bio: "Updated bio" },
       );
       expect(result.bio).toBe("Hello world");
@@ -249,7 +256,7 @@ describe("ProfilesService", () => {
     // not.toHaveBeenCalled() is the point: the guard has to run before
     // TypeORM gets an empty set and throws UpdateValuesMissingError as a 500.
     it("throws 400 when the body carries no fields", async () => {
-      await expect(service.updateProfile(1, {})).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.updateProfile(1, {}, owner)).rejects.toBeInstanceOf(BadRequestException);
       expect(profileRepository.update).not.toHaveBeenCalled();
     });
 
@@ -257,20 +264,20 @@ describe("ProfilesService", () => {
     // criteria has to carry it or a deleted profile gets edited.
     it("throws NotFoundException when the profile is soft-deleted", async () => {
       profileRepository.update.mockResolvedValue({ affected: 0 });
+      // findOne is the failure-path read that tells a missing profile from
+      // someone else's. A soft-deleted profile is not found, so it is a 404.
+      profileRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.updateProfile(1, { bio: "x" })).rejects.toBeInstanceOf(
+      await expect(service.updateProfile(1, { bio: "x" }, owner)).rejects.toBeInstanceOf(
         NotFoundException,
       );
-      expect(profileRepository.findOne).not.toHaveBeenCalled();
     });
 
     it("throws NotFoundException when updating a profile that does not exist", async () => {
       profileRepository.update.mockResolvedValue({ affected: 0 });
+      profileRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.updateProfile(999, { bio: "x" })).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
-      await expect(service.updateProfile(999, { bio: "x" })).rejects.toThrow(
+      await expect(service.updateProfile(999, { bio: "x" }, owner)).rejects.toThrow(
         "Profile #999 not found",
       );
     });
@@ -279,11 +286,47 @@ describe("ProfilesService", () => {
       profileRepository.update.mockResolvedValue({ affected: 1 });
       profileRepository.findOne.mockResolvedValue(mockProfile);
 
-      await service.updateProfile(1, { firstName: "Johnny" });
+      await service.updateProfile(1, { firstName: "Johnny" }, owner);
+
+      expect(profileRepository.update).toHaveBeenCalledWith(
+        { id: 1, deletedAt: IsNull(), userId: 42 },
+        { firstName: "Johnny" },
+      );
+    });
+
+    // The authorization rule is part of the update criteria, so a non-owner's
+    // write matches no row rather than being refused after the fact.
+    it("scopes the update to the caller's own profile", async () => {
+      profileRepository.update.mockResolvedValue({ affected: 1 });
+      profileRepository.findOne.mockResolvedValue(mockProfile);
+
+      await service.updateProfile(1, { bio: "x" }, other);
+
+      expect(profileRepository.update).toHaveBeenCalledWith(
+        { id: 1, deletedAt: IsNull(), userId: 7 },
+        { bio: "x" },
+      );
+    });
+
+    it("lets an admin update a profile that is not theirs", async () => {
+      profileRepository.update.mockResolvedValue({ affected: 1 });
+      profileRepository.findOne.mockResolvedValue(mockProfile);
+
+      await service.updateProfile(1, { bio: "x" }, admin);
 
       expect(profileRepository.update).toHaveBeenCalledWith(
         { id: 1, deletedAt: IsNull() },
-        { firstName: "Johnny" },
+        { bio: "x" },
+      );
+    });
+
+    it("throws ForbiddenException when the profile exists but is someone else's", async () => {
+      profileRepository.update.mockResolvedValue({ affected: 0 });
+      // It exists, so nothing matching means the caller does not own it.
+      profileRepository.findOne.mockResolvedValue(mockProfile);
+
+      await expect(service.updateProfile(1, { bio: "x" }, other)).rejects.toBeInstanceOf(
+        ForbiddenException,
       );
     });
   });
