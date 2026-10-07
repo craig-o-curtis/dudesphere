@@ -16,9 +16,20 @@ export type HashtagDocument = Hashtag & Document;
 // None of that is answerable from the Abiding array alone without scanning
 // every abiding in the collection.
 //
-// Rows are created by HashtagsService.registerTags and never deleted. A tag
-// outlives the abidings that used it, the same way a hashtag page on Twitter
-// survives the deletion of every tweet on it.
+// Rows are created by HashtagsService.registerTags and are never removed. A
+// tag outlives the abidings that used it, the same way a hashtag page on
+// Twitter survives the deletion of every tweet on it.
+//
+// An admin can delete a tag, but that is a soft delete: deletedAt is set and
+// the row stays. The reads leave it out, so it drops off the dropdown. It
+// stays off: posting with the tag again does not bring it back, because the
+// kept row stops registerTags from adding it a second time. Only an admin
+// restoring it does, and it returns with its first casing and date.
+//
+// A delete does not cascade. Abidings keep the slug in their own hashtags
+// array, so GET /abidings?hashtag=<slug> still finds them while
+// GET /hashtags/<slug> is a 404. That is deliberate: reaching into abidings
+// from here would make HashtagsModule depend on them.
 @Schema()
 export class Hashtag extends Document {
   // Normalized by extractHashtags/normalizeHashtag — the lookup key, and the
@@ -36,6 +47,17 @@ export class Hashtag extends Document {
   // because an upsert that finds an existing row must not touch it.
   @Prop({ type: String, required: true })
   firstUsedAt: string;
+
+  // Soft delete, stored as a UTC ISO 8601 string. Null means the tag is live.
+  // Set by HashtagsService.deleteBySlug and cleared only by restoreBySlug, so
+  // a deleted tag stays deleted until an admin restores it.
+  //
+  // Rows written before this field existed have no deletedAt at all. Reads
+  // filter on `deletedAt: null`, which Mongo also matches against a missing
+  // field, so those rows count as live and needed no backfill. DEVELOPMENT.md
+  // covers when a new Mongo field does need one.
+  @Prop({ type: String, default: null })
+  deletedAt: string | null;
 }
 
 export const HashtagSchema = SchemaFactory.createForClass(Hashtag);

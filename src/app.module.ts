@@ -19,9 +19,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ".env" }),
     ObserveModule.forRootAsync({
-      imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         appKey: config.getOrThrow<string>("DUDE_OBSERVE_APP_KEY"),
@@ -33,7 +32,6 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       // This entire forRootAsync call gets config from ConfigService
       // it also registers the TypeOrmModule globally,
       // so any feature can use @InjectRepository without importing TypeOrmModule.forFeature
-      imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         type: "postgres",
         host: config.getOrThrow("PG_HOST"),
@@ -49,7 +47,6 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [ConfigService],
     }),
     MongooseModule.forRootAsync({
-      imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         uri: config.get("MONGO_URI", "mongodb://localhost:27017/dude-abidings"),
       }),
