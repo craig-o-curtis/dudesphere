@@ -23,7 +23,8 @@ export type HashtagDocument = Hashtag & Document;
 // An admin can delete a tag, but that is a soft delete: deletedAt is set and
 // the row stays. The reads leave it out, so it drops off the dropdown. It
 // stays off: posting with the tag again does not bring it back, because the
-// kept row stops registerTags from adding it a second time.
+// kept row stops registerTags from adding it a second time. Only an admin
+// restoring it does, and it returns with its first casing and date.
 //
 // A delete does not cascade. Abidings keep the slug in their own hashtags
 // array, so GET /abidings?hashtag=<slug> still finds them while
@@ -48,8 +49,8 @@ export class Hashtag extends Document {
   firstUsedAt: string;
 
   // Soft delete, stored as a UTC ISO 8601 string. Null means the tag is live.
-  // Set by HashtagsService.deleteBySlug. Nothing in the app clears it, so a
-  // deleted tag stays deleted.
+  // Set by HashtagsService.deleteBySlug and cleared only by restoreBySlug, so
+  // a deleted tag stays deleted until an admin restores it.
   //
   // Rows written before this field existed have no deletedAt at all. Reads
   // filter on `deletedAt: null`, which Mongo also matches against a missing

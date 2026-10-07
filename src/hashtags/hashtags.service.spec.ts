@@ -32,6 +32,7 @@ describe("HashtagsService", () => {
     findOne: vi.fn(),
     bulkWrite: vi.fn(),
     updateOne: vi.fn(),
+    findOneAndUpdate: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -234,6 +235,57 @@ describe("HashtagsService", () => {
 
     it("resolves when a tag was deleted", async () => {
       await expect(service.deleteBySlug("sunday")).resolves.toBeUndefined();
+    });
+  });
+
+  describe("restoreBySlug", () => {
+    const restoredRow = {
+      slug: "sunday",
+      display: "Sunday",
+      firstUsedAt: "2026-10-05T00:00:00.000Z",
+      deletedAt: null,
+    };
+
+    // The row was kept through the delete, so the tag comes back as it was:
+    // the first casing and the first date, not new ones.
+    it("returns the restored tag with its first casing and date", async () => {
+      hashtagModel.findOneAndUpdate.mockReturnValue(queryOf(restoredRow));
+
+      const result = await service.restoreBySlug("sunday");
+
+      expect(result).toEqual({
+        slug: "sunday",
+        display: "Sunday",
+        firstUsedAt: "2026-10-05T00:00:00.000Z",
+      });
+    });
+
+    // $ne: null is what limits this to a deleted tag. returnDocument: "after"
+    // makes the one call both the restore and the read of the restored row.
+    it("clears deletedAt on a deleted tag, after normalizing the slug", async () => {
+      hashtagModel.findOneAndUpdate.mockReturnValue(queryOf(restoredRow));
+
+      await service.restoreBySlug("#Sunday");
+
+      expect(hashtagModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { slug: "sunday", deletedAt: { $ne: null } },
+        { $set: { deletedAt: null } },
+        { returnDocument: "after" },
+      );
+    });
+
+    it("throws NotFoundException for an unusable slug, without querying", async () => {
+      await expect(service.restoreBySlug("###")).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(hashtagModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    // Covers a tag that is live and one that never existed. Both are a 404,
+    // the same as UsersService.restoreUser on a user who is not deleted.
+    it("throws NotFoundException when no deleted tag matched", async () => {
+      hashtagModel.findOneAndUpdate.mockReturnValue(queryOf(null));
+
+      await expect(service.restoreBySlug("sunday")).rejects.toThrow("Deleted hashtag not found");
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, NotFoundException, Param } from "@nestjs/common";
+import { Controller, Delete, Get, HttpCode, NotFoundException, Param, Post } from "@nestjs/common";
 
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
@@ -42,5 +42,17 @@ export class HashtagsController {
   @Delete(":slug")
   public async deleteHashtagBySlug(@Param("slug") slug: string): Promise<void> {
     await this.hashtagsService.deleteBySlug(slug);
+  }
+
+  // Undoes the delete above. Admin only, like the delete, and the only way a
+  // deleted tag comes back: posting with it again does not restore it.
+  //
+  // 200, not POST's default 201: this brings back an existing tag rather than
+  // creating one. Same shape as POST /users/:id/restore.
+  @Roles(UserRole.ADMIN)
+  @Post(":slug/restore")
+  @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
+  public async restoreHashtagBySlug(@Param("slug") slug: string): Promise<HashtagResponseDto> {
+    return this.hashtagsService.restoreBySlug(slug);
   }
 }

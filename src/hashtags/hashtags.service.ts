@@ -41,8 +41,8 @@ export class HashtagsService {
   // whenever it derives hashtags from a message, so the registry fills up as
   // a side effect of posting rather than needing its own write endpoint.
   //
-  // It never brings back a tag an admin deleted. See the comment on the
-  // write below.
+  // It never brings back a tag an admin deleted; only restoreBySlug does.
+  // See the comment on the write below.
   //
   // `displays` maps each normalized slug to the casing it was written with,
   // as returned by extractHashtagDisplays. One argument rather than a slug
@@ -141,6 +141,33 @@ export class HashtagsService {
       .updateOne({ slug: normalized, deletedAt: null }, { $set: { deletedAt } })
       .exec();
     if (result.matchedCount === 0) throw new NotFoundException("Hashtag not found");
+  }
+
+  // The reverse of deleteBySlug, and the only thing that brings a deleted tag
+  // back. Posting with the tag does not; see registerTags.
+  //
+  // The row was kept, so the tag returns with the casing and first-used date
+  // it had before the delete.
+  async restoreBySlug(slug: string): Promise<HashtagResponseDto> {
+    const normalized = normalizeHashtag(slug);
+    if (!normalized) throw new NotFoundException("Deleted hashtag not found");
+
+    // $ne: null so only a deleted tag can be restored. A live or missing tag
+    // is a 404, matching UsersService.restoreUser. It also leaves out rows
+    // written before deletedAt existed, which Mongo treats as null.
+    //
+    // findOneAndUpdate, so the restore and the read of the restored row are
+    // one operation. returnDocument: "after" returns the row as it is now.
+    const restored = await this.hashtagModel
+      .findOneAndUpdate(
+        { slug: normalized, deletedAt: { $ne: null } },
+        { $set: { deletedAt: null } },
+        { returnDocument: "after" },
+      )
+      .exec();
+    if (!restored) throw new NotFoundException("Deleted hashtag not found");
+
+    return this.toResponseDto(restored);
   }
 
   // --- Private helpers ---
