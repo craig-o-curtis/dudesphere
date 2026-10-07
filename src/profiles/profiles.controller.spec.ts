@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { UserRole } from "../users/user.entity.js";
 import { ProfilesController } from "./profiles.controller.js";
 import { ProfilesService } from "./profiles.service.js";
 
@@ -16,8 +17,8 @@ describe("ProfilesController", () => {
     profileImageUrl: "https://example.com/avatar.jpg",
     isDude: true,
     ordainedDate: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    createdAt: "2026-10-06T00:00:00.000Z",
+    updatedAt: "2026-10-06T23:59:59.999Z",
   };
 
   const profilesServiceMock = {
@@ -67,7 +68,7 @@ describe("ProfilesController", () => {
       const result = await controller.getMyProfile({
         userId: 25,
         username: "walter",
-        role: "user",
+        role: UserRole.USER,
       });
 
       expect(profilesServiceMock.getProfileByUserId).toHaveBeenCalledWith(25);
@@ -103,14 +104,16 @@ describe("ProfilesController", () => {
       profilesServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
       profilesServiceMock.updateProfile.mockResolvedValue({ ...mockProfile, bio: "Updated bio" });
 
-      const result = await controller.updateMyProfile(updateDto, {
-        userId: 42,
-        username: "dude",
-        role: "user",
-      });
+      const caller = { userId: 42, username: "dude", role: UserRole.USER };
+
+      const result = await controller.updateMyProfile(updateDto, caller);
 
       expect(profilesServiceMock.getProfileByUserId).toHaveBeenCalledWith(42);
-      expect(profilesServiceMock.updateProfile).toHaveBeenCalledWith(mockProfile.id, updateDto);
+      expect(profilesServiceMock.updateProfile).toHaveBeenCalledWith(
+        mockProfile.id,
+        updateDto,
+        caller,
+      );
       expect(result).toEqual({ ...mockProfile, bio: "Updated bio" });
     });
   });
@@ -120,9 +123,13 @@ describe("ProfilesController", () => {
       const updateDto = { bio: "Updated bio" };
       profilesServiceMock.updateProfile.mockResolvedValue(mockProfile);
 
-      const result = await controller.updateProfile(1, updateDto);
+      const caller = { userId: 42, username: "dude", role: UserRole.USER };
 
-      expect(profilesServiceMock.updateProfile).toHaveBeenCalledWith(1, updateDto);
+      const result = await controller.updateProfile(1, updateDto, caller);
+
+      // The controller passes the caller straight through; the rule itself is
+      // the service's, and is tested in profiles.service.spec.ts.
+      expect(profilesServiceMock.updateProfile).toHaveBeenCalledWith(1, updateDto, caller);
       expect(result).toBe(mockProfile);
     });
   });

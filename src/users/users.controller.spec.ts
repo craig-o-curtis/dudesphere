@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { UserRole } from "./user.entity.js";
 import { UsersController } from "./users.controller.js";
 import { UsersService } from "./users.service.js";
 
@@ -98,7 +99,7 @@ describe("UsersController", () => {
       const result = await controller.updateMyUser(body, {
         userId: 25,
         username: "dude",
-        role: "user",
+        role: UserRole.USER,
       });
 
       expect(usersService.updateUser).toHaveBeenCalledWith(25, body);
@@ -110,7 +111,7 @@ describe("UsersController", () => {
     it("deletes the user on the request, not one from the URL", async () => {
       // resolve as undefined because the return type is void
       usersService.deleteUser.mockResolvedValue(undefined);
-      const mockUser = { userId: 25, username: "walter", role: "user" };
+      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
 
       await controller.deleteMe(mockUser);
 
