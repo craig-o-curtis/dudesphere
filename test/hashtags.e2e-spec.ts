@@ -12,8 +12,8 @@ import { UserRole } from "./../src/users/user.entity.js";
 
 // Needs the databases running. Each run registers one throwaway user and
 // leaves behind that user, two abidings and one hashtag, which ends the run
-// deleted.
-describe("DELETE /hashtags/:slug (e2e)", () => {
+// live again after being deleted and restored.
+describe("Hashtag delete and restore (e2e)", () => {
   let app: INestApplication<App>;
 
   // Signed here rather than logged in, so nothing depends on a seeded user.
@@ -43,9 +43,28 @@ describe("DELETE /hashtags/:slug (e2e)", () => {
     await app.close();
   });
 
-  // Every delete in this block targets a slug that does not exist, so it
-  // proves who may delete a hashtag without removing one.
-  describe("who may delete", () => {
+  // Every request in this block targets a slug that does not exist, so it
+  // proves who may delete or restore a hashtag without changing one.
+  describe("who may delete or restore", () => {
+    it("returns 401 for a restore without a token", async () => {
+      await request(app.getHttpServer()).post(`/hashtags/${unusedSlug()}/restore`).expect(401);
+    });
+
+    it("returns 403 for a restore by a signed-in user who is not an admin", async () => {
+      await request(app.getHttpServer())
+        .post(`/hashtags/${unusedSlug()}/restore`)
+        .set(bearer(await tokenFor(UserRole.USER)))
+        .expect(403);
+    });
+
+    // 404 shows the admin reached the service, which found no deleted tag.
+    it("lets an admin through a restore, and returns 404 when no deleted tag matches", async () => {
+      await request(app.getHttpServer())
+        .post(`/hashtags/${unusedSlug()}/restore`)
+        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .expect(404);
+    });
+
     it("returns 401 without a token", async () => {
       await request(app.getHttpServer()).delete(`/hashtags/${unusedSlug()}`).expect(401);
     });
@@ -79,12 +98,13 @@ describe("DELETE /hashtags/:slug (e2e)", () => {
   // One tag followed through its whole life. The tests run in order and each
   // builds on the one before, so a failure early on fails the rest.
   describe("a deleted tag", () => {
-    // Written with a capital to check the registry keeps the casing a tag was
-    // first written with. The slug is the lower-case form.
+    // Written with a capital so the restore can check the first casing
+    // survived the delete. The slug is the lower-case form.
     const display = `E2e${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const slug = display.toLowerCase();
 
     let authorToken: string;
+    let firstUsedAt: string;
 
     const postWithTag = (tag: string) =>
       request(app.getHttpServer())
@@ -111,7 +131,9 @@ describe("DELETE /hashtags/:slug (e2e)", () => {
     it("is in the registry once an abiding has used it", async () => {
       const found = await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(200);
 
-      expect((found.body as { display: string }).display).toBe(display);
+      const body = found.body as { display: string; firstUsedAt: string };
+      expect(body.display).toBe(display);
+      firstUsedAt = body.firstUsedAt;
     });
 
     it("survives a delete attempt by a user who is not an admin", async () => {
@@ -182,6 +204,46 @@ describe("DELETE /hashtags/:slug (e2e)", () => {
         .expect(200);
 
       expect(filtered.body as unknown[]).toHaveLength(2);
+    });
+
+    it("cannot be restored by a user who is not an admin", async () => {
+      await request(app.getHttpServer())
+        .post(`/hashtags/${slug}/restore`)
+        .set(bearer(await tokenFor(UserRole.USER)))
+        .expect(403);
+
+      await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
+    });
+
+    // The row was kept through the delete, so this is the original tag coming
+    // back, not a new one. The second abiding wrote the tag in lower case and
+    // at a later time; neither replaced the first casing or the first date.
+    it("is restored by an admin, with its first casing and date", async () => {
+      const restored = await request(app.getHttpServer())
+        .post(`/hashtags/${slug}/restore`)
+        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .expect(200);
+
+      const body = restored.body as { slug: string; display: string; firstUsedAt: string };
+      expect(body.slug).toBe(slug);
+      expect(body.display).toBe(display);
+      expect(body.firstUsedAt).toBe(firstUsedAt);
+    });
+
+    it("is then back in the registry and on the list", async () => {
+      await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(200);
+
+      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
+      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
+      expect(slugs).toContain(slug);
+    });
+
+    // Only a deleted tag can be restored, the same as restoring a user.
+    it("cannot be restored a second time, because it is no longer deleted", async () => {
+      await request(app.getHttpServer())
+        .post(`/hashtags/${slug}/restore`)
+        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .expect(404);
     });
   });
 

@@ -154,8 +154,8 @@ once.
 
 It does not bring back a hashtag an admin has deleted. Abidings keep a deleted
 tag in their own `hashtags` array, so the backfill sees every deleted tag on
-every run and leaves each one deleted. Nothing in the app brings a deleted tag
-back, including posting with it again.
+every run and leaves each one deleted. Posting with a deleted tag does not
+bring it back either. Only an admin can, with `POST /hashtags/:slug/restore`.
 
 It walks the whole collection with a cursor, so it does not load every abiding
 into memory, but it does write to every abiding. On a large collection, expect

@@ -179,13 +179,14 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 
 ### Hashtags
 
-| Method | Endpoint        | Description                                      |
-| ------ | --------------- | ------------------------------------------------ |
-| GET    | /hashtags       | List every live hashtag, alphabetically          |
-| GET    | /hashtags/:slug | Get one hashtag                                  |
-| DELETE | /hashtags/:slug | Soft-delete a hashtag from the list (admin only) |
+| Method | Endpoint                | Description                                      |
+| ------ | ----------------------- | ------------------------------------------------ |
+| GET    | /hashtags               | List every live hashtag, alphabetically          |
+| GET    | /hashtags/:slug         | Get one hashtag                                  |
+| DELETE | /hashtags/:slug         | Soft-delete a hashtag from the list (admin only) |
+| POST   | /hashtags/:slug/restore | Restore a deleted hashtag (admin only)           |
 
-Deleting a hashtag takes it off the list for good. Abidings that used it keep it, and `GET /abidings?hashtag=<slug>` still finds them. Posting with the tag again does not put it back on the list.
+Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GET /abidings?hashtag=<slug>` still finds them. Posting with the tag again does not put it back on the list. Only an admin restoring it does, and it comes back with the casing and first-used date it had before.
 
 ### Auth
 
