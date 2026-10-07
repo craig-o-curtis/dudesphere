@@ -10,6 +10,7 @@ describe("HashtagsController", () => {
   const hashtagsService = {
     listAll: vi.fn(),
     getBySlug: vi.fn(),
+    deleteBySlug: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -48,6 +49,27 @@ describe("HashtagsController", () => {
       hashtagsService.getBySlug.mockResolvedValue(null);
 
       await expect(controller.getHashtagBySlug("nope")).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // No role assertion here. The admin-only rule is @Roles() metadata read by
+  // RolesGuard, an APP_GUARD this testing module never registers, so a 403 is
+  // unreachable from a unit spec. test/hashtags.e2e-spec.ts proves it over HTTP.
+  describe("deleteHashtagBySlug", () => {
+    it("hands the slug to the service", async () => {
+      hashtagsService.deleteBySlug.mockResolvedValue(undefined);
+
+      await controller.deleteHashtagBySlug("sunday");
+
+      expect(hashtagsService.deleteBySlug).toHaveBeenCalledWith("sunday");
+    });
+
+    it("lets the service's NotFoundException through", async () => {
+      hashtagsService.deleteBySlug.mockRejectedValue(new NotFoundException("Hashtag not found"));
+
+      await expect(controller.deleteHashtagBySlug("nope")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });
