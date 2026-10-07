@@ -25,7 +25,7 @@ export class CreateProfileDto {
   @IsOptional()
   isDude?: boolean;
 
-  // Optional ordination date as ISO 8601 UTC string (e.g., "2026-09-28T12:00:00.000Z")
+  // Optional ordination date as ISO 8601 UTC string (e.g., "2026-10-06T12:00:00.000Z")
   @IsISO8601({ strict: false })
   @IsOptional()
   ordainedDate?: string;

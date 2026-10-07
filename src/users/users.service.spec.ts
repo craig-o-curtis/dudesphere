@@ -227,7 +227,7 @@ describe("UsersService", () => {
         id: 1,
         email: "d@x.com",
         username: "ghost",
-        deletedAt: "2026-01-01T00:00:00.000Z",
+        deletedAt: "2026-10-06T00:00:00.000Z",
       });
 
       await expect(
