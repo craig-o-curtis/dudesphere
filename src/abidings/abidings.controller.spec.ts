@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { Types } from "mongoose";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { UserRole } from "../users/user.entity.js";
@@ -203,13 +204,22 @@ describe("AbidingsController", () => {
   });
 
   describe("patchAbiding", () => {
+    // The id param is a Types.ObjectId, because that is what ParseObjectIdPipe
+    // hands the route. The service takes the string form. That the pipe is
+    // actually bound to the route is proved in abidings.controller.http.spec.ts,
+    // since pipes do not run on a direct method call like this one.
     it("looks up the author by id and returns their username", async () => {
+      const id = new Types.ObjectId("6ac543e3d91134719299fe49");
       abidingService.patchAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "edited" });
       usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
 
-      const result = await controller.patchAbiding("a1", { message: "edited" }, caller);
+      const result = await controller.patchAbiding(id, { message: "edited" }, caller);
 
-      expect(abidingService.patchAbiding).toHaveBeenCalledWith("a1", { message: "edited" }, caller);
+      expect(abidingService.patchAbiding).toHaveBeenCalledWith(
+        "6ac543e3d91134719299fe49",
+        { message: "edited" },
+        caller,
+      );
       expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
       expect(result.username).toBe("walter");
     });

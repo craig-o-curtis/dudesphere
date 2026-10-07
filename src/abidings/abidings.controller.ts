@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { ParseObjectIdPipe } from "@nestjs/mongoose";
+import type { Types as MongooseTypes } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -72,13 +74,6 @@ export class AbidingsController {
   @Get("me")
   public async getMyAbidings(@CurrentUser() user: AuthUser): Promise<AbidingResponseDto[]> {
     const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId);
-    // const authorIds = [...new Set(myAbidings.map((a) => a.userId))];
-    // const users = await this.usersService.getUsersByIds(authorIds);
-    // const usernames = new Map(users.map((u) => [u.id, u.username]));
-    //
-    // TODO CC seems overly complex for my own abidings. confirm changes are correct
-    // TODO shouldn't logic be moved ot service, consider getMyAbidings in service and return AbidingResponseDto[] with username filled in
-
     return myAbidings.map(
       (a) =>
         new AbidingResponseDto({
@@ -93,11 +88,16 @@ export class AbidingsController {
     );
   }
 
-  // TODO confirm if we should use the ParseIntPipe for the id params on all calls
   @Public()
   @Get(":id")
-  public async getAbidingById(@Param("id") id: string): Promise<AbidingResponseDto> {
-    const abiding = await this.AbidingsService.getAbidingById(id);
+  // ParseObjectIdPipe rejects anything that is not a 24-character hex id, so a
+  // typo is a 400 here rather than a CastError and a 500 inside Mongoose. It
+  // returns a Types.ObjectId, which is why the param is typed that way and the
+  // service — which takes a string — is handed id.toString().
+  public async getAbidingById(
+    @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
+  ): Promise<AbidingResponseDto> {
+    const abiding = await this.AbidingsService.getAbidingById(id.toString());
     const [author] = await this.usersService.getUsersByIds([abiding.userId]);
     return new AbidingResponseDto({
       id: abiding.id,
@@ -131,11 +131,15 @@ export class AbidingsController {
   // Author or admin. The service enforces it, in the same filter as the write.
   @Patch(":id")
   public async patchAbiding(
-    @Param("id") id: string,
+    @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @Body() updateAbidingDto: UpdateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const updatedAbiding = await this.AbidingsService.patchAbiding(id, updateAbidingDto, user);
+    const updatedAbiding = await this.AbidingsService.patchAbiding(
+      id.toString(),
+      updateAbidingDto,
+      user,
+    );
     const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
     return new AbidingResponseDto({
       id: updatedAbiding.id,
@@ -150,7 +154,10 @@ export class AbidingsController {
 
   // Author or admin, same rule as PATCH above.
   @Delete(":id")
-  async deleteAbiding(@Param("id") id: string, @CurrentUser() user: AuthUser): Promise<void> {
-    await this.AbidingsService.deleteAbiding(id, user);
+  async deleteAbiding(
+    @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
+    @CurrentUser() user: AuthUser,
+  ): Promise<void> {
+    await this.AbidingsService.deleteAbiding(id.toString(), user);
   }
 }
