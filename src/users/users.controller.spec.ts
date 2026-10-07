@@ -57,7 +57,7 @@ describe("UsersController", () => {
       const user = { id: 7, username: "walter" };
       usersService.getUserById.mockResolvedValue(user);
 
-      const result = await controller.getUserById(7);
+      const result = await controller.getUserById({ id: 7 });
 
       expect(usersService.getUserById).toHaveBeenCalledWith(7);
       expect(result).toBe(user);
@@ -83,7 +83,7 @@ describe("UsersController", () => {
       const updated = { id: 7, username: "walter" };
       usersService.updateUser.mockResolvedValue(updated);
 
-      const result = await controller.updateUser(7, body);
+      const result = await controller.updateUser({ id: 7 }, body);
 
       expect(usersService.updateUser).toHaveBeenCalledWith(7, body);
       expect(result).toBe(updated);
@@ -123,7 +123,7 @@ describe("UsersController", () => {
     it("passes the id to the service and returns nothing", async () => {
       usersService.deleteUser.mockResolvedValue(undefined);
 
-      const result = await controller.deleteUser(7);
+      const result = await controller.deleteUser({ id: 7 });
 
       expect(usersService.deleteUser).toHaveBeenCalledWith(7);
       expect(result).toBeUndefined();
@@ -135,7 +135,7 @@ describe("UsersController", () => {
       const restored = { id: 7, username: "walter" };
       usersService.restoreUser.mockResolvedValue(restored);
 
-      const result = await controller.restoreUser(7);
+      const result = await controller.restoreUser({ id: 7 });
 
       expect(usersService.restoreUser).toHaveBeenCalledWith(7);
       expect(result).toBe(restored);

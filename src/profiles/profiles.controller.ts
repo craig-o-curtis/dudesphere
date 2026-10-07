@@ -12,6 +12,7 @@ import {
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
+import { IdParamDto } from "../shared/dto/id-param.dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -49,14 +50,14 @@ export class ProfilesController {
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
   @Public()
-  @Get("user/:userId")
-  getProfileByUserId(@Param("userId", ParseIntPipe) userId: number): Promise<ProfileResponseDto> {
+  @Get("user/:id")
+  getProfileByUserId(@Param() { id: userId }: IdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(userId);
   }
 
   @Public()
   @Get(":id")
-  getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
+  getProfileById(@Param() { id }: IdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileById(id);
   }
 
@@ -80,7 +81,7 @@ export class ProfilesController {
   // goes through above.
   @Patch(":id")
   updateProfile(
-    @Param("id", ParseIntPipe) id: number,
+    @Param() { id }: IdParamDto,
     @Body() updateProfileDto: UpdateProfileDto,
     @CurrentUser() user: AuthUser,
   ): Promise<ProfileResponseDto> {
