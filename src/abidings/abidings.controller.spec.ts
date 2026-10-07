@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { UserRole } from "../users/user.entity.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
@@ -15,11 +16,16 @@ describe("AbidingsController", () => {
     getAbidingsByHashtags: vi.fn(),
     createAbiding: vi.fn(),
     patchAbiding: vi.fn(),
+    deleteAbiding: vi.fn(),
   };
 
   const usersService = {
     getUsersByIds: vi.fn(),
   };
+
+  // The user JwtAuthGuard puts on the request. The write routes pass it
+  // straight through to the service, which owns the authorization rule.
+  const caller = { userId: 25, username: "walter", role: UserRole.USER };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -164,7 +170,7 @@ describe("AbidingsController", () => {
         { id: "a1", userId: 25, message: "mine" },
       ]);
       usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
-      const mockUser = { userId: 25, username: "walter", role: "user" };
+      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
 
       const result = await controller.getMyAbidings(mockUser);
 
@@ -180,7 +186,7 @@ describe("AbidingsController", () => {
       abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "new" });
       usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
 
-      const result = await controller.postAbiding({ userId: "25", message: "new" });
+      const result = await controller.postAbiding({ message: "new" }, caller);
 
       expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
       expect(result.username).toBe("walter");
@@ -190,7 +196,7 @@ describe("AbidingsController", () => {
       abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 99, message: "new" });
       usersService.getUsersByIds.mockResolvedValue([]);
 
-      const result = await controller.postAbiding({ userId: "99", message: "new" });
+      const result = await controller.postAbiding({ message: "new" }, caller);
 
       expect(result.username).toBe("Unknown");
     });
@@ -201,8 +207,9 @@ describe("AbidingsController", () => {
       abidingService.patchAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "edited" });
       usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
 
-      const result = await controller.patchAbiding("a1", { message: "edited" });
+      const result = await controller.patchAbiding("a1", { message: "edited" }, caller);
 
+      expect(abidingService.patchAbiding).toHaveBeenCalledWith("a1", { message: "edited" }, caller);
       expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
       expect(result.username).toBe("walter");
     });

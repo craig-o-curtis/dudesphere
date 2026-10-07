@@ -7,12 +7,11 @@ import {
   ParseIntPipe,
   Patch,
   Query,
-  UseGuards,
 } from "@nestjs/common";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { Public } from "../shared/decorators/public.decorator.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -21,6 +20,7 @@ import { ProfilesService } from "./profiles.service.js";
 export class ProfilesController {
   constructor(private readonly profilesService: ProfilesService) {}
 
+  @Public()
   @Get()
   getProfiles(
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
@@ -43,17 +43,18 @@ export class ProfilesController {
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
   @Get("me")
-  @UseGuards(JwtAuthGuard)
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(user.userId);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
+  @Public()
   @Get("user/:userId")
   getProfileByUserId(@Param("userId", ParseIntPipe) userId: number): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(userId);
   }
 
+  @Public()
   @Get(":id")
   getProfileById(@Param("id", ParseIntPipe) id: number): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileById(id);
@@ -66,25 +67,30 @@ export class ProfilesController {
   //
   // Auth flow: same as GET /profiles/me — see that comment above.
   @Patch("me")
-  @UseGuards(JwtAuthGuard)
   async updateMyProfile(
     @Body() updateProfileDto: UpdateProfileDto,
     @CurrentUser() user: AuthUser,
   ): Promise<ProfileResponseDto> {
     const profile = await this.profilesService.getProfileByUserId(user.userId);
-    return this.profilesService.updateProfile(profile.id, updateProfileDto);
+    return this.profilesService.updateProfile(profile.id, updateProfileDto, user);
   }
 
+  // Any profile, by id. The service decides who may: an admin edits anyone's,
+  // and everyone else only their own, which is the same rule PATCH /profiles/me
+  // goes through above.
   @Patch(":id")
   updateProfile(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateProfileDto: UpdateProfileDto,
+    @CurrentUser() user: AuthUser,
   ): Promise<ProfileResponseDto> {
-    return this.profilesService.updateProfile(id, updateProfileDto);
+    return this.profilesService.updateProfile(id, updateProfileDto, user);
   }
 
   // No deleteProfile endpoint. A profile is soft-deleted together with its
   // user, in the same transaction, by UsersService.deleteUser. The
   // ON DELETE CASCADE on the foreign key only fires on a real DELETE, which
   // this app never runs.
+
+  // admin reset profile
 }

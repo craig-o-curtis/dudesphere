@@ -11,9 +11,10 @@ export class CreateAbidingDto {
   @IsOptional()
   imageUrl?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
+  // No userId. The author is the caller, read from the verified token in
+  // AbidingsService.createAbiding. Because ValidationPipe runs with
+  // forbidNonWhitelisted, a client still sending one gets a 400 rather than
+  // having it quietly ignored.
 
   @IsOptional()
   @IsString()

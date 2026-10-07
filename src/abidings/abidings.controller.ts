@@ -1,18 +1,8 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Query,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { Public } from "../shared/decorators/public.decorator.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -27,6 +17,7 @@ export class AbidingsController {
     private readonly usersService: UsersService,
   ) {}
 
+  @Public()
   @Get()
   public async getAbidings(@Query() query: ListAbidingsQueryDto): Promise<AbidingResponseDto[]> {
     const userId = query.userId ? Number(query.userId) : undefined;
@@ -79,20 +70,22 @@ export class AbidingsController {
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
   @Get("me")
-  @UseGuards(JwtAuthGuard)
   public async getMyAbidings(@CurrentUser() user: AuthUser): Promise<AbidingResponseDto[]> {
-    const abidings = await this.AbidingsService.getAbidingsByUserId(user.userId);
-    const authorIds = [...new Set(abidings.map((a) => a.userId))];
-    const users = await this.usersService.getUsersByIds(authorIds);
-    const usernames = new Map(users.map((u) => [u.id, u.username]));
+    const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId);
+    // const authorIds = [...new Set(myAbidings.map((a) => a.userId))];
+    // const users = await this.usersService.getUsersByIds(authorIds);
+    // const usernames = new Map(users.map((u) => [u.id, u.username]));
+    //
+    // TODO CC seems overly complex for my own abidings. confirm changes are correct
+    // TODO shouldn't logic be moved ot service, consider getMyAbidings in service and return AbidingResponseDto[] with username filled in
 
-    return abidings.map(
+    return myAbidings.map(
       (a) =>
         new AbidingResponseDto({
           id: a.id,
           userId: a.userId,
           message: a.message,
-          username: usernames.get(a.userId) || "Unknown",
+          username: user.username,
           createdAt: a.createdAt || "",
           replyToId: a.replyToId ?? undefined,
           hashtags: a.hashtags,
@@ -100,6 +93,8 @@ export class AbidingsController {
     );
   }
 
+  // TODO confirm if we should use the ParseIntPipe for the id params on all calls
+  @Public()
   @Get(":id")
   public async getAbidingById(@Param("id") id: string): Promise<AbidingResponseDto> {
     const abiding = await this.AbidingsService.getAbidingById(id);
@@ -118,8 +113,9 @@ export class AbidingsController {
   @Post()
   public async postAbiding(
     @Body() createAbidingDto: CreateAbidingDto,
+    @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto);
+    const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto, user);
     const [author] = await this.usersService.getUsersByIds([newAbiding.userId]);
     return new AbidingResponseDto({
       id: newAbiding.id,
@@ -132,12 +128,14 @@ export class AbidingsController {
     });
   }
 
+  // Author or admin. The service enforces it, in the same filter as the write.
   @Patch(":id")
   public async patchAbiding(
     @Param("id") id: string,
     @Body() updateAbidingDto: UpdateAbidingDto,
+    @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const updatedAbiding = await this.AbidingsService.patchAbiding(id, updateAbidingDto);
+    const updatedAbiding = await this.AbidingsService.patchAbiding(id, updateAbidingDto, user);
     const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
     return new AbidingResponseDto({
       id: updatedAbiding.id,
@@ -150,8 +148,9 @@ export class AbidingsController {
     });
   }
 
+  // Author or admin, same rule as PATCH above.
   @Delete(":id")
-  async deleteAbiding(@Param("id") id: string): Promise<void> {
-    await this.AbidingsService.deleteAbiding(id);
+  async deleteAbiding(@Param("id") id: string, @CurrentUser() user: AuthUser): Promise<void> {
+    await this.AbidingsService.deleteAbiding(id, user);
   }
 }

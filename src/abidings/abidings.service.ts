@@ -1,13 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 
+import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import {
   extractHashtagDisplays,
   extractHashtags,
   normalizeHashtag,
 } from "../shared/utils/hashtag.js";
+import { UserRole } from "../users/user.entity.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
@@ -90,9 +92,14 @@ export class AbidingsService {
     return abidings.map((abiding) => this.toResponseDto(abiding));
   }
 
-  async createAbiding(createAbidingDto: CreateAbidingDto): Promise<AbidingResponseDto> {
+  // The author is the caller, taken from the verified token. It was previously
+  // read from the request body, which let anyone post as anyone.
+  async createAbiding(
+    createAbidingDto: CreateAbidingDto,
+    caller: AuthUser,
+  ): Promise<AbidingResponseDto> {
     const newAbiding = await this.abidingModel.create({
-      userId: Number(createAbidingDto.userId),
+      userId: caller.userId,
       message: createAbidingDto.message,
       replyToId: createAbidingDto.replyToId || null,
       // Derived from the message, never from client input — there is no
@@ -111,7 +118,12 @@ export class AbidingsService {
     return this.toResponseDto(newAbiding);
   }
 
-  async patchAbiding(id: string, updateAbidingDto: UpdateAbidingDto): Promise<AbidingResponseDto> {
+  // TODO refactor to be more elegant
+  async patchAbiding(
+    id: string,
+    updateAbidingDto: UpdateAbidingDto,
+    caller: AuthUser,
+  ): Promise<AbidingResponseDto> {
     // Built explicitly, not spread from the DTO, so a client can never set
     // `hashtags` directly and an edit that doesn't touch `message` can't
     // accidentally wipe it to [].
@@ -119,17 +131,23 @@ export class AbidingsService {
       imageUrl: updateAbidingDto.imageUrl,
       replyToId: updateAbidingDto.replyToId || undefined,
     };
-    if (updateAbidingDto.message !== undefined) {
+    if (typeof updateAbidingDto.message === "string" && updateAbidingDto.message.length > 0) {
       update.message = updateAbidingDto.message;
       update.hashtags = extractHashtags(updateAbidingDto.message);
     }
 
+    // the { new: true } option returns the updated document, not the original.
+    // ownedBy puts the authorization rule in the filter, so the check and the
+    // write are one operation with no window between them.
     const updatedAbiding = await this.abidingModel
-      .findOneAndUpdate({ _id: id, deletedAt: null }, update, { new: true })
+      .findOneAndUpdate({ _id: id, deletedAt: null, ...this.ownedBy(caller) }, update, {
+        new: true,
+      })
       .exec();
 
     if (!updatedAbiding) {
-      throw new NotFoundException("Abiding not found");
+      await this.assertExists(id);
+      throw new ForbiddenException("Not authorized to edit this abiding");
     }
 
     // An edit can introduce tags the registry has never seen. Tags the edit
@@ -145,13 +163,36 @@ export class AbidingsService {
     return this.toResponseDto(updatedAbiding);
   }
 
-  async deleteAbiding(abidingId: string): Promise<void> {
+  async deleteAbiding(abidingId: string, caller: AuthUser): Promise<void> {
     // deletedAt: null so an abiding hidden with its deleted user is a 404 here
-    // too, and comes back intact if the user is restored.
+    // too, and comes back intact if the user is restored. ownedBy adds the
+    // authorization rule to the same filter.
     const result = await this.abidingModel
-      .findOneAndDelete({ _id: abidingId, deletedAt: null })
+      .findOneAndDelete({ _id: abidingId, deletedAt: null, ...this.ownedBy(caller) })
       .exec();
     if (!result) {
+      await this.assertExists(abidingId);
+      throw new ForbiddenException("Not authorized to delete this abiding");
+    }
+  }
+
+  // --- Authorization helpers ---
+
+  // An admin may touch anyone's abiding, so the filter gains nothing. Everyone
+  // else is pinned to their own userId.
+  private ownedBy(caller: AuthUser): { userId?: number } {
+    return caller.role === UserRole.ADMIN ? {} : { userId: caller.userId };
+  }
+
+  // Called only when an ownership-scoped write matched nothing, to tell a
+  // missing abiding from someone else's. Throws 404 when it is gone; returning
+  // normally means it exists and the caller does not own it.
+  //
+  // A missing abiding is a 404 even for a non-owner, deliberately: answering
+  // 403 would tell a caller which ids exist.
+  private async assertExists(id: string): Promise<void> {
+    const exists = await this.abidingModel.exists({ _id: id, deletedAt: null }).exec();
+    if (!exists) {
       throw new NotFoundException("Abiding not found");
     }
   }

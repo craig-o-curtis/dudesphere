@@ -1,7 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
+import type { AuthUser } from "../auth/auth-user.js";
+import { UserRole } from "../users/user.entity.js";
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
@@ -73,7 +80,16 @@ export class ProfilesService {
     await manager.restore(Profile, { userId, deletedAt: Not(IsNull()) });
   }
 
-  async updateProfile(id: number, updateProfileDto: UpdateProfileDto): Promise<ProfileResponseDto> {
+  // `caller` is who is asking, so one rule covers both routes that reach here:
+  // an admin edits any profile, and everyone else edits only their own. The
+  // ownership condition goes in the update criteria rather than a separate
+  // read, so the check and the write are one statement with no window between
+  // them.
+  async updateProfile(
+    id: number,
+    updateProfileDto: UpdateProfileDto,
+    caller: AuthUser,
+  ): Promise<ProfileResponseDto> {
     // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
     // that is not a QueryFailedError, so QueryFailedFilter lets it through as
     // a 500. Every field on UpdateProfileDto is optional, so an empty body
@@ -85,12 +101,23 @@ export class ProfilesService {
     // filter that find() does. Without it a deleted profile gets edited and
     // the caller still gets a 404 from getProfileById below.
     const result = await this.profileRepository.update(
-      { id, deletedAt: IsNull() },
+      { id, deletedAt: IsNull(), ...this.ownedBy(caller) },
       updateProfileDto,
     );
     if (result.affected === 0) {
-      throw new NotFoundException(`Profile #${id} not found`);
+      // Nothing matched, which means the profile is missing or it is someone
+      // else's. One extra read, on the failure path only, to tell those apart:
+      // getProfileById throws 404 when it is gone, so reaching the line below
+      // means it exists and the caller does not own it.
+      await this.getProfileById(id);
+      throw new ForbiddenException("Not authorized to edit this profile");
     }
     return this.getProfileById(id);
+  }
+
+  // An admin is unrestricted, so the criteria gain nothing. Everyone else is
+  // pinned to their own userId.
+  private ownedBy(caller: AuthUser): { userId?: number } {
+    return caller.role === UserRole.ADMIN ? {} : { userId: caller.userId };
   }
 }
