@@ -36,6 +36,11 @@ export class Hashtag extends Document {
   // because an upsert that finds an existing row must not touch it.
   @Prop({ type: String, required: true })
   firstUsedAt: string;
+
+  // TODO setup for soft delete
+  // TODO just added this so see how to `migrate` this change, document in DEVELOPMENT.md
+  @Prop({ type: String, default: null })
+  deletedAt: string | null;
 }
 
 export const HashtagSchema = SchemaFactory.createForClass(Hashtag);
