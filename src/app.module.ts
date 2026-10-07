@@ -8,7 +8,6 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
-import { AuthStateModule } from "./auth/auth-state.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
@@ -57,7 +56,6 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [ConfigService],
     }),
     UsersModule,
-    AuthStateModule,
     AbidingsModule,
     AuthModule,
     ProfilesModule,

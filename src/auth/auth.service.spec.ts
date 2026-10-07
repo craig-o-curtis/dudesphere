@@ -3,7 +3,6 @@ import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { UsersService } from "../users/users.service.js";
-import { AuthStateService } from "./auth-state.service.js";
 import { AuthService } from "./auth.service.js";
 
 describe("AuthService", () => {
@@ -18,7 +17,6 @@ describe("AuthService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: AuthStateService, useValue: { isAuthenticated: false } },
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
       ],
