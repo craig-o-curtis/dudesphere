@@ -78,7 +78,7 @@ export class HashtagsService {
             update: {
               $setOnInsert: { slug, display: displays.get(slug) ?? slug, firstUsedAt },
             },
-            upsert: true,
+            upsert: true, // upsert means if the document doesn't exist, it will be created, but if exists it will not be modified due to $setOnInsert
           },
         })),
       );
@@ -91,6 +91,16 @@ export class HashtagsService {
       // record that matters; losing a registry row costs a dropdown entry
       // until the tag is used again, and is not worth failing the post over.
     }
+  }
+
+  // TODO unit test this
+  async deleteBySlug(slug: string): Promise<void> {
+    const normalized = normalizeHashtag(slug);
+    if (!normalized) {
+      return;
+    }
+
+    await this.hashtagModel.deleteOne({ slug: normalized }).exec();
   }
 
   // --- Private helpers ---
