@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
@@ -31,14 +31,15 @@ describe("HashtagsService", () => {
     find: vi.fn(),
     findOne: vi.fn(),
     bulkWrite: vi.fn(),
-    deleteOne: vi.fn(),
+    updateOne: vi.fn(),
   };
 
   beforeEach(async () => {
     vi.resetAllMocks();
     hashtagModel.find.mockReturnValue(queryOf([]));
     hashtagModel.findOne.mockReturnValue(queryOf(null));
-    hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 1 }));
+    // Default: the delete found a live tag to stamp.
+    hashtagModel.updateOne.mockReturnValue(queryOf({ matchedCount: 1 }));
     vi.mocked(getUtcNow).mockReturnValue(UTC_NOW);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -69,13 +70,24 @@ describe("HashtagsService", () => {
       expect(result.map((h) => h.slug)).toEqual(["dude", "sunday"]);
       expect(result.map((h) => h.display)).toEqual(["Dude", "Sunday"]);
     });
+
+    // The filter is what hides a deleted tag from the dropdown. Mongo matches
+    // `deletedAt: null` against a missing field too, so rows written before
+    // the field existed still count as live.
+    it("leaves out tags an admin has deleted", async () => {
+      await service.listAll();
+
+      expect(hashtagModel.find).toHaveBeenCalledWith({ deletedAt: null });
+    });
   });
 
   describe("getBySlug", () => {
-    it("normalizes before looking up", async () => {
+    // deletedAt: null means a deleted tag reads as not found, the same as one
+    // that never existed.
+    it("normalizes before looking up, and only finds a live tag", async () => {
       await service.getBySlug("#Sunday");
 
-      expect(hashtagModel.findOne).toHaveBeenCalledWith({ slug: "sunday" });
+      expect(hashtagModel.findOne).toHaveBeenCalledWith({ slug: "sunday", deletedAt: null });
     });
 
     it("returns null for a slug that can't normalize, without querying", async () => {
@@ -87,7 +99,6 @@ describe("HashtagsService", () => {
 
     it("returns null when the tag isn't registered", async () => {
       hashtagModel.findOne.mockReturnValue(queryOf(null));
-      hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 1 }));
 
       expect(await service.getBySlug("sunday")).toBeNull();
     });
@@ -112,6 +123,29 @@ describe("HashtagsService", () => {
       // Only $setOnInsert — a $set here would overwrite the first casing
       // every time the tag was used again.
       expect(operations[0].updateOne.update.$set).toBeUndefined();
+    });
+
+    // A deleted tag keeps its row, with deletedAt set. The upsert matches that
+    // row and $setOnInsert writes nothing to a row that exists, so posting
+    // with the tag does not put it back on the list. The backfill relies on
+    // the same thing: it re-registers every tag every abiding carries, and
+    // abidings keep a tag after it is deleted.
+    it("never touches deletedAt, so a deleted tag stays deleted", async () => {
+      await service.registerTags(new Map([["sunday", "Sunday"]]));
+
+      const { update } = hashtagModel.bulkWrite.mock.calls[0][0][0].updateOne;
+      expect(Object.keys(update)).toEqual(["$setOnInsert"]);
+      expect(update.$setOnInsert).not.toHaveProperty("deletedAt");
+    });
+
+    // The other half of the same guarantee. Narrowing the filter to live tags
+    // would make the upsert try to insert a second row for a deleted slug,
+    // and the unique index would reject it on every reuse.
+    it("matches on slug alone, so a deleted row is matched rather than duplicated", async () => {
+      await service.registerTags(new Map([["sunday", "Sunday"]]));
+
+      const { filter } = hashtagModel.bulkWrite.mock.calls[0][0][0].updateOne;
+      expect(filter).toEqual({ slug: "sunday" });
     });
 
     it("stamps firstUsedAt with the UTC string getUtcNow returned", async () => {
@@ -150,10 +184,23 @@ describe("HashtagsService", () => {
   });
 
   describe("deleteBySlug", () => {
-    it("normalizes the slug before deleting", async () => {
+    // A soft delete: the row stays. That row is what stops registerTags from
+    // adding the tag again the next time an abiding uses it.
+    it("stamps deletedAt with the UTC string getUtcNow returned", async () => {
+      await service.deleteBySlug("sunday");
+
+      const [, update] = hashtagModel.updateOne.mock.calls[0];
+      // Written through unchanged, the same as firstUsedAt.
+      expect(update).toEqual({ $set: { deletedAt: UTC_NOW } });
+    });
+
+    // deletedAt: null in the filter keeps the first timestamp on a tag that
+    // is already deleted, and is what makes a second delete a 404.
+    it("normalizes the slug, and only touches a tag that is still live", async () => {
       await service.deleteBySlug("#Sunday");
 
-      expect(hashtagModel.deleteOne).toHaveBeenCalledWith({ slug: "sunday" });
+      const [filter] = hashtagModel.updateOne.mock.calls[0];
+      expect(filter).toEqual({ slug: "sunday", deletedAt: null });
     });
 
     // A slug that cannot normalize can never match a stored one, so there is
@@ -161,16 +208,28 @@ describe("HashtagsService", () => {
     it("throws NotFoundException for an unusable slug, without querying", async () => {
       await expect(service.deleteBySlug("###")).rejects.toBeInstanceOf(NotFoundException);
 
-      expect(hashtagModel.deleteOne).not.toHaveBeenCalled();
+      expect(hashtagModel.updateOne).not.toHaveBeenCalled();
     });
 
-    // deleteOne reports success whether or not it matched, so without this
-    // check DELETE /hashtags/anything returned 200 and the caller could not
-    // tell a real delete from a no-op.
-    it("throws NotFoundException when no tag matched", async () => {
-      hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 0 }));
+    // Covers both a tag that never existed and one that is already deleted.
+    // Without this check DELETE /hashtags/anything returned 200 and the
+    // caller could not tell a real delete from a no-op.
+    it("throws NotFoundException when no live tag matched", async () => {
+      hashtagModel.updateOne.mockReturnValue(queryOf({ matchedCount: 0 }));
 
       await expect(service.deleteBySlug("sunday")).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    // Thrown, not swallowed as registerTags does. The caller asked for this
+    // delete, so they have to hear that it did not happen. Writing anyway
+    // would hide the tag behind a blank timestamp.
+    it("throws ServiceUnavailableException when the clock can't be read, and writes nothing", async () => {
+      vi.mocked(getUtcNow).mockReturnValueOnce("");
+
+      await expect(service.deleteBySlug("sunday")).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(hashtagModel.updateOne).not.toHaveBeenCalled();
     });
 
     it("resolves when a tag was deleted", async () => {

@@ -18,7 +18,8 @@ export type HashtagBackfillResult = {
 // Safe to run as many times as you like. It re-derives from `message` rather
 // than checking whether `hashtags` is already set, so an abiding that is
 // already correct is rewritten to the same value, and registerTags upserts
-// with $setOnInsert so an existing tag is left alone.
+// with $setOnInsert so a tag that already exists is left exactly as it is —
+// including one an admin has deleted, which stays deleted.
 @Injectable()
 export class HashtagBackfillService {
   private readonly logger = new Logger(HashtagBackfillService.name);
@@ -57,6 +58,9 @@ export class HashtagBackfillService {
     // Repairs the registry as well as the abidings: any tag missing from it,
     // whether because it predates the registry or because a live upsert
     // failed, is added here.
+    //
+    // Abidings keep a deleted tag in their hashtags array, so `displays` holds
+    // every tag an admin ever deleted. registerTags leaves those deleted.
     await this.hashtagsService.registerTags(displays);
 
     this.logger.log(`Backfilled ${abidings} abidings, registered ${displays.size} tags`);
