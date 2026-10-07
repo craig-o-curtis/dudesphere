@@ -1,20 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Query,
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
+import { IdParamDto } from "../shared/dto/id-param.dto.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { ListUsersQueryDto } from "./dto/list-users-query.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -43,8 +33,7 @@ export class UsersController {
 
   @Public()
   @Get(":id")
-  // @HttpCode(200)
-  getUserById(@Param("id", ParseIntPipe) id: number): Promise<UserResponseDto> {
+  getUserById(@Param() { id }: IdParamDto): Promise<UserResponseDto> {
     return this.usersService.getUserById(id);
   }
 
@@ -76,7 +65,7 @@ export class UsersController {
   @Patch(":id")
   // @HttpCode(200)
   updateUser(
-    @Param("id", ParseIntPipe) id: number,
+    @Param() { id }: IdParamDto,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updateUser(id, updateUserDto);
@@ -106,7 +95,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
-  deleteUser(@Param("id", ParseIntPipe) id: number): Promise<void> {
+  deleteUser(@Param() { id }: IdParamDto): Promise<void> {
     return this.usersService.deleteUser(id);
   }
 
@@ -115,7 +104,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Post(":id/restore")
   @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
-  restoreUser(@Param("id", ParseIntPipe) id: number): Promise<UserResponseDto> {
+  restoreUser(@Param() { id }: IdParamDto): Promise<UserResponseDto> {
     return this.usersService.restoreUser(id);
   }
 }

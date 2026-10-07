@@ -80,7 +80,7 @@ describe("ProfilesController", () => {
     it("delegates to ProfilesService.getProfileById", async () => {
       profilesServiceMock.getProfileById.mockResolvedValue(mockProfile);
 
-      const result = await controller.getProfileById(1);
+      const result = await controller.getProfileById({ id: 1 });
 
       expect(profilesServiceMock.getProfileById).toHaveBeenCalledWith(1);
       expect(result).toBe(mockProfile);
@@ -91,7 +91,7 @@ describe("ProfilesController", () => {
     it("delegates to ProfilesService.getProfileByUserId", async () => {
       profilesServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
 
-      const result = await controller.getProfileByUserId(42);
+      const result = await controller.getProfileByUserId({ id: 42 });
 
       expect(profilesServiceMock.getProfileByUserId).toHaveBeenCalledWith(42);
       expect(result).toBe(mockProfile);
@@ -125,7 +125,7 @@ describe("ProfilesController", () => {
 
       const caller = { userId: 42, username: "dude", role: UserRole.USER };
 
-      const result = await controller.updateProfile(1, updateDto, caller);
+      const result = await controller.updateProfile({ id: 1 }, updateDto, caller);
 
       // The controller passes the caller straight through; the rule itself is
       // the service's, and is tested in profiles.service.spec.ts.
