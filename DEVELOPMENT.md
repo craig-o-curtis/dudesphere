@@ -66,6 +66,49 @@ pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
 Open http://localhost:8081 and log in with your MongoDB credentials from `.env`.
 
+## Mongo Schema Changes
+
+Postgres and MongoDB change in different ways, and only Postgres has migrations.
+
+- **Postgres** holds `user` and `profile`. Their schema only changes through a
+  migration. See "Database Migrations" in the [README](README.md).
+- **MongoDB** holds `abidings` and `hashtags`. There is nothing to migrate.
+  Adding a `@Prop` to a schema changes what the app writes from then on. It
+  does nothing to documents already stored.
+
+`pnpm migration:check` will never notice a Mongo change. It reads
+`src/database/data-source.ts`, which only loads `*.entity.ts` files, and those
+are the two Postgres tables. That is correct, not a gap.
+
+So when you add a field to a Mongoose schema, the question is whether the
+documents already stored need it filled in.
+
+### When a new field needs no backfill
+
+A new field that can be null usually needs nothing, as long as every read
+treats "missing" and "null" the same way. MongoDB does this for you: a filter
+of `{ deletedAt: null }` matches a document where `deletedAt` is null and also
+one that has no `deletedAt` at all.
+
+`Hashtag.deletedAt` and `Abiding.deletedAt` both work this way. Every read
+filters on `deletedAt: null`, so documents written before the field existed
+count as live from the first day, with no write to any of them.
+
+### When it does need one
+
+Write a backfill when any of these is true:
+
+- A read filters the other way, such as `{ deletedAt: { $ne: null } }`, where
+  a missing field and a null one do not match the same documents.
+- You sort on the field or build an index on it.
+- The value has to be worked out from other data. `Abiding.hashtags` was this
+  kind: it is derived from `message`, and no query can infer it. That is why
+  `pnpm backfill:hashtags` exists.
+
+To write one, follow `src/database/seeds/hashtag-backfill.seed.ts`: a service
+that is safe to run twice, a thin runner like `backfill-hashtags.ts`, a script
+in `package.json`, and a spec.
+
 ## Seeds and Backfills
 
 ### Seed data
@@ -109,6 +152,11 @@ rather than checking what is already stored, and tag registration only inserts
 tags that are missing. Running it twice produces the same result as running it
 once.
 
+It does not bring back a hashtag an admin has deleted. Abidings keep a deleted
+tag in their own `hashtags` array, so the backfill sees every deleted tag on
+every run and leaves each one deleted. Nothing in the app brings a deleted tag
+back, including posting with it again.
+
 It walks the whole collection with a cursor, so it does not load every abiding
 into memory, but it does write to every abiding. On a large collection, expect
 it to take a while.
@@ -127,7 +175,7 @@ pnpm run start:dev
 
 ### Tables not appearing in pgAdmin
 
-Tables are created automatically by TypeORM when the NestJS app starts (via `synchronize: true`). Start the app first, then refresh pgAdmin.
+Tables are created by migrations, not by starting the app. `synchronize` is turned off. Run `pnpm migration:run`, then refresh pgAdmin.
 
 ## Useful Commands
 
