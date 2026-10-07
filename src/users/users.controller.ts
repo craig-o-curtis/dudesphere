@@ -9,22 +9,27 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from "@nestjs/common";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { Public } from "../shared/decorators/public.decorator.js";
+import { Roles } from "../shared/decorators/roles.decorator.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { ListUsersQueryDto } from "./dto/list-users-query.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
+import { UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
 @Controller("users")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // Admin only. This route returned every user's email address to anyone who
+  // asked, with no token, which made it a mass harvest. A single record stays
+  // public below, and a signed-in user reads their own through GET /users/me.
+  @Roles(UserRole.ADMIN)
   @Get()
   // @HttpCode(200)
   getUsers(@Query() query: ListUsersQueryDto): Promise<UserResponseDto[]> {
@@ -32,17 +37,19 @@ export class UsersController {
   }
 
   @Get("me")
-  @UseGuards(JwtAuthGuard)
   getMyUser(@CurrentUser() user: AuthUser): Promise<UserResponseDto> {
     return this.usersService.getUserById(user.userId);
   }
 
+  @Public()
   @Get(":id")
   // @HttpCode(200)
   getUserById(@Param("id", ParseIntPipe) id: number): Promise<UserResponseDto> {
     return this.usersService.getUserById(id);
   }
 
+  // Public: registration is how someone gets their first token.
+  @Public()
   @Post()
   // @HttpCode(201)
   createUser(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -56,7 +63,6 @@ export class UsersController {
   //
   // Auth flow: same as GET /users/me — see that comment above.
   @Patch("me")
-  @UseGuards(JwtAuthGuard)
   updateMyUser(
     @Body() updateUserDto: UpdateUserDto,
     @CurrentUser() user: AuthUser,
@@ -64,6 +70,9 @@ export class UsersController {
     return this.usersService.updateUser(user.userId, updateUserDto);
   }
 
+  // Any account, by id. Admin only — a user edits their own through
+  // PATCH /users/me above.
+  @Roles(UserRole.ADMIN)
   @Patch(":id")
   // @HttpCode(200)
   updateUser(
@@ -88,12 +97,13 @@ export class UsersController {
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
   @Delete("me")
-  @UseGuards(JwtAuthGuard)
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   deleteMe(@CurrentUser() user: AuthUser): Promise<void> {
     return this.usersService.deleteUser(user.userId);
   }
 
+  // Admin only — a user closes their own account through DELETE /users/me.
+  @Roles(UserRole.ADMIN)
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   deleteUser(@Param("id", ParseIntPipe) id: number): Promise<void> {
@@ -101,8 +111,8 @@ export class UsersController {
   }
 
   // 200, not POST's default 201: this brings back an existing user rather
-  // than creating one. Unguarded like DELETE above; both need an admin guard
-  // once auth carries a role.
+  // than creating one. Admin only, like DELETE above.
+  @Roles(UserRole.ADMIN)
   @Post(":id/restore")
   @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
   restoreUser(@Param("id", ParseIntPipe) id: number): Promise<UserResponseDto> {

@@ -75,3 +75,61 @@ jobs:
         run: pnpm migration:run
       - name: Entities still match
         run: pnpm migration:check
+
+  e2e:
+    name: End-to-end against live databases
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine # same image as docker-compose.yml
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: dudesphere_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mongo:
+        image: mongo:8 # same image as docker-compose.yml
+        # No auth: a throwaway database that only this job can reach, so
+        # MONGO_URI below needs no authSource, unlike the local .env.
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    # Throwaway databases, so none of this is secret. ObserveModule reads its
+    # two values with getOrThrow, so the app will not start without them.
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_ADMIN_USER: ci
+      PG_ADMIN_PW: ci
+      PG_DATABASE: dudesphere_ci
+      MONGO_URI: mongodb://localhost:27017/dude-abidings
+      JWT_SECRET: ci-only-not-a-secret
+      EMAIL: admin@dude.com
+      PASSWORD: ci-admin-password
+      DUDE_OBSERVE_APP_KEY: ci
+      DUDE_OBSERVE_APP_SECRET: ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create the schema
+        run: pnpm migration:run
+      # profile-me and authorization both log in, and the admin-only cases need
+      # a real admin row.
+      - name: Seed the admin user
+        run: pnpm seed:run
+      - run: pnpm test:e2e
