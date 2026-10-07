@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
+import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 
 describe("AppController (e2e)", () => {
@@ -14,6 +15,9 @@ describe("AppController (e2e)", () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // Same global pipes, filters and interceptor as main.ts, so this tests the
+    // app that actually runs. See src/app-setup.ts.
+    configureApp(app);
     await app.init();
   });
 
