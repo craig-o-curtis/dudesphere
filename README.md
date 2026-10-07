@@ -106,6 +106,8 @@ pnpm run build
 
 The PostgreSQL schema is managed by migrations in `src/database/migrations/`. `synchronize` is turned off, so the app never changes tables on its own.
 
+Migrations cover PostgreSQL only. MongoDB has none: see "Mongo Schema Changes" in [DEVELOPMENT.md](DEVELOPMENT.md) for what to do when a Mongoose schema changes.
+
 ```bash
 # Apply any migrations that haven't run yet (run this after pulling)
 pnpm run migration:run
@@ -135,12 +137,13 @@ Never edit a migration that has already been committed. Databases that have alre
 
 ## Continuous Integration
 
-GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has two jobs, which run in parallel:
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has three jobs, which run in parallel:
 
 | Job                                                 | Steps                                                                                                                               |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Format, lint, typecheck, test, build**            | `format:check` → `lint` → `typecheck` → `test` → `build`                                                                            |
 | **Migrations apply, match entities, and roll back** | Starts a throwaway Postgres 18, then `migration:run` → `migration:check` → `migration:revert` → `migration:run` → `migration:check` |
+| **End-to-end against live databases**               | Starts a throwaway Postgres 18 and MongoDB 8, then `migration:run` → `seed:run` → `test:e2e`                                        |
 
 To catch failures before pushing, run the same commands locally:
 
@@ -149,8 +152,8 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 ```
 
 - **Versions** are pinned in two places: `.node-version` sets the Node version, and `packageManager` in `package.json` sets the pnpm version. Both CI and fnm read `.node-version`, so one file covers local and CI. To upgrade either, change it there.
-- **E2E tests (`test:e2e`) don't run in CI.** They boot the whole app, which needs MongoDB and the Nest Observe keys.
-- **No secrets are needed.** The Postgres used by the migrations job exists only for the length of the run.
+- **E2E tests (`test:e2e`) run in CI against real databases.** Both are service containers that start empty and are thrown away when the job ends. To run them locally you need `docker compose up -d` and `pnpm seed:run` first.
+- **No secrets are needed.** The databases exist only for the length of the run, and every value the e2e job sets, including the Nest Observe keys, is a placeholder written in the workflow file.
 
 ## API Endpoints
 
@@ -173,6 +176,16 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 | POST   | /abiding     | Create a abiding  |
 | PATCH  | /abiding/:id | Update a abiding  |
 | DELETE | /abiding/:id | Delete a abiding  |
+
+### Hashtags
+
+| Method | Endpoint        | Description                                      |
+| ------ | --------------- | ------------------------------------------------ |
+| GET    | /hashtags       | List every live hashtag, alphabetically          |
+| GET    | /hashtags/:slug | Get one hashtag                                  |
+| DELETE | /hashtags/:slug | Soft-delete a hashtag from the list (admin only) |
+
+Deleting a hashtag takes it off the list for good. Abidings that used it keep it, and `GET /abidings?hashtag=<slug>` still finds them. Posting with the tag again does not put it back on the list.
 
 ### Auth
 
