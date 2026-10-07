@@ -22,7 +22,9 @@ export class AbidingsController {
   @Public()
   @Get()
   public async getAbidings(@Query() query: ListAbidingsQueryDto): Promise<AbidingResponseDto[]> {
-    const userId = query.userId ? Number(query.userId) : undefined;
+    // Already a number: ListAbidingsQueryDto coerces and validates it, so an
+    // unusable value is a 400 before it reaches here.
+    const userId = query.userId;
     // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
     // tag still goes through the dedicated single-tag call rather than the
     // multi-tag one, since that's the call the rest of the service (and any
