@@ -159,7 +159,9 @@ describe("AbidingsController", () => {
     it("passes userId through to getAbidingsByHashtag", async () => {
       abidingService.getAbidingsByHashtag.mockResolvedValue([]);
 
-      await controller.getAbidings({ hashtag: "sunday", userId: "3" });
+      // A number now: ListAbidingsQueryDto coerces and validates it, so the
+      // controller no longer converts it by hand.
+      await controller.getAbidings({ hashtag: "sunday", userId: 3 });
 
       expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", 3);
     });
