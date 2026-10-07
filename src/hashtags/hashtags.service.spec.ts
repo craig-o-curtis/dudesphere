@@ -1,3 +1,4 @@
+import { NotFoundException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
@@ -30,12 +31,14 @@ describe("HashtagsService", () => {
     find: vi.fn(),
     findOne: vi.fn(),
     bulkWrite: vi.fn(),
+    deleteOne: vi.fn(),
   };
 
   beforeEach(async () => {
     vi.resetAllMocks();
     hashtagModel.find.mockReturnValue(queryOf([]));
     hashtagModel.findOne.mockReturnValue(queryOf(null));
+    hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 1 }));
     vi.mocked(getUtcNow).mockReturnValue(UTC_NOW);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -84,6 +87,7 @@ describe("HashtagsService", () => {
 
     it("returns null when the tag isn't registered", async () => {
       hashtagModel.findOne.mockReturnValue(queryOf(null));
+      hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 1 }));
 
       expect(await service.getBySlug("sunday")).toBeNull();
     });
@@ -142,6 +146,35 @@ describe("HashtagsService", () => {
 
       await expect(service.registerTags(new Map([["sunday", "Sunday"]]))).resolves.toBeUndefined();
       expect(hashtagModel.bulkWrite).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteBySlug", () => {
+    it("normalizes the slug before deleting", async () => {
+      await service.deleteBySlug("#Sunday");
+
+      expect(hashtagModel.deleteOne).toHaveBeenCalledWith({ slug: "sunday" });
+    });
+
+    // A slug that cannot normalize can never match a stored one, so there is
+    // nothing to ask the database.
+    it("throws NotFoundException for an unusable slug, without querying", async () => {
+      await expect(service.deleteBySlug("###")).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(hashtagModel.deleteOne).not.toHaveBeenCalled();
+    });
+
+    // deleteOne reports success whether or not it matched, so without this
+    // check DELETE /hashtags/anything returned 200 and the caller could not
+    // tell a real delete from a no-op.
+    it("throws NotFoundException when no tag matched", async () => {
+      hashtagModel.deleteOne.mockReturnValue(queryOf({ deletedCount: 0 }));
+
+      await expect(service.deleteBySlug("sunday")).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("resolves when a tag was deleted", async () => {
+      await expect(service.deleteBySlug("sunday")).resolves.toBeUndefined();
     });
   });
 });
