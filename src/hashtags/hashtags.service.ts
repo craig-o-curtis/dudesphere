@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
@@ -93,14 +93,12 @@ export class HashtagsService {
     }
   }
 
-  // TODO unit test this
   async deleteBySlug(slug: string): Promise<void> {
     const normalized = normalizeHashtag(slug);
-    if (!normalized) {
-      return;
-    }
+    if (!normalized) throw new NotFoundException("Hashtag not found");
 
-    await this.hashtagModel.deleteOne({ slug: normalized }).exec();
+    const result = await this.hashtagModel.deleteOne({ slug: normalized }).exec();
+    if (result.deletedCount === 0) throw new NotFoundException("Hashtag not found");
   }
 
   // --- Private helpers ---
