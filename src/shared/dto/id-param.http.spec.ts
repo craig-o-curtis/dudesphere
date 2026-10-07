@@ -1,16 +1,17 @@
-import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
+import { configureApp } from "../../app-setup.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
 import { PG_INT_MAX } from "./id-param.dto.js";
 
 // IdParamDto is enforced by the global ValidationPipe, which only runs in the
 // real request pipeline — calling controller.getUserById({ id: 1 }) directly
-// skips it entirely. So this boots an HTTP app, with the same ValidationPipe
-// options main.ts uses, and mocked services so no database is needed.
+// skips it entirely. So this boots an HTTP app, configured by the same
+// configureApp() main.ts calls, with mocked services so no database is needed.
 //
 // UsersController stands in for every route using IdParamDto; ProfilesController
 // shares the DTO and needs no second copy of these cases.
@@ -39,9 +40,9 @@ describe("IdParamDto (over HTTP)", () => {
       req.user = { userId: 7, username: "walter", role: "user" };
       next();
     });
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
+    // The same global setup as main.ts, so the ValidationPipe options here
+    // cannot drift from the ones production runs with.
+    configureApp(app);
     await app.init();
   });
 
