@@ -12,7 +12,6 @@ import { AuthModule } from "./auth/auth.module.js";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
-import jwtConfig from "./config/jwt.config.js";
 import mongoConfig from "./config/mongo.config.js";
 import observeConfig from "./config/observe.config.js";
 import postgresConfig from "./config/postgres.config.js";
@@ -30,8 +29,10 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       envFilePath: ".env",
       // Checks every variable at startup. See src/config/env.validate.ts.
       validate: validateEnv,
-      // One file per namespace. Each is injected by its KEY, as below.
-      load: [appConfig, postgresConfig, mongoConfig, jwtConfig, observeConfig],
+      // One file per namespace. Each is injected by its KEY, as below. These are
+      // the ones this module uses. A feature with config of its own loads it
+      // itself, as AuthModule does with ConfigModule.forFeature.
+      load: [appConfig, postgresConfig, mongoConfig, observeConfig],
     }),
     ObserveModule.forRootAsync({
       inject: [observeConfig.KEY],
