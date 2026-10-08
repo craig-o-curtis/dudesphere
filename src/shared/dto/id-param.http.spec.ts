@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
+import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
@@ -43,7 +44,7 @@ describe("IdParamDto (over HTTP)", () => {
     // The same global setup as main.ts, so the ValidationPipe options here
     // cannot drift from the ones production runs with.
     configureApp(app);
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterEach(async () => {

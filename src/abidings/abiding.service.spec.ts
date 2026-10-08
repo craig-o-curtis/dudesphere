@@ -249,10 +249,12 @@ describe("AbidingsService", () => {
 
       await service.patchAbiding("x", { message: "New #Dude message" }, author);
 
+      // returnDocument here is the new name for the old "new" option, which was deprecated in Mongoose 7.
+      // it tells findOneAndUpdate to return the updated document, not the original.
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.objectContaining({ message: "New #Dude message", hashtags: ["dude"] }),
-        { new: true },
+        { returnDocument: "after" },
       );
     });
 
@@ -280,7 +282,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.not.objectContaining({ hashtags: expect.anything() }),
-        { new: true },
+        { returnDocument: "after" },
       );
     });
 
@@ -294,7 +296,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 2 },
         expect.anything(),
-        { new: true },
+        { returnDocument: "after" },
       );
     });
 
@@ -306,7 +308,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null },
         expect.anything(),
-        { new: true },
+        { returnDocument: "after" },
       );
     });
 
