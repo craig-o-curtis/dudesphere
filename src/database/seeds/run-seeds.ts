@@ -7,9 +7,10 @@ import * as dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-import { ConfigService } from "@nestjs/config";
+import { ConfigService, type ConfigType } from "@nestjs/config";
 
 import { AppModule } from "../../app.module.js";
+import appConfig from "../../config/app.config.js";
 import { ProfilesSeedService } from "../../profiles/profiles.seed.js";
 import { UsersSeedService } from "../../users/users.seed.js";
 import { AbidingSeedService } from "./abiding.seed.js";
@@ -20,7 +21,7 @@ async function runSeeds() {
   const configService = app.get(ConfigService);
   const adminEmail = configService.get<string>("EMAIL");
   const adminPassword = configService.get<string>("PASSWORD");
-  const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
+  const { environment } = app.get<ConfigType<typeof appConfig>>(appConfig.KEY);
 
   if (!adminEmail || !adminPassword) {
     console.error("EMAIL and PASSWORD must be set in .env");
@@ -37,7 +38,7 @@ async function runSeeds() {
 
     // Run MongoDB seed (Abiding)
     const abidingSeed = app.get(AbidingSeedService);
-    await abidingSeed.seed(nodeEnv, adminEmail);
+    await abidingSeed.seed(environment, adminEmail);
 
     console.log("All seeds completed successfully!");
   } catch (error) {

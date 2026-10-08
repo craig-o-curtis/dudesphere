@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
+import { listenOnLoopback } from "../../test/listen-on-loopback.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
@@ -54,7 +55,7 @@ describe("AbidingsController id params (over HTTP)", () => {
       req.user = { userId: 1, username: "walter", role: "user" };
       next();
     });
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterEach(async () => {
