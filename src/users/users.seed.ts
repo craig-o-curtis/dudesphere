@@ -1,8 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
+import { HashingProvider } from "../hashing/hashing.provider.js";
 import { User, UserRole } from "./user.entity.js";
 
 @Injectable()
@@ -12,6 +13,11 @@ export class UsersSeedService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    // @Inject names the token outright. `pnpm seed:run` runs through tsx, which
+    // does not emit the constructor types Nest otherwise reads, so without it
+    // this parameter arrives undefined there.
+    @Inject(HashingProvider)
+    private readonly hashingProvider: HashingProvider,
   ) {}
 
   async seed(adminEmail: string, adminPassword: string): Promise<void> {
@@ -20,6 +26,11 @@ export class UsersSeedService {
       return;
     }
 
+    // The seed writes to the table directly, so it hashes for itself. Every
+    // run stores a fresh hash of PASSWORD, which resets the admin's password
+    // to the value in .env.
+    const passwordHash = await this.hashingProvider.hash(adminPassword);
+
     let admin = await this.usersRepository.findOne({
       where: { email: adminEmail },
     });
@@ -27,7 +38,7 @@ export class UsersSeedService {
     if (admin) {
       // Update existing user to ensure correct role/flags
       admin.username = "Admin";
-      admin.password = adminPassword;
+      admin.password = passwordHash;
       admin.role = UserRole.ADMIN;
       await this.usersRepository.save(admin);
       this.logger.log(`Updated admin user (${adminEmail}) with role ${UserRole.ADMIN}`);
@@ -37,7 +48,7 @@ export class UsersSeedService {
       admin = this.usersRepository.create({
         username: "Admin",
         email: adminEmail,
-        password: adminPassword,
+        password: passwordHash,
         role: UserRole.ADMIN,
         createdAt: nowUtc,
         updatedAt: nowUtc,

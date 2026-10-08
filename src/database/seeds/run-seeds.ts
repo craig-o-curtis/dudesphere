@@ -42,7 +42,9 @@ async function runSeeds() {
 
     console.log("All seeds completed successfully!");
   } catch (error) {
-    console.error("Error running seeds:", error);
+    // The message only. A failed query's error object also carries the values
+    // it was run with, and for the admin row those include the password hash.
+    console.error("Error running seeds:", error instanceof Error ? error.message : error);
     process.exit(1);
   } finally {
     await app.close();

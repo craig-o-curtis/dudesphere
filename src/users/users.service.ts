@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -8,10 +9,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
+import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { User } from "./user.entity.js";
@@ -23,6 +26,7 @@ export class UsersService {
     private readonly dataSource: DataSource,
     private readonly profilesService: ProfilesService,
     private readonly userAbidingsService: UserAbidingsService,
+    private readonly hashingProvider: HashingProvider,
   ) {}
 
   async getUsers(limit: number = 10, page: number = 1): Promise<UserResponseDto[]> {
@@ -80,8 +84,13 @@ export class UsersService {
   // found, so they can't log in.
   async getUserByCredentials(email: string, password: string): Promise<UserResponseDto | null> {
     const user = await this.usersRepository.findOne({ where: { email } });
-    // Passwords are stored as plain text today, so this is a plain compare.
-    if (!user || user.password !== password) {
+    // The column holds a hash, so the two are compared by the hasher, never
+    // with ===. For an unknown email user?.password is undefined, and compare
+    // still does the work before answering false. Both failures then take
+    // about the same time, which keeps the response from revealing which
+    // emails have an account.
+    const matches = await this.hashingProvider.compare(password, user?.password);
+    if (!user || !matches) {
       return null;
     }
     return this.toResponseDto(user);
@@ -108,7 +117,8 @@ export class UsersService {
         manager.create(User, {
           username: createUserDto.username,
           email: createUserDto.email,
-          password: createUserDto.password,
+          // Only the hash is stored. The password itself is never written.
+          password: await this.hashingProvider.hash(createUserDto.password),
         }),
       );
 
@@ -120,6 +130,35 @@ export class UsersService {
 
       return this.toResponseDto(user, profile);
     });
+  }
+
+  // The signed-in user updates their own account. Setting a new password
+  // needs the current one too. Without that, a stolen token is enough to
+  // change the password and lock the real owner out for good.
+  //
+  // An admin resets someone's password through updateUser below, which asks
+  // for nothing more: the admin does not know the user's current password.
+  async updateMyUser(userId: number, updateMyUserDto: UpdateMyUserDto): Promise<UserResponseDto> {
+    const { currentPassword, ...updateUserDto } = updateMyUserDto;
+
+    if (updateUserDto.password !== undefined) {
+      if (currentPassword === undefined) {
+        throw new BadRequestException("currentPassword is required to set a new password");
+      }
+
+      const user = await this.usersRepository.findOne({ where: { id: userId } });
+      const matches = await this.hashingProvider.compare(currentPassword, user?.password);
+      if (!user) {
+        throw new NotFoundException(`My User #${userId} not found`);
+      }
+      // 403, not 401. The caller is signed in, so a client must not treat
+      // this as an expired session and log them out.
+      if (!matches) {
+        throw new ForbiddenException("Current password is incorrect");
+      }
+    }
+
+    return this.updateUser(userId, updateUserDto);
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
@@ -149,6 +188,12 @@ export class UsersService {
       if (existing) {
         throw new ConflictException(takenFieldMessage(existing, updateUserDto));
       }
+    }
+
+    // A new password arrives as plain text and is stored as a hash, the same
+    // as on sign-up. update() below runs no entity hooks, so it is done here.
+    if (userFields.password !== undefined) {
+      userFields.password = await this.hashingProvider.hash(userFields.password);
     }
 
     // deletedAt: IsNull() because update() does not apply the soft-delete

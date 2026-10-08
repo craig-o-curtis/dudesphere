@@ -1,9 +1,15 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { User } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
@@ -42,9 +48,17 @@ describe("UsersService", () => {
     restoreForUser: vi.fn(),
   };
 
+  // A fake hasher, so no test here runs bcrypt. hash() wraps its input, which
+  // makes a stored hash easy to tell from the password it came from.
+  const hashingProvider = {
+    hash: vi.fn(),
+    compare: vi.fn(),
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
     manager.create.mockImplementation((_entity: unknown, values: object) => values);
+    hashingProvider.hash.mockImplementation((plain: string) => Promise.resolve(`hashed(${plain})`));
 
     const module = await Test.createTestingModule({
       providers: [
@@ -53,6 +67,7 @@ describe("UsersService", () => {
         { provide: DataSource, useValue: dataSource },
         { provide: ProfilesService, useValue: profilesService },
         { provide: UserAbidingsService, useValue: userAbidingsService },
+        { provide: HashingProvider, useValue: hashingProvider },
       ],
     }).compile();
 
@@ -108,31 +123,39 @@ describe("UsersService", () => {
       id: 4,
       username: "walter",
       email: "w@x.com",
-      password: "secret1",
+      password: "hashed(secret1)",
       role: "user",
     };
 
-    it("returns the user, without the password, when the password matches", async () => {
+    it("returns the user, without the password, when the hasher says it matches", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(true);
 
       const result = await service.getUserByCredentials("w@x.com", "secret1");
 
       // No withDeleted, so a soft-deleted user is not found and can't log in.
       expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
+      // The typed password first, the stored hash second.
+      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       expect(result).toMatchObject({ id: 4, username: "walter" });
       expect(result?.password).toBeUndefined();
     });
 
-    it("returns null when the password is wrong", async () => {
+    it("returns null when the hasher says the password is wrong", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(false);
 
       await expect(service.getUserByCredentials("w@x.com", "wrong-one")).resolves.toBeNull();
     });
 
-    it("returns null when no user has that email", async () => {
+    // The compare still runs, against no hash, so an unknown email takes as
+    // long to reject as a wrong password.
+    it("returns null when no user has that email, and still runs the compare", async () => {
       usersRepository.findOne.mockResolvedValue(null);
+      hashingProvider.compare.mockResolvedValue(false);
 
       await expect(service.getUserByCredentials("no@x.com", "secret1")).resolves.toBeNull();
+      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", undefined);
     });
   });
 
@@ -157,10 +180,12 @@ describe("UsersService", () => {
       // Both writes happen inside one transaction.
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       // The user is saved through the transaction's manager, not the repository.
+      // The hash is what gets stored, never the password itself.
+      expect(hashingProvider.hash).toHaveBeenCalledWith("secret1");
       expect(manager.save).toHaveBeenCalledWith(User, {
         username: "dude",
         email: "d@x.com",
-        password: "secret1",
+        password: "hashed(secret1)",
       });
       // The profile is created with that same manager, for the id the insert returned.
       expect(profilesService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
@@ -238,6 +263,55 @@ describe("UsersService", () => {
     });
   });
 
+  describe("updateMyUser", () => {
+    const storedUser = { id: 3, username: "dude", email: "d@x.com", password: "hashed(secret1)" };
+
+    it("sets a new password when the current one is right", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      hashingProvider.compare.mockResolvedValue(true);
+
+      await service.updateMyUser(3, { password: "secret2", currentPassword: "secret1" });
+
+      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
+      // currentPassword is not a column, so it must not reach the update.
+      expect(usersRepository.update).toHaveBeenCalledWith(
+        { id: 3, deletedAt: IsNull() },
+        { password: "hashed(secret2)" },
+      );
+    });
+
+    it("throws 400 when a new password comes without the current one", async () => {
+      await expect(service.updateMyUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("throws 403 and changes nothing when the current password is wrong", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(false);
+
+      await expect(
+        service.updateMyUser(3, { password: "secret2", currentPassword: "not-it" }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(hashingProvider.hash).not.toHaveBeenCalled();
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("does not ask for the current password when no new one is set", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "d@x.com" });
+
+      await service.updateMyUser(3, { username: "donny" });
+
+      expect(hashingProvider.compare).not.toHaveBeenCalled();
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
+    });
+  });
+
   describe("updateUser", () => {
     // update() does not apply the soft-delete filter that find() does, so the
     // criteria has to carry it or a deleted row gets mutated behind a 404.
@@ -255,9 +329,33 @@ describe("UsersService", () => {
       expect(usersRepository.update).toHaveBeenCalledWith(
         { id: 3, deletedAt: IsNull() },
         {
-          password: "secret2",
+          password: "hashed(secret2)",
         },
       );
+    });
+
+    it("stores a new password as a hash", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude", email: "d@x.com" });
+
+      await service.updateUser(3, { password: "secret2" });
+
+      expect(hashingProvider.hash).toHaveBeenCalledWith("secret2");
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), {
+        password: "hashed(secret2)",
+      });
+    });
+
+    it("does not hash anything when the body has no password", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "d@x.com" });
+
+      await service.updateUser(3, { username: "donny" });
+
+      expect(hashingProvider.hash).not.toHaveBeenCalled();
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
 
     it("throws 400 when the body carries no user fields", async () => {
