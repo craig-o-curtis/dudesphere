@@ -38,15 +38,27 @@ The app runs on `http://localhost:3000` (or the port specified in `.env`).
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and fill in your values.
 
-| Variable        | Description            | Example         |
-| --------------- | ---------------------- | --------------- |
-| `PG_ADMIN_USER` | PostgreSQL role name   | `admin`         |
-| `PG_ADMIN_PW`   | PostgreSQL password    | (your password) |
-| `PG_DATABASE`   | Database name          | `dude`          |
-| `MG_ADMIN_USER` | MongoDB admin user     | `dude`          |
-| `MG_ADMIN_PW`   | MongoDB admin password | (your password) |
+The app checks every variable when it starts, in `src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
+
+| Variable                  | Required | Description                                                            | Example or default                                |
+| ------------------------- | -------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| `NODE_ENV`                | no       | `development`, `staging`, `production` or `test`                       | default `development`                             |
+| `PORT`                    | no       | Port the app listens on                                                | default `3000`                                    |
+| `PG_HOST`                 | yes      | PostgreSQL host                                                        | `localhost`                                       |
+| `PG_PORT`                 | yes      | PostgreSQL port                                                        | `5432`                                            |
+| `PG_ADMIN_USER`           | yes      | PostgreSQL role name                                                   | `admin`                                           |
+| `PG_ADMIN_PW`             | yes      | PostgreSQL password                                                    | (your password)                                   |
+| `PG_DATABASE`             | yes      | Database name                                                          | `dude`                                            |
+| `MONGO_URI`               | no       | MongoDB connection string                                              | default `mongodb://localhost:27017/dude-abidings` |
+| `JWT_SECRET`              | yes      | Key that signs login tokens                                            | (a long random string)                            |
+| `DUDE_OBSERVE_APP_KEY`    | yes      | Observe project key                                                    | (from the Observe dashboard)                      |
+| `DUDE_OBSERVE_APP_SECRET` | yes      | Observe project secret                                                 | (from the Observe dashboard)                      |
+| `EMAIL`                   | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests | `admin@dude.com`                                  |
+| `PASSWORD`                | seed     | Password of the seeded admin                                           | (your password)                                   |
+| `MG_ADMIN_USER`           | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app       | `dude`                                            |
+| `MG_ADMIN_PW`             | compose  | MongoDB admin password. Read by `docker-compose.yml`                   | (your password)                                   |
 
 ## pgAdmin Setup
 
