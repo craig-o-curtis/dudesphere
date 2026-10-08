@@ -133,7 +133,8 @@ pnpm seed:run
 ```
 
 Creates the admin user and profile from `EMAIL` and `PASSWORD` in `.env`, and
-some sample abidings. The abidings seed only runs when `NODE_ENV` is
+some sample abidings. The password is stored as a bcrypt hash. Running the seed
+again resets the admin's password to the value in `.env`. The abidings seed only runs when `NODE_ENV` is
 `development`, and skips itself if the collection already has documents.
 
 ### Hashtag backfill
