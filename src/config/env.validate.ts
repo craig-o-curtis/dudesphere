@@ -87,13 +87,27 @@ export class EnvironmentVariables {
  * Checks the environment and returns it typed, with defaults filled in.
  *
  * ConfigModule.forRoot({ validate: validateEnv }) calls this once at startup, so the app
- * refuses to start on a missing or malformed value. Each file in this folder
- * calls it again to read its own variables.
+ * refuses to start on a missing or malformed value. Each config file calls it
+ * again to read its own variables: the ones in this folder, and a feature's
+ * own, such as src/auth/config/auth.config.ts.
  */
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
   // An empty value means "not set". `.env.example` ships lines like PORT='',
   // and without this Number('') made the app listen on port 0.
   const present = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== ""));
+  // Object.fromEntries does the following:
+  //   [["PORT", "3000"], ["HOST", "localhost"]]  ->  { PORT: "3000", HOST: "localhost" }
+  // It turns a list of [key, value] pairs back into an object.
+
+  // Object.entries does the following:
+  //   { PORT: "3000", HOST: "" }  ->  [["PORT", "3000"], ["HOST", ""]]
+  // It turns an object into a list of [key, value] pairs, so we can filter them.
+
+  // so Object.fromEntries(Object.entries()) does the following:
+  //   { PORT: "3000", HOST: "" }  ->  { PORT: "3000", HOST: "" }
+  // On its own it gives back a copy of the same object. The filter in between
+  // is what changes it, by dropping the empty values:
+  //   { PORT: "3000", HOST: "" }  ->  { PORT: "3000" }
 
   const validated = plainToInstance(EnvironmentVariables, present);
   const errors = validateSync(validated, { skipMissingProperties: false });
