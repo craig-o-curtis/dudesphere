@@ -64,6 +64,23 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   JWT_SECRET: string;
 
+  // How long a login token lasts, in seconds.
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  JWT_EXPIRES_IN: number = 3600;
+
+  // Who a token is for, and who issued it. Both are written into every token
+  // and checked on every request, so a token made for another app is rejected
+  // even if it was signed with the same secret.
+  @IsString()
+  @IsNotEmpty()
+  JWT_AUDIENCE: string = "dudesphere-api";
+
+  @IsString()
+  @IsNotEmpty()
+  JWT_ISSUER: string = "dudesphere";
+
   @IsString()
   @IsNotEmpty()
   DUDE_OBSERVE_APP_KEY: string;

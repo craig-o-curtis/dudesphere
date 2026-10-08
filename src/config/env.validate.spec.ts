@@ -30,6 +30,26 @@ describe("validateEnv", () => {
     expect(env.PORT).toBe(3000);
     expect(env.NODE_ENV).toBe("development");
     expect(env.MONGO_URI).toBe("mongodb://localhost:27017/dude-abidings");
+    expect(env.JWT_EXPIRES_IN).toBe(3600);
+    expect(env.JWT_AUDIENCE).toBe("dudesphere-api");
+    expect(env.JWT_ISSUER).toBe("dudesphere");
+  });
+
+  it("reads the JWT settings when they are set", () => {
+    const env = validateEnv({
+      ...required,
+      JWT_EXPIRES_IN: "900",
+      JWT_AUDIENCE: "bowling-app",
+      JWT_ISSUER: "lebowski",
+    });
+
+    expect(env.JWT_EXPIRES_IN).toBe(900);
+    expect(env.JWT_AUDIENCE).toBe("bowling-app");
+    expect(env.JWT_ISSUER).toBe("lebowski");
+  });
+
+  it.each(["abc", "0", "-5", "1.5"])("throws when JWT_EXPIRES_IN is %s", (seconds) => {
+    expect(() => validateEnv({ ...required, JWT_EXPIRES_IN: seconds })).toThrow(/JWT_EXPIRES_IN/);
   });
 
   it("keeps variables it has no rule for, such as the seed login", () => {

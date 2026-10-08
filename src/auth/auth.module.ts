@@ -28,9 +28,20 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
       // which checks every variable before any module loads.
       imports: [authConfigModule],
       inject: [authConfig.KEY],
+      // Set once here for signing and verifying. AuthService and JwtAuthGuard
+      // then call signAsync and verifyAsync with no options of their own, and
+      // the guard rejects a token with the wrong audience or issuer.
       useFactory: (auth: ConfigType<typeof authConfig>) => ({
         secret: auth.secret,
-        signOptions: { expiresIn: "1h" },
+        signOptions: {
+          expiresIn: auth.expiresIn,
+          audience: auth.audience,
+          issuer: auth.issuer,
+        },
+        verifyOptions: {
+          audience: auth.audience,
+          issuer: auth.issuer,
+        },
       }),
     }),
   ],
