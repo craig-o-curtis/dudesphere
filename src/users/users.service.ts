@@ -8,6 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
@@ -23,6 +24,7 @@ export class UsersService {
     private readonly dataSource: DataSource,
     private readonly profilesService: ProfilesService,
     private readonly userAbidingsService: UserAbidingsService,
+    private readonly hashingProvider: HashingProvider,
   ) {}
 
   async getUsers(limit: number = 10, page: number = 1): Promise<UserResponseDto[]> {
@@ -80,8 +82,13 @@ export class UsersService {
   // found, so they can't log in.
   async getUserByCredentials(email: string, password: string): Promise<UserResponseDto | null> {
     const user = await this.usersRepository.findOne({ where: { email } });
-    // Passwords are stored as plain text today, so this is a plain compare.
-    if (!user || user.password !== password) {
+    // The column holds a hash, so the two are compared by the hasher, never
+    // with ===. For an unknown email user?.password is undefined, and compare
+    // still does the work before answering false. Both failures then take
+    // about the same time, which keeps the response from revealing which
+    // emails have an account.
+    const matches = await this.hashingProvider.compare(password, user?.password);
+    if (!user || !matches) {
       return null;
     }
     return this.toResponseDto(user);
@@ -108,7 +115,8 @@ export class UsersService {
         manager.create(User, {
           username: createUserDto.username,
           email: createUserDto.email,
-          password: createUserDto.password,
+          // Only the hash is stored. The password itself is never written.
+          password: await this.hashingProvider.hash(createUserDto.password),
         }),
       );
 
@@ -149,6 +157,12 @@ export class UsersService {
       if (existing) {
         throw new ConflictException(takenFieldMessage(existing, updateUserDto));
       }
+    }
+
+    // A new password arrives as plain text and is stored as a hash, the same
+    // as on sign-up. update() below runs no entity hooks, so it is done here.
+    if (userFields.password !== undefined) {
+      userFields.password = await this.hashingProvider.hash(userFields.password);
     }
 
     // deletedAt: IsNull() because update() does not apply the soft-delete

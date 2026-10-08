@@ -1,3 +1,7 @@
 allowBuilds:
   "@swc/core": true
   esbuild: true
+  # bcrypt ships ready-built binaries for macOS, glibc and musl, and loads
+  # them at run time. Its install script would only compile from source on a
+  # platform with no binary, so it stays off, as in the Dockerfile.
+  bcrypt: false
