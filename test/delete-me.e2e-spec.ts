@@ -7,6 +7,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { listenOnLoopback } from "./listen-on-loopback.js";
 
 // Needs the databases running. Creates a throwaway user and soft-deletes it,
 // so each run leaves one deleted user behind.
@@ -22,7 +23,7 @@ describe("DELETE /users/me (e2e)", () => {
     // Same global pipes, filters and interceptor as main.ts, so this tests the
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {
