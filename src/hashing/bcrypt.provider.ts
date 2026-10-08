@@ -8,6 +8,8 @@ import { HashingProvider } from "./hashing.provider.js";
 // at login, slow for someone guessing passwords against a stolen table.
 const ROUNDS = 12;
 
+const MAX_PASSWORD_BYTES = 72;
+
 @Injectable()
 export class BcryptProvider implements HashingProvider {
   // Made on first use and then reused. compare() checks against it when there
@@ -17,6 +19,14 @@ export class BcryptProvider implements HashingProvider {
   // bcrypt.hash makes a random salt and stores it inside the returned string,
   // along with the cost. That is why compare() needs nothing but the hash.
   hash(plain: string): Promise<string> {
+    // bcrypt reads the first 72 bytes and ignores the rest. The sign-up DTO
+    // already rejects longer input; this catches a caller that skips the DTO,
+    // such as the seed, before it stores a hash of only part of a password.
+    if (Buffer.byteLength(plain) > MAX_PASSWORD_BYTES) {
+      return Promise.reject(
+        new RangeError(`A password can be at most ${MAX_PASSWORD_BYTES} bytes for bcrypt`),
+      );
+    }
     return bcrypt.hash(plain, ROUNDS);
   }
 

@@ -34,6 +34,13 @@ describe("BcryptProvider", () => {
     expect(await provider.compare(password, undefined)).toBe(false);
   });
 
+  it("hashes a password of exactly 72 bytes and refuses one of 73", async () => {
+    const atLimit = "a".repeat(72);
+
+    expect(await provider.compare(atLimit, await provider.hash(atLimit))).toBe(true);
+    await expect(provider.hash("a".repeat(73))).rejects.toBeInstanceOf(RangeError);
+  });
+
   // A row saved before hashing was added holds the password itself.
   it("answers false, without throwing, for a stored value that is not a hash", async () => {
     expect(await provider.compare(password, password)).toBe(false);

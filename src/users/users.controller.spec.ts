@@ -16,6 +16,7 @@ describe("UsersController", () => {
     getUserById: vi.fn(),
     createUser: vi.fn(),
     updateUser: vi.fn(),
+    updateMyUser: vi.fn(),
     deleteUser: vi.fn(),
     restoreUser: vi.fn(),
   };
@@ -92,9 +93,9 @@ describe("UsersController", () => {
 
   describe("updateMyUser", () => {
     it("passes the user id from the token and the body to the service and returns its result", async () => {
-      const body = { username: "newdude" };
+      const body = { username: "newdude", password: "secret2", currentPassword: "secret1" };
       const updated = { id: 25, username: "newdude" };
-      usersService.updateUser.mockResolvedValue(updated);
+      usersService.updateMyUser.mockResolvedValue(updated);
 
       const result = await controller.updateMyUser(body, {
         userId: 25,
@@ -102,7 +103,9 @@ describe("UsersController", () => {
         role: UserRole.USER,
       });
 
-      expect(usersService.updateUser).toHaveBeenCalledWith(25, body);
+      // updateMyUser, not updateUser: it is the one that checks currentPassword.
+      expect(usersService.updateMyUser).toHaveBeenCalledWith(25, body);
+      expect(usersService.updateUser).not.toHaveBeenCalled();
       expect(result).toBe(updated);
     });
   });

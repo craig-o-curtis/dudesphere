@@ -7,6 +7,7 @@ import { Roles } from "../shared/decorators/roles.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { ListUsersQueryDto } from "./dto/list-users-query.dto.js";
+import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { UserRole } from "./user.entity.js";
@@ -51,12 +52,14 @@ export class UsersController {
   // matched as that param.
   //
   // Auth flow: same as GET /users/me — see that comment above.
+  //
+  // A new password also needs `currentPassword`. See UsersService.updateMyUser.
   @Patch("me")
   updateMyUser(
-    @Body() updateUserDto: UpdateUserDto,
+    @Body() updateMyUserDto: UpdateMyUserDto,
     @CurrentUser() user: AuthUser,
   ): Promise<UserResponseDto> {
-    return this.usersService.updateUser(user.userId, updateUserDto);
+    return this.usersService.updateMyUser(user.userId, updateMyUserDto);
   }
 
   // Any account, by id. Admin only — a user edits their own through

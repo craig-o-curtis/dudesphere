@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -13,6 +14,7 @@ import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
+import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { User } from "./user.entity.js";
@@ -128,6 +130,35 @@ export class UsersService {
 
       return this.toResponseDto(user, profile);
     });
+  }
+
+  // The signed-in user updates their own account. Setting a new password
+  // needs the current one too. Without that, a stolen token is enough to
+  // change the password and lock the real owner out for good.
+  //
+  // An admin resets someone's password through updateUser below, which asks
+  // for nothing more: the admin does not know the user's current password.
+  async updateMyUser(userId: number, updateMyUserDto: UpdateMyUserDto): Promise<UserResponseDto> {
+    const { currentPassword, ...updateUserDto } = updateMyUserDto;
+
+    if (updateUserDto.password !== undefined) {
+      if (currentPassword === undefined) {
+        throw new BadRequestException("currentPassword is required to set a new password");
+      }
+
+      const user = await this.usersRepository.findOne({ where: { id: userId } });
+      const matches = await this.hashingProvider.compare(currentPassword, user?.password);
+      if (!user) {
+        throw new NotFoundException(`My User #${userId} not found`);
+      }
+      // 403, not 401. The caller is signed in, so a client must not treat
+      // this as an expired session and log them out.
+      if (!matches) {
+        throw new ForbiddenException("Current password is incorrect");
+      }
+    }
+
+    return this.updateUser(userId, updateUserDto);
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {

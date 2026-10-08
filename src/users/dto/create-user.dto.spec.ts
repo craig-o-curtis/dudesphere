@@ -58,4 +58,27 @@ describe("CreateUserDto", () => {
 
     expect(errors.map((error) => error.property)).toContain(field);
   });
+
+  // The password is not in sizedFields: its column holds a 60-character hash,
+  // so the limit that matters is bcrypt's 72 bytes of input, not the column.
+  describe("password", () => {
+    const passwordErrors = (password: string) =>
+      validateSync(buildDto({ password })).filter((error) => error.property === "password");
+
+    it("accepts 72 bytes and rejects 73", () => {
+      expect(passwordErrors("a".repeat(72))).toEqual([]);
+      expect(passwordErrors("a".repeat(73))).not.toEqual([]);
+    });
+
+    // "é" is 2 bytes, so 36 of them is 72 bytes and 37 is 74. A rule that
+    // counted characters would let 72 of them through, which is 144 bytes.
+    it("counts bytes, not characters", () => {
+      expect(passwordErrors("é".repeat(36))).toEqual([]);
+      expect(passwordErrors("é".repeat(37))).not.toEqual([]);
+    });
+
+    it("still rejects fewer than 6 characters", () => {
+      expect(passwordErrors("abcde")).not.toEqual([]);
+    });
+  });
 });

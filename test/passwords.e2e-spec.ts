@@ -129,6 +129,82 @@ describe("Passwords (e2e)", () => {
     });
   });
 
+  describe("sign-up password length", () => {
+    it("accepts 72 bytes, and that password then logs in", async () => {
+      const password = "a".repeat(72);
+      const { email, status } = await register(password);
+
+      expect(status).toBe(201);
+      await login(email, password).expect(201);
+    });
+
+    it("rejects 73 bytes with a 400", async () => {
+      const { status } = await register("a".repeat(73));
+
+      expect(status).toBe(400);
+    });
+
+    // 37 characters, but "é" is 2 bytes, so 74 bytes.
+    it("counts bytes, not characters", async () => {
+      const { status } = await register("é".repeat(37));
+
+      expect(status).toBe(400);
+    });
+  });
+
+  describe("changing your own password", () => {
+    const signUp = async () => {
+      const { email } = await register("secret123");
+      const { body } = await login(email, "secret123").expect(201);
+      return { email, token: (body as { token: string }).token };
+    };
+
+    const changePassword = (token: string, body: object) =>
+      request(app.getHttpServer()).patch("/users/me").set(bearer(token)).send(body);
+
+    it("is refused with a 400 when the current password is not sent", async () => {
+      const { email, token } = await signUp();
+
+      await changePassword(token, { password: "secret456" }).expect(400);
+
+      await login(email, "secret123").expect(201);
+    });
+
+    it("is refused with a 403 when the current password is wrong", async () => {
+      const { email, token } = await signUp();
+
+      await changePassword(token, { password: "secret456", currentPassword: "secret999" }).expect(
+        403,
+      );
+
+      await login(email, "secret123").expect(201);
+      await login(email, "secret456").expect(401);
+    });
+
+    it("works with the right current password, and the old one stops working", async () => {
+      const { email, token } = await signUp();
+
+      const response = await changePassword(token, {
+        password: "secret456",
+        currentPassword: "secret123",
+      }).expect(200);
+
+      expect(response.body).not.toHaveProperty("password");
+      expect(response.body).not.toHaveProperty("currentPassword");
+      await login(email, "secret456").expect(201);
+      await login(email, "secret123").expect(401);
+    });
+
+    it("does not ask for the current password when only the username changes", async () => {
+      const { token } = await signUp();
+      const username = `e2e-${randomUUID().slice(0, 8)}`;
+
+      const response = await changePassword(token, { username }).expect(200);
+
+      expect(response.body).toMatchObject({ username });
+    });
+  });
+
   describe("the login token", () => {
     it("carries an audience, an issuer and an expiry", async () => {
       const { email } = await register("secret123");
