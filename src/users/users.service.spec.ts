@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
@@ -255,6 +260,55 @@ describe("UsersService", () => {
       ).rejects.toBeInstanceOf(ConflictException);
 
       expect(manager.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateMyUser", () => {
+    const storedUser = { id: 3, username: "dude", email: "d@x.com", password: "hashed(secret1)" };
+
+    it("sets a new password when the current one is right", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      hashingProvider.compare.mockResolvedValue(true);
+
+      await service.updateMyUser(3, { password: "secret2", currentPassword: "secret1" });
+
+      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
+      // currentPassword is not a column, so it must not reach the update.
+      expect(usersRepository.update).toHaveBeenCalledWith(
+        { id: 3, deletedAt: IsNull() },
+        { password: "hashed(secret2)" },
+      );
+    });
+
+    it("throws 400 when a new password comes without the current one", async () => {
+      await expect(service.updateMyUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("throws 403 and changes nothing when the current password is wrong", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(false);
+
+      await expect(
+        service.updateMyUser(3, { password: "secret2", currentPassword: "not-it" }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(hashingProvider.hash).not.toHaveBeenCalled();
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("does not ask for the current password when no new one is set", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "d@x.com" });
+
+      await service.updateMyUser(3, { username: "donny" });
+
+      expect(hashingProvider.compare).not.toHaveBeenCalled();
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
   });
 
