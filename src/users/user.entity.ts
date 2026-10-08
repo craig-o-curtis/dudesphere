@@ -1,5 +1,5 @@
 import { Exclude } from "class-transformer";
-import { Column, Entity, Index, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
+import { Column, Entity, OneToOne, PrimaryGeneratedColumn, type Relation } from "typeorm";
 
 import { Profile } from "../profiles/profile.entity.js";
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
@@ -26,11 +26,9 @@ export class User {
     length: 24,
     unique: true,
   })
-  @Index()
   username: string;
 
   @Column({ type: "varchar", nullable: false, length: 100, unique: true })
-  @Index()
   email: string;
 
   @Column({ type: "varchar", length: 255 })

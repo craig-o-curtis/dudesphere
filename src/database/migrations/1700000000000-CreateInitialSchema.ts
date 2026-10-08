@@ -1,5 +1,25 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
+// The starting point: creates the two Postgres tables, "user" and "profile".
+//
+// What up() leaves behind:
+//   - "user", with unique username and email, plus a plain index on each.
+//     Those repeat the unique ones, and DropRedundantUserIndexes removes them.
+//     "role" is plain text here, defaulting to 'user'; AlignSchema turns it
+//     into an enum. "deletedAt" is the soft-delete column: the app sets it
+//     rather than removing the row.
+//   - "profile", with a unique "userId", so a user has at most one profile. It
+//     has no "deletedAt" yet; AddProfileDeletedAt adds it.
+//   - A foreign key from profile.userId to user.id with ON DELETE CASCADE, so
+//     removing a user row removes its profile. The app soft-deletes, so that
+//     only fires on a real DELETE.
+//
+// Written by hand, not generated. That is why the timestamp in the name is a
+// round number, picked to sort first, and why the index and key names are
+// readable ones rather than the hashes TypeORM derives. AlignSchema renames
+// them.
+//
+// down() drops both tables, and every user and profile with them.
 export class CreateInitialSchema1700000000000 implements MigrationInterface {
   name = "CreateInitialSchema1700000000000";
 
