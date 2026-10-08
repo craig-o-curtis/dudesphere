@@ -104,8 +104,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    # Throwaway databases, so none of this is secret. ObserveModule reads its
-    # two values with getOrThrow, so the app will not start without them.
+    # Throwaway databases, so none of this is secret. The two Observe values
+    # are required by src/config/env.validate.ts, so the app will not start
+    # without them.
     env:
       PG_HOST: localhost
       PG_PORT: 5432
