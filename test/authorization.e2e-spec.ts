@@ -9,6 +9,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { listenOnLoopback } from "./listen-on-loopback.js";
 
 // The only place the guards are proved over real HTTP. A unit controller spec
 // cannot do it: both guards are APP_GUARDs registered in AppModule, and
@@ -54,7 +55,7 @@ describe("Authorization (e2e)", () => {
     // Same global pipes, filters and interceptor as main.ts, so this tests the
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
-    await app.init();
+    await listenOnLoopback(app);
     jwt = app.get(JwtService);
 
     owner = await registerAndLogin();

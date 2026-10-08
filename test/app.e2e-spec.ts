@@ -5,6 +5,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { listenOnLoopback } from "./listen-on-loopback.js";
 
 describe("AppController (e2e)", () => {
   let app: INestApplication<App>;
@@ -18,7 +19,7 @@ describe("AppController (e2e)", () => {
     // Same global pipes, filters and interceptor as main.ts, so this tests the
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   it("/ (GET)", () => {

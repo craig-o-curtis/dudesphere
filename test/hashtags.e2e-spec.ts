@@ -9,6 +9,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { listenOnLoopback } from "./listen-on-loopback.js";
 
 // Needs the databases running. Each run registers one throwaway user and
 // leaves behind that user, two abidings and one hashtag, which ends the run
@@ -36,7 +37,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     // Same global pipes, filters and interceptor as main.ts, so this tests the
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {
