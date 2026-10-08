@@ -29,22 +29,26 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       }),
     }),
     TypeOrmModule.forRootAsync({
-      // This entire forRootAsync call gets config from ConfigService
-      // it also registers the TypeOrmModule globally,
-      // so any feature can use @InjectRepository without importing TypeOrmModule.forFeature
+      // Reads its settings from ConfigService. ConfigModule is global, so this
+      // import is not required, but it is listed to match the NestJS docs.
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      // This opens the one database connection, and that connection is shared by
+      // the whole app. It does not hand out repositories. A feature module still
+      // lists its own entities with TypeOrmModule.forFeature([...]) before it can
+      // use @InjectRepository, as UsersModule and ProfilesModule do.
       useFactory: (config: ConfigService) => ({
         type: "postgres",
-        host: config.getOrThrow("PG_HOST"),
-        port: config.getOrThrow("PG_PORT"),
+        host: config.getOrThrow("PG_HOST"), // we use getOrThrow instead of get to fail fast if a required env var is missing
+        port: Number(config.getOrThrow("PG_PORT")),
         username: config.getOrThrow("PG_ADMIN_USER"),
         password: config.getOrThrow("PG_ADMIN_PW"),
         database: config.getOrThrow("PG_DATABASE"),
         autoLoadEntities: true,
-        synchronize: false, // migrations are the single source of truth for the schema
+        synchronize: false, // migrations are the single source of truth for the schema, synchronize is only for development and testing, never production
         // logging: ["query", "error"],
         // logger: "formatted-console", // ← puts each part of the query on its own line
       }),
-      inject: [ConfigService],
     }),
     MongooseModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
