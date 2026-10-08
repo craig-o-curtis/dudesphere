@@ -1121,9 +1121,6 @@ Every test in `users/` and `profile/` passes. **4 tests still fail**, in `auth/`
 
 ## Not covered: fix these later
 
-- **Passwords are stored as plain text** (in `createUser` and `users.seed.ts`). Hash them with bcrypt or argon2.
-- **`login()` never checks the password.** Anyone who knows an email can log in.
-- **`JwtAuthGuard` is imported but never used**, so every `/users` route is public, including delete.
 - **`updatedAt` never changes.** `onUpdate: "CURRENT_TIMESTAMP"` in `update-utc-column.decorator.ts` only works on MySQL, not Postgres. Switch that decorator to TypeORM's `@UpdateDateColumn`.
 - **Timestamps set by the database come back a few hours off.** In testing, users created through the API showed `createdAt` 3 hours earlier than the seeded admin, whose timestamps are set in code. The `timestamp` columns have no timezone, and the transformer reads them in the wrong one. Look at `timestamptz` and at `iso-timestamp-transformer.ts`.
 - **A soft-deleted user's profile is still visible** at `GET /profiles/user/:id`.
