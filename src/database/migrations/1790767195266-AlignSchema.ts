@@ -1,5 +1,22 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
+// Makes the database match the entities exactly, so `pnpm migration:check`
+// reports no differences. It adds no table and no column. CreateInitialSchema
+// was written by hand, and this closes the two gaps between what it built and
+// what user.entity.ts and profile.entity.ts declare.
+//
+// 1. "user"."role" changes from plain text to a Postgres enum,
+//    user_role_enum ('admin', 'user'), matching the UserRole enum on the
+//    entity. The column is converted in place, so every user keeps their role.
+//    The conversion fails if any row holds a value other than those two.
+//
+// 2. The two indexes on "user" and the foreign key on "profile" are dropped
+//    and recreated under the names TypeORM derives for them. They cover the
+//    same columns and behave the same as before; only the names change.
+//    migration:check compares names, so the readable ones counted as drift.
+//
+// down() reverses both: the role goes back to plain text with its values kept,
+// and the indexes and the key get their original names back.
 export class AlignSchema1790767195266 implements MigrationInterface {
   name = "AlignSchema1790767195266";
 
