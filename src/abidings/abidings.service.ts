@@ -136,12 +136,13 @@ export class AbidingsService {
       update.hashtags = extractHashtags(updateAbidingDto.message);
     }
 
-    // the { new: true } option returns the updated document, not the original.
+    // returnDocument: "after" returns the updated document, not the original.
+    // It replaces the older { new: true }, which Mongoose has deprecated.
     // ownedBy puts the authorization rule in the filter, so the check and the
     // write are one operation with no window between them.
     const updatedAbiding = await this.abidingModel
       .findOneAndUpdate({ _id: id, deletedAt: null, ...this.ownedBy(caller) }, update, {
-        new: true,
+        returnDocument: "after",
       })
       .exec();
 
