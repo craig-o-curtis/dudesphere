@@ -56,7 +56,7 @@ Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose)
 Services return DTOs built by a mapper, such as `UsersService.toResponseDto` or `ProfileResponseDto.fromEntity`. They never return entities.
 
 - **Loaded isn't returned.** A relation loaded with `relations` but not passed to the mapper never reaches the client. Follow each new field from the query, through the mapper, to the DTO.
-- **Hand-built responses drop fields.** `AbidingsController` builds `AbidingResponseDto` by hand in five places. A field added to the DTO must be added to each one, or it is stored and never returned: `imageUrl` and `updatedAt` were both lost this way. Flag a new field on a response DTO that is not set at every place the DTO is built.
+- **Build a response in one place.** `AbidingsController.toResponse` is the only place an abiding becomes an `AbidingResponseDto`, and it passes on everything the service returned. Five routes once listed the fields by hand, and `imageUrl` and `updatedAt` were left off all five. Flag a controller that lists a response's fields by hand in more than one place.
 - **Accepted is not stored.** Follow each field of a create or update DTO to the write. `CreateAbidingDto.imageUrl` was validated and then never passed to the model.
 - **`undefined` vs `null`.** `undefined` keys disappear from the JSON, while `null` keys stay. Choose deliberately.
 - **Secrets stay out.** `password` is `@Exclude()`d and never mapped.
