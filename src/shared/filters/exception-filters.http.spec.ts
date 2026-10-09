@@ -1,3 +1,16 @@
+// WHAT THIS FILE IS
+//
+// An HTTP spec. It starts a tiny Nest app with one throwaway controller,
+// then sends real HTTP requests to it with supertest.
+//
+// Why not a plain unit spec? Exception filters only run when Nest handles a
+// real request. Each filter has its own unit spec for its logic; this file
+// proves the whole chain: the filter order configureApp sets, the body a
+// caller sees, and the request id header on an error response.
+//
+// Why not an e2e test? The controller here fakes each error, so no database
+// is needed, and it runs with the fast unit suite (pnpm test).
+
 import { Controller, Get, INestApplication, Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { mongo } from "mongoose";

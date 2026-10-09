@@ -1,3 +1,16 @@
+// WHAT THIS FILE IS
+//
+// An HTTP spec. It starts a tiny Nest app with one controller and a fake
+// service, then sends real HTTP requests to it with supertest.
+//
+// Why not a plain unit spec? Calling controller.getUserById(...) directly
+// skips the ValidationPipe, so a unit test could never prove that a bad id
+// gets a 400. Only a real request runs the pipeline. This file calls the
+// same configureApp() as main.ts, so the pipeline is the production one.
+//
+// Why not an e2e test? The service is a mock, so no database is needed, and
+// it runs with the fast unit suite (pnpm test), not with pnpm test:e2e.
+
 import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
