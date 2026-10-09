@@ -134,7 +134,7 @@ export class HashtagsService {
     const deletedAt = getUtcNow();
     if (!deletedAt) {
       throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE, // TODO install latest gmt and we can remove all of these CLOCK_UNAVAILABLE
+        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
       });
     }
 
