@@ -17,8 +17,9 @@ This folder holds the ones several features share.
 - `id-param.http.spec.ts` tests it over HTTP.
 - `pagination-query.dto.ts` holds `PaginationQueryDto`, the `?limit=&page=`
   query on list routes (`GET /users`, `GET /profiles`). `limit` is 1 to 100,
-  default 10. `page` is 1 or more, default 1. Page 0 used to reach Postgres as
-  a negative OFFSET and come back as a 500.
+  default 10. `page` is 1 to 1,000,000, default 1. Page 0 used to reach Postgres
+  as a negative OFFSET and come back as a 500. So did a page too large for an
+  OFFSET.
 - `pagination-query.dto.spec.ts` tests the defaults and bounds directly, and
   `pagination-query.http.spec.ts` tests them over HTTP.
 
