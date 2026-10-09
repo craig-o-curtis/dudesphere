@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 
@@ -99,10 +104,17 @@ export class AbidingsService {
     createAbidingDto: CreateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
+    if (createAbidingDto.replyToId) {
+      await this.assertReplyTargetExists(createAbidingDto.replyToId);
+    }
+
     const newAbiding = await this.abidingModel.create({
       userId: caller.userId,
       message: createAbidingDto.message,
-      replyToId: createAbidingDto.replyToId || null,
+      // The DTO has always accepted imageUrl. It was never passed on here, so
+      // a post with an image was stored without one.
+      imageUrl: createAbidingDto.imageUrl ?? null,
+      replyToId: createAbidingDto.replyToId ?? null,
       // Derived from the message, never from client input — there is no
       // `hashtags` field on CreateAbidingDto.
       hashtags: extractHashtags(createAbidingDto.message),
@@ -128,10 +140,20 @@ export class AbidingsService {
     // Built explicitly, not spread from the DTO, so a client can never set
     // `hashtags` directly and an edit that doesn't touch `message` can't
     // accidentally wipe it to [].
+    //
+    // For imageUrl and replyToId a missing field and a null mean different
+    // things. Missing is undefined, which Mongoose drops, so the stored value
+    // stays. Null is written, which clears it.
     const update: Record<string, any> = {
       imageUrl: updateAbidingDto.imageUrl,
-      replyToId: updateAbidingDto.replyToId || undefined,
+      replyToId: updateAbidingDto.replyToId,
     };
+    if (updateAbidingDto.replyToId) {
+      if (updateAbidingDto.replyToId === id) {
+        throw new BadRequestException("An abiding cannot reply to itself");
+      }
+      await this.assertReplyTargetExists(updateAbidingDto.replyToId);
+    }
     if (typeof updateAbidingDto.message === "string" && updateAbidingDto.message.length > 0) {
       update.message = updateAbidingDto.message;
       update.hashtags = extractHashtags(updateAbidingDto.message);
@@ -208,6 +230,16 @@ export class AbidingsService {
     }
   }
 
+  // A reply has to point at an abiding a reader can open. Mongo has no
+  // foreign keys, so nothing else would stop a reply to an id that was never
+  // there, or to an abiding hidden with its deleted author.
+  private async assertReplyTargetExists(replyToId: string): Promise<void> {
+    const exists = await this.abidingModel.exists({ _id: replyToId, deletedAt: null }).exec();
+    if (!exists) {
+      throw new NotFoundException("The abiding being replied to was not found");
+    }
+  }
+
   // --- Private helpers ---
 
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
@@ -215,6 +247,7 @@ export class AbidingsService {
       id: abiding._id.toString(),
       userId: abiding.userId,
       message: abiding.message,
+      imageUrl: abiding.imageUrl ?? null,
       username: abiding.username || undefined,
       createdAt: abiding.createdAt ?? "",
       updatedAt: abiding.updatedAt ?? "",
