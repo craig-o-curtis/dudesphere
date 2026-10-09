@@ -41,7 +41,11 @@ Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose)
 - **Join in code.** Collect the distinct ids, load them with one `findBy({ id: In(ids) })` (`UsersService.getUsersByIds`), then look each one up in a `Map`.
   - Flag code that loads a page with `getUsers()` and then calls `.find()` on it. Anyone past the first page is missed.
   - Flag one lookup per item. That's an N+1.
-- **Bound Mongo lists.** A per-user list needs a sort and a limit. The `{ userId: 1, createdAt: -1 }` index exists for this.
+- **Bound every list.** A route that returns a list takes `PaginationQueryDto` (or a class that extends it) and answers with `toPaginatedResponse` from `src/shared/dto/paginated-response.ts`. Flag a list route that returns a bare array, or a query with no limit.
+  - The controller calls `toPaginatedResponse` by hand, on purpose. The generic rule against wrapping a response in the handler does not apply to it.
+  - Each item in `data` must be an instance of its response DTO. A spread copy loses its class, and `@Exclude` with it.
+- **Sort every list.** A paged query with no fixed order can repeat a row or skip one. Postgres lists use `order: { id: "ASC" }`. Abidings sort by `{ createdAt: -1, _id: -1 }`, and each list index in `abiding.schema.ts` ends with those two keys. Flag a new list filter that no index serves.
+- **Count with the filter you read with.** `totalItems` has to describe the list the caller is paging through.
 - **Check references in the service.** Mongo has no foreign keys. A field that names another document, such as an abiding's `replyToId`, needs its shape checked in the DTO (`@IsMongoId`) and its target checked in the service (`AbidingsService.assertReplyTargetExists`). Flag a new reference field with neither.
 - **Updates skip the schema.** `findOneAndUpdate`, `updateOne` and `updateMany` run no schema validators unless the call passes `runValidators: true`.
 - **Nesting across databases.** Putting Mongo data inside a Postgres-backed response ties the endpoint to both databases. It also tends to create module cycles; see [Module boundaries](#module-boundaries).
@@ -107,8 +111,8 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 
 ## Tests
 
-- **Logic tests go in service specs.** Controller specs only check delegation: the right arguments reach the service, and the result comes back unchanged (`toBe`). Pipes, guards, filters, status codes, error bodies and serialization only run on real HTTP requests. Those that need no database go in a `*.http.spec.ts` next to the code, with mocked services (see `src/shared/dto/id-param.http.spec.ts`). Those that need real data go in e2e tests (`test/`, `pnpm test:e2e`).
-- **E2E runs only against local databases.** `test/global-setup.ts` refuses to start unless Postgres and Mongo are on this machine (`test/local-databases.ts`), because the suites write rows and the cleanup hard-deletes them. Flag a change that weakens that check. E2E users keep an `e2e-…@example.com` email, and test messages hold no `#tag`.
+- **Logic tests go in service specs.** Controller specs only check delegation: the right arguments reach the service, and the result comes back unchanged (`toBe`). For a list route, that is `result.data` being the service's own `items` array. Pipes, guards, filters, status codes, error bodies and serialization only run on real HTTP requests. Those that need no database go in a `*.http.spec.ts` next to the code, with mocked services (see `src/shared/dto/id-param.http.spec.ts`). Those that need real data go in e2e tests (`test/`, `pnpm test:e2e`).
+- **E2E runs only against local databases.** `test/global-setup.ts` refuses to start unless Postgres and Mongo are on this machine (`test/local-databases.ts`), because the suites write rows and the cleanup hard-deletes them. Flag a change that weakens that check. E2E users keep an `e2e-…@example.com` email, and a test hashtag is `e2e` plus 12 hex characters, the two shapes the cleanup deletes.
 - **Bug fixes need a test.** It should fail without the fix.
-- **Use distinct values.** Pass arguments that differ from the defaults and from each other, like `getUsers(5, 2)` rather than `(10, 1)`, so swapped arguments fail.
+- **Use distinct values.** Pass arguments that differ from the defaults and from each other, like `getUsers({ limit: 5, page: 2 })` rather than `{ limit: 10, page: 1 }`, so a swapped or dropped value fails.
 - **Keep mocks in their own variable.** Store `vi.fn()` mocks for `EntityManager` methods in a variable. Reading them off an object cast `as EntityManager` triggers the `unbound-method` lint warning.

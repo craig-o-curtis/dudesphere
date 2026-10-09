@@ -36,6 +36,10 @@ the field run:
 - **`@IsNotEmpty()` passes a string of spaces.**
 - **`@IsInt()` rejects `"5"`.** Query and URL values arrive as strings. Put
   `@Type(() => Number)` on the field to convert it first.
+- **`@Type(() => Number)` reads more than digits.** `"0x10"` becomes 16,
+  `"1e1"` becomes 10 and `"+5"` becomes 5. Where one value should have one
+  spelling, convert with a digits-only `@Transform`, as `IdParamDto` and
+  `PaginationQueryDto` do.
 - **`@IsInt()` has no upper limit.** `1e20` passes. Add `@Max`.
 - **`@IsUrl()` rejects a `localhost` URL** and passes one with no `https://`.
 - **`@IsByteLength` counts bytes, not characters.** `"ééé"` is 6 bytes.
@@ -71,7 +75,7 @@ Set once in [src/app-setup.ts](../src/app-setup.ts).
 | `transform: true`            | Hands the handler an instance of the DTO class, with the values `@Type` and `@Transform` produced. |
 
 The pipe does not guess types. `?limit=7` stays the string `"7"` unless the
-field has `@Type(() => Number)`.
+field converts it, with `@Type(() => Number)` or a `@Transform`.
 
 ## One field, read line by line
 
@@ -81,17 +85,18 @@ left out.
 ```ts
 // src/shared/dto/pagination-query.dto.ts
 @IsOptional()
-@Type(() => Number)
+@Transform(digitsOr(DEFAULT_LIMIT))
 @IsInt()
 @Min(1)
-@Max(100)
-limit: number = 10;
+@Max(MAX_LIMIT)
+limit: number = DEFAULT_LIMIT;
 ```
 
 1. `@IsOptional()`: `limit` may be missing. Then it keeps the default, 10.
-2. `@Type(() => Number)`: the string `"7"` becomes the number 7.
-3. `@IsInt()`: it must be a whole number, so `abc` and `1.5` get a 400.
-4. `@Min(1)` and `@Max(100)`: it must be from 1 to 100.
+2. `@Transform(digitsOr(DEFAULT_LIMIT))`: the string `"7"` becomes the number 7. Anything that is not plain digits becomes `NaN`, so `abc`, `0x10` and
+   `1e1` fail the next line. `digitsOr` is defined at the top of the same file.
+3. `@IsInt()`: it must be a whole number, so `NaN` and `1.5` get a 400.
+4. `@Min(1)` and `@Max(MAX_LIMIT)`: it must be from 1 to 100.
 
 ## What the 400 looks like
 
