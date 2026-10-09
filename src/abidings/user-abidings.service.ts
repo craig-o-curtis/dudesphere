@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
@@ -14,8 +14,6 @@ import { Abiding, AbidingDocument } from "./abiding.schema.js";
 // request fixes it, because both methods only touch rows still in the old state.
 @Injectable()
 export class UserAbidingsService {
-  private readonly logger = new Logger(UserAbidingsService.name);
-
   constructor(@InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>) {}
 
   async softDeleteForUser(userId: number): Promise<void> {
@@ -31,11 +29,9 @@ export class UserAbidingsService {
         .updateMany({ userId, deletedAt: null }, { $set: { deletedAt } })
         .exec();
     } catch (error) {
-      this.logger.error(
-        `Could not soft-delete abidings for user #${userId}`,
-        error instanceof Error ? error.stack : error,
-      );
-      throw new ServiceUnavailableException("Could not update abidings");
+      // The driver error rides along as `cause`. AllExceptionsFilter logs it
+      // with the request that failed, so nothing is logged here.
+      throw new ServiceUnavailableException("Could not update abidings", { cause: error });
     }
   }
 
@@ -50,11 +46,8 @@ export class UserAbidingsService {
         .updateMany({ userId, deletedAt: { $ne: null } }, { $set: { deletedAt: null } })
         .exec();
     } catch (error) {
-      this.logger.error(
-        `Could not restore abidings for user #${userId}`,
-        error instanceof Error ? error.stack : error,
-      );
-      throw new ServiceUnavailableException("Could not update abidings");
+      // Same as softDeleteForUser: the cause is logged by the filter.
+      throw new ServiceUnavailableException("Could not update abidings", { cause: error });
     }
   }
 }
