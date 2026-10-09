@@ -1,4 +1,12 @@
-import { IsBoolean, IsISO8601, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsBoolean,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from "class-validator";
 
 export class CreateProfileDto {
   @IsString()
@@ -21,8 +29,12 @@ export class CreateProfileDto {
   @IsOptional()
   profileImageUrl?: string;
 
+  // Not @IsOptional(): that also skips null, and this column is NOT NULL, so
+  // { "isDude": null } reached Postgres and came back as a 500. This skips a
+  // missing field only. Every other field here maps to a nullable column and
+  // keeps @IsOptional(), so a client can send null to clear it.
   @IsBoolean()
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   isDude?: boolean;
 
   // Optional ordination date as ISO 8601 UTC string (e.g., "2026-10-06T12:00:00.000Z")
