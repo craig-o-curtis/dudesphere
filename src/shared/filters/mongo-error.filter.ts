@@ -6,6 +6,7 @@ import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable } from "./database-unavailable.js";
 import { invalidValue } from "./invalid-value.js";
+import { MAX_TIME_EXPIRED, queryTimedOut } from "./query-timed-out.js";
 
 /** MongoDB duplicate key. */
 export const DUPLICATE_KEY = 11000;
@@ -19,6 +20,8 @@ export const DUPLICATE_KEY = 11000;
  * sent again. Any other server error is a fault and stays a 500, logged
  * without the document the error carries.
  *
+ * An operation that ran past its time limit becomes a 408.
+ *
  * Two errors come from Mongoose itself, before anything reaches Mongo. A
  * ValidationError means a value broke a rule in a schema, and a CastError
  * means a value could not be turned into the type a path needs. Both are the
@@ -31,6 +34,7 @@ export const DUPLICATE_KEY = 11000;
   mongo.MongoServerError,
   mongo.MongoNetworkError,
   mongo.MongoServerSelectionError,
+  mongo.MongoOperationTimeoutError,
   MongooseError.ValidationError,
   MongooseError.CastError,
 )
@@ -59,6 +63,20 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       exception instanceof mongo.MongoServerSelectionError
     ) {
       super.catch(databaseUnavailable(exception), host);
+      return;
+    }
+
+    // The operation passed the driver's timeoutMS, or Mongo's own limit got
+    // there first (code 50). The caller waited as long as a request is
+    // allowed to, so it is the same 408 TimeoutInterceptor gives.
+    if (
+      exception instanceof mongo.MongoOperationTimeoutError ||
+      (exception instanceof mongo.MongoServerError && exception.code === MAX_TIME_EXPIRED)
+    ) {
+      this.logger.warn(
+        `${this.requestLine(host)}: Mongo gave up on an operation that ran past its time limit`,
+      );
+      super.catch(queryTimedOut(exception), host);
       return;
     }
 
