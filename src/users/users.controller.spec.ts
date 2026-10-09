@@ -41,15 +41,23 @@ describe("UsersController", () => {
 
   describe("getUsers", () => {
     // 5 and 2 differ from the defaults (10 and 1), and from each other, so a
-    // swapped or dropped argument shows up as a failure.
-    it("passes limit and page to the service in that order and returns its result", async () => {
+    // swapped or dropped value shows up as a failure.
+    it("passes limit and page to the service and wraps its page", async () => {
       const users = [{ id: 1, username: "dude" }];
-      usersService.getUsers.mockResolvedValue(users);
+      usersService.getUsers.mockResolvedValue({ items: users, total: 12 });
 
       const result = await controller.getUsers({ limit: 5, page: 2 });
 
-      expect(usersService.getUsers).toHaveBeenCalledWith(5, 2);
-      expect(result).toBe(users);
+      expect(usersService.getUsers).toHaveBeenCalledWith({ limit: 5, page: 2 });
+      // toBe: the service's own array, not a copy of it.
+      expect(result.data).toBe(users);
+      expect(result.meta).toEqual({
+        itemsPerPage: 5,
+        totalItems: 12,
+        currentPage: 2,
+        totalPages: 3,
+      });
+      expect(result.links.next).toBe("/users?limit=5&page=3");
     });
   });
 

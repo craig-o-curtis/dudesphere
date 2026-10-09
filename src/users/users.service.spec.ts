@@ -29,6 +29,7 @@ describe("UsersService", () => {
 
   const usersRepository = {
     find: vi.fn(),
+    findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
   };
@@ -71,24 +72,39 @@ describe("UsersService", () => {
   });
 
   describe("getUsers", () => {
-    // The defaults match the controller's: 10 per page, starting at page 1.
-    it("returns the first 10 users by default", async () => {
-      usersRepository.find.mockResolvedValue([
-        { id: 4, username: "walter", email: "w@x.com", role: "user" },
+    it("returns the first page with the count of every user", async () => {
+      usersRepository.findAndCount.mockResolvedValue([
+        [{ id: 4, username: "walter", email: "w@x.com", role: "user" }],
+        37,
       ]);
 
-      const result = await service.getUsers();
+      const result = await service.getUsers({ limit: 10, page: 1 });
 
-      expect(usersRepository.find).toHaveBeenCalledWith({ skip: 0, take: 10 });
-      expect(result.map((u) => u.username)).toEqual(["walter"]);
+      expect(usersRepository.findAndCount).toHaveBeenCalledWith({
+        order: { id: "ASC" },
+        skip: 0,
+        take: 10,
+      });
+      expect(result.items.map((u) => u.username)).toEqual(["walter"]);
+      expect(result.total).toBe(37);
     });
 
     it("skips the earlier pages when given a limit and a page", async () => {
-      usersRepository.find.mockResolvedValue([]);
+      usersRepository.findAndCount.mockResolvedValue([[], 0]);
 
-      await service.getUsers(5, 3);
+      await service.getUsers({ limit: 5, page: 3 });
 
-      expect(usersRepository.find).toHaveBeenCalledWith({ skip: 10, take: 5 });
+      expect(usersRepository.findAndCount).toHaveBeenCalledWith({
+        order: { id: "ASC" },
+        skip: 10,
+        take: 5,
+      });
+    });
+
+    it("returns no items and a total of 0 when there are no users", async () => {
+      usersRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      expect(await service.getUsers({ limit: 10, page: 1 })).toEqual({ items: [], total: 0 });
     });
   });
 

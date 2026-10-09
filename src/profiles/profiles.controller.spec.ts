@@ -48,14 +48,23 @@ describe("ProfilesController", () => {
   });
 
   describe("getProfiles", () => {
-    it("delegates to ProfilesService.getProfiles with the limit and page", async () => {
+    it("delegates to ProfilesService.getProfiles with the limit and page, and wraps its page", async () => {
       const profiles = [mockProfile];
-      profilesServiceMock.getProfiles.mockResolvedValue(profiles);
+      profilesServiceMock.getProfiles.mockResolvedValue({ items: profiles, total: 11 });
 
       const result = await controller.getProfiles({ limit: 5, page: 3 });
 
-      expect(profilesServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
-      expect(result).toBe(profiles);
+      expect(profilesServiceMock.getProfiles).toHaveBeenCalledWith({ limit: 5, page: 3 });
+      // toBe: the service's own array, not a copy of it.
+      expect(result.data).toBe(profiles);
+      expect(result.meta).toEqual({
+        itemsPerPage: 5,
+        totalItems: 11,
+        currentPage: 3,
+        totalPages: 3,
+      });
+      expect(result.links.previous).toBe("/profiles?limit=5&page=2");
+      expect(result.links.next).toBeNull();
     });
   });
 
