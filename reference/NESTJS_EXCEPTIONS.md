@@ -85,15 +85,17 @@ The options object takes three keys:
 
 ```ts
 // src/shared/guards/roles.guard.ts
-throw new UnauthorizedException("Not signed in", { errorCode: ErrorCode.TOKEN_MISSING });
+throw new ForbiddenException("Not authorized to perform this action", {
+  errorCode: ErrorCode.ROLE_REQUIRED,
+});
 ```
 
 ```json
 {
-  "message": "Not signed in",
-  "error": "Unauthorized",
-  "statusCode": 401,
-  "errorCode": "TOKEN_MISSING"
+  "message": "Not authorized to perform this action",
+  "error": "Forbidden",
+  "statusCode": 403,
+  "errorCode": "ROLE_REQUIRED"
 }
 ```
 
@@ -105,6 +107,13 @@ with the `HttpStatus` enum:
 ```ts
 throw new HttpException("Slow down", HttpStatus.TOO_MANY_REQUESTS);
 ```
+
+## This app's own exception classes
+
+You can extend a built-in class to give one kind of failure a name, such as
+`NotOwnerException`. Nest answers it exactly as it answers its parent. This
+app has seven. [NESTJS_CUSTOM_EXCEPTIONS.md](NESTJS_CUSTOM_EXCEPTIONS.md)
+explains how to write one and when a failure gets one.
 
 ## Where filters come in
 

@@ -1,15 +1,18 @@
-import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
+import { ArgumentsHost, Catch, Logger } from "@nestjs/common";
 import { Error as MongooseError, mongo } from "mongoose";
 
-import { ErrorCode } from "../error-codes.js";
+import { DatabaseFaultException } from "../exceptions/database-fault.exception.js";
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
+import { InvalidValueException } from "../exceptions/invalid-value.exception.js";
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
-import { databaseFault } from "./database-fault.js";
-import { databaseUnavailable } from "./database-unavailable.js";
-import { invalidValue } from "./invalid-value.js";
-import { MAX_TIME_EXPIRED, queryTimedOut } from "./query-timed-out.js";
 
 /** MongoDB duplicate key. */
 export const DUPLICATE_KEY = 11000;
+
+/** MongoDB MaxTimeMSExpired: what the server answers when an operation passes its limit. */
+export const MAX_TIME_EXPIRED = 50;
 
 /**
  * The Mongo twin of QueryFailedFilter.
@@ -48,13 +51,7 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       this.logger.warn(
         `${this.requestLine(host)}: duplicate key reached Mongo: ${exception.message}`,
       );
-      super.catch(
-        new ConflictException("That value is already taken", {
-          cause: exception,
-          errorCode: ErrorCode.VALUE_TAKEN,
-        }),
-        host,
-      );
+      super.catch(new ValueTakenException(undefined, { cause: exception }), host);
       return;
     }
 
@@ -62,7 +59,7 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       exception instanceof mongo.MongoNetworkError ||
       exception instanceof mongo.MongoServerSelectionError
     ) {
-      super.catch(databaseUnavailable(exception), host);
+      super.catch(new DatabaseUnavailableException(exception), host);
       return;
     }
 
@@ -76,7 +73,7 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       this.logger.warn(
         `${this.requestLine(host)}: Mongo gave up on an operation that ran past its time limit`,
       );
-      super.catch(queryTimedOut(exception), host);
+      super.catch(new TimeLimitExceededException(exception), host);
       return;
     }
 
@@ -92,12 +89,12 @@ export class MongoErrorFilter extends AllExceptionsFilter {
         `${this.requestLine(host)}: Mongoose refused a value a DTO should have stopped: ` +
           exception.message,
       );
-      super.catch(invalidValue(exception), host);
+      super.catch(new InvalidValueException(exception), host);
       return;
     }
 
     // Not passed on as it is: a Mongo server error can hold the document it
-    // refused, and the base filter would print it. See database-fault.ts.
-    super.catch(databaseFault(exception), host);
+    // refused, and the base filter would print it. See DatabaseFaultException.
+    super.catch(new DatabaseFaultException(exception), host);
   }
 }

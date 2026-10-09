@@ -8,7 +8,8 @@ import { DataSource, QueryFailedError } from "typeorm";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import { MAX_TIME_EXPIRED, QUERY_CANCELED } from "./../src/shared/filters/query-timed-out.js";
+import { MAX_TIME_EXPIRED } from "./../src/shared/filters/mongo-error.filter.js";
+import { QUERY_CANCELED } from "./../src/shared/filters/query-failed.filter.js";
 import { REQUEST_TIMEOUT_MS } from "./../src/shared/interceptors/timeout.interceptor.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 

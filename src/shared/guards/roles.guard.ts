@@ -1,16 +1,11 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
 import type { AuthUser } from "../../auth/auth-user.js";
 import type { UserRole } from "../../users/user.entity.js";
 import { ROLES_KEY } from "../auth-metadata.js";
 import { ErrorCode } from "../error-codes.js";
+import { TokenMissingException } from "../exceptions/token-missing.exception.js";
 
 interface RequestWithUser {
   user?: AuthUser;
@@ -48,7 +43,7 @@ export class RolesGuard implements CanActivate {
     // role rule with nobody to check is a missing identity, not a refused
     // one, so 401 rather than 403.
     if (!user) {
-      throw new UnauthorizedException("Not signed in", { errorCode: ErrorCode.TOKEN_MISSING });
+      throw new TokenMissingException("Not signed in");
     }
 
     if (!required.includes(user.role)) {

@@ -1,7 +1,8 @@
-import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
+import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
+import { TokenMissingException } from "../../shared/exceptions/token-missing.exception.js";
 import { UserRole } from "../../users/user.entity.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 
@@ -46,7 +47,7 @@ describe("JwtAuthGuard", () => {
   it("throws 401 when there is no Authorization header", async () => {
     const attempt = guard.canActivate(contextFor({ headers: {} }));
 
-    await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(attempt).rejects.toBeInstanceOf(TokenMissingException);
     await expect(attempt).rejects.toMatchObject({ errorCode: "TOKEN_MISSING" });
     expect(verifyAsync).not.toHaveBeenCalled();
   });
@@ -55,7 +56,7 @@ describe("JwtAuthGuard", () => {
     const request = { headers: { authorization: "Basic abc123" } };
     const attempt = guard.canActivate(contextFor(request));
 
-    await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(attempt).rejects.toBeInstanceOf(TokenMissingException);
     await expect(attempt).rejects.toMatchObject({ errorCode: "TOKEN_MISSING" });
     expect(verifyAsync).not.toHaveBeenCalled();
   });

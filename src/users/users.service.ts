@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -14,6 +13,10 @@ import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { ErrorCode } from "../shared/error-codes.js";
+import {
+  type TakenField,
+  ValueTakenException,
+} from "../shared/exceptions/value-taken.exception.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -110,8 +113,7 @@ export class UsersService {
         withDeleted: true,
       });
       if (existing) {
-        const { message, errorCode } = takenField(existing, createUserDto);
-        throw new ConflictException(message, { errorCode });
+        throw new ValueTakenException(takenField(existing, createUserDto));
       }
 
       const user = await manager.save(
@@ -190,8 +192,7 @@ export class UsersService {
         withDeleted: true,
       });
       if (existing) {
-        const { message, errorCode } = takenField(existing, updateUserDto);
-        throw new ConflictException(message, { errorCode });
+        throw new ValueTakenException(takenField(existing, updateUserDto));
       }
     }
 
@@ -277,8 +278,8 @@ export class UsersService {
 }
 
 /**
- * Names the field that collided so a 409 tells the caller what to change,
- * and gives it a code the client can branch on.
+ * Says which field collided, so the 409 can tell the caller what to change.
+ * The wording and the code for each field belong to ValueTakenException.
  * Only email is compared directly — a row that came back without matching the
  * attempted email must have matched on username, because those are the two
  * fields the lookup searched.
@@ -286,9 +287,6 @@ export class UsersService {
 function takenField(
   existing: Pick<User, "email" | "username">,
   attempted: { email?: string; username?: string },
-): { message: string; errorCode: ErrorCode } {
-  if (attempted.email && existing.email === attempted.email) {
-    return { message: "Email already registered", errorCode: ErrorCode.EMAIL_TAKEN };
-  }
-  return { message: "Username already taken", errorCode: ErrorCode.USERNAME_TAKEN };
+): TakenField {
+  return attempted.email && existing.email === attempted.email ? "email" : "username";
 }

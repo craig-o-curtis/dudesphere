@@ -1,13 +1,8 @@
-import {
-  CallHandler,
-  ExecutionContext,
-  Logger,
-  NestInterceptor,
-  RequestTimeoutException,
-} from "@nestjs/common";
+import { CallHandler, ExecutionContext, Logger, NestInterceptor } from "@nestjs/common";
 import type { Request } from "express";
 import { catchError, Observable, throwError, timeout, TimeoutError } from "rxjs";
 
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
 import { REQUEST_ID_HEADER } from "../middleware/request-id.middleware.js";
 
 /** How long a handler may take before the caller gets a 408. */
@@ -51,7 +46,7 @@ export class TimeoutInterceptor implements NestInterceptor {
               `(request ${String(requestId)})`,
           );
         }
-        return throwError(() => new RequestTimeoutException(undefined, { cause: error }));
+        return throwError(() => new TimeLimitExceededException(error));
       }),
     );
   }
