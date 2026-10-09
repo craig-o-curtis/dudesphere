@@ -3,6 +3,7 @@ import { Error as MongooseError, mongo } from "mongoose";
 
 import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
+import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable } from "./database-unavailable.js";
 import { invalidValue } from "./invalid-value.js";
 
@@ -15,7 +16,8 @@ export const DUPLICATE_KEY = 11000;
  * A duplicate key is a race on a unique index, the same thing as Postgres
  * 23505 (duplicate key violation), so it becomes a 409. A network or server-selection error means
  * Mongo is unreachable, which is a 503: the same request may succeed when
- * sent again. Any other server error is a fault and stays a 500.
+ * sent again. Any other server error is a fault and stays a 500, logged
+ * without the document the error carries.
  *
  * Two errors come from Mongoose itself, before anything reaches Mongo. A
  * ValidationError means a value broke a rule in a schema, and a CastError
@@ -76,6 +78,8 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       return;
     }
 
-    super.catch(exception, host);
+    // Not passed on as it is: a Mongo server error can hold the document it
+    // refused, and the base filter would print it. See database-fault.ts.
+    super.catch(databaseFault(exception), host);
   }
 }

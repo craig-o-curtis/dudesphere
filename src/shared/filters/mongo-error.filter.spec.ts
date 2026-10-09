@@ -2,6 +2,7 @@ import {
   ArgumentsHost,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -124,11 +125,20 @@ describe("MongoErrorFilter", () => {
     });
   });
 
-  it("passes any other server error through unchanged, so it stays a 500", () => {
+  // Wrapped, not passed on as it is. A Mongo server error can hold the
+  // document it refused, and whatever reaches Nest's base filter unwrapped is
+  // printed whole. As a cause, only its stack is logged.
+  it("wraps any other server error in a plain 500 that keeps it as cause", () => {
     const exception = new mongo.MongoServerError({ message: "BadValue", code: 2 });
 
     new MongoErrorFilter().catch(exception, host);
 
-    expect(baseCatch.mock.calls[0][0]).toBe(exception);
+    const [passed] = baseCatch.mock.calls[0];
+    expect(passed).toBeInstanceOf(InternalServerErrorException);
+    expect((passed as InternalServerErrorException).getResponse()).toEqual({
+      statusCode: 500,
+      message: "Internal server error",
+    });
+    expect((passed as InternalServerErrorException).cause).toBe(exception);
   });
 });

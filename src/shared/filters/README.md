@@ -25,6 +25,9 @@ the HTTP response. `@Catch(SomeError)` names the errors a filter handles.
   database cannot be reached" and the one 503 body, with `DATABASE_UNAVAILABLE`.
 - `invalid-value.ts` holds the one 400 body for a value the database refused,
   and the list of Postgres codes that count as one.
+- `database-fault.ts` holds the plain 500 for every other database error. It
+  keeps the driver error out of the log, where it would print the query's
+  values or a document.
 
 ## The 400 is a safety net, and every hit is a bug
 
