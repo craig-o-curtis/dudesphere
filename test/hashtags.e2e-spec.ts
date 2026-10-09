@@ -34,6 +34,25 @@ describe("Hashtag delete and restore (e2e)", () => {
     return `e2e${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   }
 
+  // Every live slug, read the way a client fills a dropdown: the largest page
+  // first, then links.next until there is none.
+  //
+  // One page is not enough here. The list is sorted by slug and the dev
+  // database has tags of its own, so the tag under test may not be on page 1.
+  // A "not on the list" check against page 1 alone would pass even if the
+  // delete had done nothing.
+  async function listEverySlug(): Promise<string[]> {
+    const slugs: string[] = [];
+    let next: string | null = "/hashtags?limit=100";
+    while (next) {
+      const page = await request(app.getHttpServer()).get(next).expect(200);
+      const body = page.body as PaginatedResponse<{ slug: string }>;
+      slugs.push(...body.data.map((hashtag) => hashtag.slug));
+      next = body.links.next;
+    }
+    return slugs;
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -162,9 +181,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("then reads as not found, and is gone from the list", async () => {
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).not.toContain(slug);
+      expect(await listEverySlug()).not.toContain(slug);
     });
 
     // The first delete matched a live tag. This one finds none, because the
@@ -203,9 +220,7 @@ describe("Hashtag delete and restore (e2e)", () => {
 
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).not.toContain(slug);
+      expect(await listEverySlug()).not.toContain(slug);
     });
 
     it("is now carried by both abidings, and still off the list", async () => {
@@ -245,9 +260,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("is then back in the registry and on the list", async () => {
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(200);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).toContain(slug);
+      expect(await listEverySlug()).toContain(slug);
     });
 
     // Only a deleted tag can be restored, the same as restoring a user.

@@ -3,6 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
+import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { ErrorCode } from "../shared/error-codes.js";
 import { normalizeHashtag } from "../shared/utils/hashtag.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
@@ -14,16 +15,30 @@ export class HashtagsService {
 
   constructor(@InjectModel(Hashtag.name) private readonly hashtagModel: Model<HashtagDocument>) {}
 
-  // Every live hashtag, alphabetically — the list a tag dropdown or an
-  // autocomplete reads. Served by the unique index on slug, not by scanning
-  // abidings.
+  // One page of the live hashtags, alphabetically, and the count of all of
+  // them — the list a tag dropdown or an autocomplete reads. Served by the
+  // unique index on slug, not by scanning abidings.
+  //
+  // A page, not the whole registry. Anyone who posts can add a tag, so the
+  // registry has no upper size, and this route is public.
+  //
+  // slug is unique, so the sort has no ties and the pages cannot overlap.
   //
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
-  async listAll(): Promise<HashtagResponseDto[]> {
-    const hashtags = await this.hashtagModel.find({ deletedAt: null }).sort({ slug: 1 }).exec();
-    return hashtags.map((hashtag) => this.toResponseDto(hashtag));
+  async list(request: PageRequest): Promise<Page<HashtagResponseDto>> {
+    const filter = { deletedAt: null };
+    const [hashtags, total] = await Promise.all([
+      this.hashtagModel
+        .find(filter)
+        .sort({ slug: 1 })
+        .skip(toSkip(request))
+        .limit(request.limit)
+        .exec(),
+      this.hashtagModel.countDocuments(filter).exec(),
+    ]);
+    return { items: hashtags.map((hashtag) => this.toResponseDto(hashtag)), total };
   }
 
   async getBySlug(slug: string): Promise<HashtagResponseDto | null> {
