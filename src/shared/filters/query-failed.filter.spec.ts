@@ -3,6 +3,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
@@ -39,6 +40,32 @@ describe("QueryFailedFilter", () => {
     expect((passed as ConflictException).message).toBe("That value is already taken");
     expect((passed as ConflictException).errorCode).toBe("VALUE_TAKEN");
     expect(passedHost).toBe(host);
+  });
+
+  // pg reports a socket that closed under a running query with this message
+  // and no code. TypeORM wraps it like any other query failure.
+  it("turns a connection lost mid-query into a 503", () => {
+    const exception = new QueryFailedError(
+      "SELECT ...",
+      [],
+      new Error("Connection terminated unexpectedly"),
+    );
+
+    new QueryFailedFilter().catch(exception, host);
+
+    const [passed] = baseCatch.mock.calls[0];
+    expect(passed).toBeInstanceOf(ServiceUnavailableException);
+    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as ServiceUnavailableException).cause).toBe(exception);
+  });
+
+  it("turns a Postgres shutdown into a 503", () => {
+    // 57P01 is admin_shutdown.
+    new QueryFailedFilter().catch(queryFailed("57P01"), host);
+
+    const [passed] = baseCatch.mock.calls[0];
+    expect(passed).toBeInstanceOf(ServiceUnavailableException);
+    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
   });
 
   // Wrapped, not passed on as it is: the QueryFailedError carries the query's

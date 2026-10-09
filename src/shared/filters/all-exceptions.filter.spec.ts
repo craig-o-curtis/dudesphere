@@ -68,6 +68,26 @@ describe("AllExceptionsFilter", () => {
     expect(baseCatch).toHaveBeenCalledWith(exception, host);
   });
 
+  // What pg throws when Postgres cannot be reached: a plain Error, which no
+  // class-based filter can catch. This filter is the only one it reaches.
+  it("turns an unreachable Postgres into a 503 and logs the socket error", () => {
+    const refused = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5432"), {
+      code: "ECONNREFUSED",
+    });
+
+    new AllExceptionsFilter().catch(refused, host);
+
+    const [passed, passedHost] = baseCatch.mock.calls[0];
+    expect(passed).toBeInstanceOf(ServiceUnavailableException);
+    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as ServiceUnavailableException).cause).toBe(refused);
+    expect(passedHost).toBe(host);
+    expect(error).toHaveBeenCalledWith(
+      "DELETE /users/me failed for user 7 (request req-1): Database unavailable",
+      refused.stack,
+    );
+  });
+
   // Nothing else logs an HttpException, so without a cause its own stack is
   // the only trace of where the 503 came from.
   it("logs a 503's own stack when it has no cause", () => {

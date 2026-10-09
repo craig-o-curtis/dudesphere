@@ -10,6 +10,7 @@ import { QueryFailedError } from "typeorm";
 
 import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
+import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
 
 /** Postgres unique_violation. */
 export const UNIQUE_VIOLATION = "23505";
@@ -19,6 +20,7 @@ export const UNIQUE_VIOLATION = "23505";
  *
  * A unique violation means two callers raced, or a service forgot a lookup.
  * Either way it is a conflict, not a server fault, so it becomes a 409.
+ * A lost connection becomes a 503, the same answer MongoErrorFilter gives.
  * Every other database error keeps falling through to a 500 — those are real
  * faults and hiding them would only delay the fix.
  *
@@ -43,6 +45,14 @@ export class QueryFailedFilter extends AllExceptionsFilter {
         }),
         host,
       );
+      return;
+    }
+
+    // The connection dropped while the query ran, or Postgres is shutting
+    // down. The query was not wrong, and the same request may work when sent
+    // again, so it is a 503 and not a 500.
+    if (isDatabaseUnreachable(exception.driverError)) {
+      super.catch(databaseUnavailable(exception), host);
       return;
     }
 

@@ -4,6 +4,7 @@ import { ArgumentsHost, Catch, HttpException, Logger } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
 
 import { REQUEST_ID_HEADER } from "../middleware/request-id.middleware.js";
+import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
 
 // The fields of the request the log line reads. Typed here, not imported
 // from express, so the filter does not depend on one adapter.
@@ -16,10 +17,13 @@ interface RequestLike {
 }
 
 /**
- * The last filter every error reaches. It changes no response: Nest's
- * BaseExceptionFilter still writes the body, so the shape stays
- * { statusCode, message, error }. What it adds is one log line per server
- * fault that says which request failed, for whom, and under which request id.
+ * The last filter every error reaches. Nest's BaseExceptionFilter still
+ * writes the body, so the shape stays { statusCode, message, error }. What
+ * it adds is one log line per server fault that says which request failed,
+ * for whom, and under which request id.
+ *
+ * It changes one response: a database that cannot be reached becomes a 503
+ * with DATABASE_UNAVAILABLE, not a 500. See the comment in catch().
  *
  * BaseExceptionFilter alone logs an unknown error's stack with no request
  * context, and never logs an HttpException, not even a 503. So:
@@ -41,10 +45,16 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
   private readonly faultLogger = new Logger(AllExceptionsFilter.name);
 
   override catch(exception: unknown, host: ArgumentsHost): void {
-    if (host.getType() === "http" && this.isServerFault(exception)) {
-      this.logFault(exception, host);
+    // The one response this filter changes. When Postgres cannot be reached,
+    // pg throws a plain Error (ECONNREFUSED and the like), and now and then
+    // the Mongo driver does too. No @Catch(SomeClass) filter can claim a
+    // plain Error, so this is the only filter it reaches.
+    const fault = isDatabaseUnreachable(exception) ? databaseUnavailable(exception) : exception;
+
+    if (host.getType() === "http" && this.isServerFault(fault)) {
+      this.logFault(fault, host);
     }
-    super.catch(exception, host);
+    super.catch(fault, host);
   }
 
   private isServerFault(exception: unknown): boolean {
