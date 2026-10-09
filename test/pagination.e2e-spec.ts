@@ -12,9 +12,9 @@ import type { PaginatedResponse } from "./../src/shared/dto/paginated-response.j
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
-// Needs the databases running. Each run registers one throwaway user, three
-// abidings and one hashtag. test/global-setup.ts deletes all of them when the
-// run ends.
+// Needs the databases running. Each run registers three throwaway users, five
+// abidings and three hashtags. test/global-setup.ts deletes all of them when
+// the run ends.
 //
 // The unit specs prove each service asks for the right sort, skip and limit.
 // Only a real database proves the answer: that the rows come back in that
@@ -42,6 +42,18 @@ describe("Pagination (e2e)", () => {
     const get = request(app.getHttpServer()).get(url);
     const response = await (token ? get.set(bearer(token)) : get).expect(200);
     return response.body as PaginatedResponse<T>;
+  }
+
+  // A whole list: the largest page first, then links.next until there is none.
+  async function getEveryPage<T>(url: string, token?: string): Promise<T[]> {
+    const rows: T[] = [];
+    let next: string | null = url;
+    while (next) {
+      const page: PaginatedResponse<T> = await getPage<T>(next, token);
+      rows.push(...page.data);
+      next = page.links.next;
+    }
+    return rows;
   }
 
   beforeAll(async () => {
@@ -169,29 +181,97 @@ describe("Pagination (e2e)", () => {
 
   // No totals are asserted below. These lists are not filtered, so other
   // suites and the dev data change their size while this one runs.
+  //
+  // Each order test is built so that it fails if the sort is removed. A list
+  // read in the order the rows happen to be stored would pass a plain "is it
+  // sorted" check most of the time, and always on an empty list.
   describe("the lists that are not filtered", () => {
-    it("returns users in id order", async () => {
-      const page = await getPage<{ id: number }>(
+    interface Account {
+      id: number;
+      profileId: number;
+      token: string;
+    }
+
+    let first: Account;
+    let second: Account;
+
+    // e2e plus 12 hex characters, the shape test/global-setup.ts deletes. The
+    // fourth character fixes the order: "0" sorts before "f".
+    const hex = randomUUID().replaceAll("-", "").slice(0, 11);
+    const earlySlug = `e2e0${hex}`;
+    const lateSlug = `e2ef${hex}`;
+
+    async function signUp(): Promise<Account> {
+      // randomUUID, not Date.now(), which the gmt lint rules ban.
+      const tag = randomUUID().slice(0, 8);
+      const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
+      const user = await request(app.getHttpServer())
+        .post("/users")
+        .send({ ...credentials, username: `e2e-${tag}` })
+        .expect(201);
+      const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+      const body = user.body as { id: number; profile: { id: number } };
+      return {
+        id: body.id,
+        profileId: body.profile.id,
+        token: (login.body as { token: string }).token,
+      };
+    }
+
+    beforeAll(async () => {
+      first = await signUp();
+      second = await signUp();
+
+      // Editing a row makes Postgres write a new copy of it further along in
+      // the table. With no ORDER BY, the first user and the first profile
+      // would now come back after the second ones.
+      await request(app.getHttpServer())
+        .patch("/users/me")
+        .set(bearer(first.token))
+        .send({ username: `e2e-${randomUUID().slice(0, 8)}` })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch("/profiles/me")
+        .set(bearer(first.token))
+        .send({ bio: "edited after the second profile was made" })
+        .expect(200);
+
+      // The late slug is registered first. With no sort, Mongo would return
+      // the tags in the order they were stored, late before early.
+      for (const slug of [lateSlug, earlySlug]) {
+        await request(app.getHttpServer())
+          .post("/abidings")
+          .set(bearer(first.token))
+          .send({ message: `the dude abides #${slug}` })
+          .expect(201);
+      }
+    });
+
+    it("returns users in id order, even after the first one is edited", async () => {
+      const users = await getEveryPage<{ id: number }>(
         "/users?limit=100",
         await tokenFor(UserRole.ADMIN),
       );
+      const ids = users.map((user) => user.id);
 
-      const ids = page.data.map((user) => user.id);
-      expect(ids).toEqual(ids.toSorted((a, b) => a - b));
+      expect(ids).toContain(first.id);
+      expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(second.id));
     });
 
-    it("returns profiles in id order", async () => {
-      const page = await getPage<{ id: number }>("/profiles?limit=100");
+    it("returns profiles in id order, even after the first one is edited", async () => {
+      const profiles = await getEveryPage<{ id: number }>("/profiles?limit=100");
+      const ids = profiles.map((profile) => profile.id);
 
-      const ids = page.data.map((profile) => profile.id);
-      expect(ids).toEqual(ids.toSorted((a, b) => a - b));
+      expect(ids).toContain(first.profileId);
+      expect(ids.indexOf(first.profileId)).toBeLessThan(ids.indexOf(second.profileId));
     });
 
-    it("returns hashtags in slug order", async () => {
-      const page = await getPage<{ slug: string }>("/hashtags?limit=100");
+    it("returns hashtags in slug order, not the order they were first used", async () => {
+      const hashtags = await getEveryPage<{ slug: string }>("/hashtags?limit=100");
+      const slugs = hashtags.map((hashtag) => hashtag.slug);
 
-      const slugs = page.data.map((hashtag) => hashtag.slug);
-      expect(slugs).toEqual(slugs.toSorted());
+      expect(slugs).toContain(earlySlug);
+      expect(slugs.indexOf(earlySlug)).toBeLessThan(slugs.indexOf(lateSlug));
     });
 
     // The last page the API allows. With 10 rows to a page it starts ten
