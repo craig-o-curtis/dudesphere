@@ -9,6 +9,11 @@ services:
       POSTGRES_USER: ${PG_ADMIN_USER}
       POSTGRES_PASSWORD: ${PG_ADMIN_PW}
       POSTGRES_DB: ${PG_DATABASE}
+      # The server's own zone and the default zone of every session. UTC is
+      # already this image's default; stating it here means a change of image
+      # cannot move the database clock without someone noticing.
+      TZ: UTC
+      PGTZ: UTC
     ports:
       - "5432:5432"
     volumes:

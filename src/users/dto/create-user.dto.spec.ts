@@ -1,4 +1,4 @@
-import { validateSync } from "class-validator";
+import { isEmail, maxLength, validateSync } from "class-validator";
 import { getMetadataArgsStorage } from "typeorm";
 
 import { User } from "../user.entity.js";
@@ -57,6 +57,42 @@ describe("CreateUserDto", () => {
     const errors = validateSync(buildDto({ [field]: value }));
 
     expect(errors.map((error) => error.property)).toContain(field);
+  });
+
+  // A variation selector is an invisible code point that follows some
+  // characters. @MaxLength left it out of its count and Postgres counts it,
+  // so these values passed the DTO and overflowed the column. Each is valid
+  // in every other way, so only the length rule can reject it.
+  describe("a value that is only short if variation selectors are left out", () => {
+    const WITH_SELECTOR = "a\uFE0F";
+
+    it("rejects such a username", () => {
+      // 13 letters to @MaxLength, 26 characters to varchar(24).
+      const username = WITH_SELECTOR.repeat(13);
+      expect(maxLength(username, columnLength("username"))).toBe(true);
+
+      const errors = validateSync(buildDto({ username }));
+
+      expect(errors.map((error) => error.property)).toEqual(["username"]);
+    });
+
+    it("rejects such an email", () => {
+      // 71 to @MaxLength, 131 characters to varchar(100).
+      const label = "b\uFE0F".repeat(30);
+      const email = `aaaaa@${label}.${label}.com`;
+      expect(isEmail(email)).toBe(true);
+      expect(maxLength(email, columnLength("email"))).toBe(true);
+
+      const errors = validateSync(buildDto({ email }));
+
+      expect(errors.map((error) => error.property)).toEqual(["email"]);
+    });
+  });
+
+  it("rejects a username that contains a NUL character", () => {
+    const errors = validateSync(buildDto({ username: "du\u0000de" }));
+
+    expect(errors.map((error) => error.property)).toEqual(["username"]);
   });
 
   // The password is not in sizedFields: its column holds a 60-character hash,

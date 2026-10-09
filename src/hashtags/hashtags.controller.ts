@@ -40,6 +40,7 @@ export class HashtagsController {
   // see the comment on HashtagsModule.
   @Roles(UserRole.ADMIN)
   @Delete(":slug")
+  @HttpCode(204) // needs 204 No Content instead of default 200 OK
   public async deleteHashtagBySlug(@Param("slug") slug: string): Promise<void> {
     await this.hashtagsService.deleteBySlug(slug);
   }

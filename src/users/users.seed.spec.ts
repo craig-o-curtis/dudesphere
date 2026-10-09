@@ -19,6 +19,8 @@ describe("UsersSeedService", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     usersRepository.create.mockImplementation((values: object) => values);
+    // The real save() returns the row with the id the database gave it.
+    usersRepository.save.mockImplementation((user: object) => Promise.resolve({ id: 7, ...user }));
     hashingProvider.hash.mockImplementation((plain: string) => Promise.resolve(`hashed(${plain})`));
 
     const module = await Test.createTestingModule({
@@ -58,10 +60,24 @@ describe("UsersSeedService", () => {
     );
   });
 
-  it("does nothing when the email or the password is not set", async () => {
-    await seedService.seed("admin@dude.com", "");
+  it("does nothing, and returns null, when the email or the password is not set", async () => {
+    await expect(seedService.seed("admin@dude.com", "")).resolves.toBeNull();
 
     expect(hashingProvider.hash).not.toHaveBeenCalled();
     expect(usersRepository.save).not.toHaveBeenCalled();
+  });
+
+  // The abiding seed writes its sample rows as this user, so it needs the id
+  // the database really gave the admin, not an assumed 1.
+  it("returns the id of the admin it created", async () => {
+    usersRepository.findOne.mockResolvedValue(null);
+
+    await expect(seedService.seed("admin@dude.com", "rug-password")).resolves.toBe(7);
+  });
+
+  it("returns the id of the admin it updated", async () => {
+    usersRepository.findOne.mockResolvedValue({ id: 42, email: "admin@dude.com", role: "user" });
+
+    await expect(seedService.seed("admin@dude.com", "rug-password")).resolves.toBe(42);
   });
 });

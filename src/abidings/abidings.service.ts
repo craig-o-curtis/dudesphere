@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 
@@ -99,10 +104,17 @@ export class AbidingsService {
     createAbidingDto: CreateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
+    if (createAbidingDto.replyToId) {
+      await this.assertReplyTargetExists(createAbidingDto.replyToId);
+    }
+
     const newAbiding = await this.abidingModel.create({
       userId: caller.userId,
       message: createAbidingDto.message,
-      replyToId: createAbidingDto.replyToId || null,
+      // The DTO has always accepted imageUrl. It was never passed on here, so
+      // a post with an image was stored without one.
+      imageUrl: createAbidingDto.imageUrl ?? null,
+      replyToId: createAbidingDto.replyToId ?? null,
       // Derived from the message, never from client input — there is no
       // `hashtags` field on CreateAbidingDto.
       hashtags: extractHashtags(createAbidingDto.message),
@@ -119,31 +131,50 @@ export class AbidingsService {
     return this.toResponseDto(newAbiding);
   }
 
-  // TODO refactor to be more elegant
   async patchAbiding(
     id: string,
     updateAbidingDto: UpdateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // Built explicitly, not spread from the DTO, so a client can never set
-    // `hashtags` directly and an edit that doesn't touch `message` can't
-    // accidentally wipe it to [].
-    const update: Record<string, any> = {
-      imageUrl: updateAbidingDto.imageUrl,
-      replyToId: updateAbidingDto.replyToId || undefined,
-    };
-    if (typeof updateAbidingDto.message === "string" && updateAbidingDto.message.length > 0) {
-      update.message = updateAbidingDto.message;
-      update.hashtags = extractHashtags(updateAbidingDto.message);
+    const { message, imageUrl, replyToId } = updateAbidingDto;
+
+    if (replyToId) {
+      if (replyToId === id) {
+        throw new BadRequestException("An abiding cannot reply to itself");
+      }
+      await this.assertReplyTargetExists(replyToId);
+    }
+
+    // Built field by field, not spread from the DTO, so a client can never
+    // set `hashtags` directly, and an edit that doesn't touch `message` can't
+    // wipe them to [].
+    //
+    // For imageUrl and replyToId a missing field and a null mean different
+    // things. Missing is undefined, which Mongoose drops, so the stored value
+    // stays. Null is written, which clears it.
+    const update: {
+      imageUrl?: string | null;
+      replyToId?: string | null;
+      message?: string;
+      hashtags?: string[];
+    } = { imageUrl, replyToId };
+    if (message !== undefined) {
+      update.message = message;
+      update.hashtags = extractHashtags(message);
     }
 
     // returnDocument: "after" returns the updated document, not the original.
     // It replaces the older { new: true }, which Mongoose has deprecated.
     // ownedBy puts the authorization rule in the filter, so the check and the
     // write are one operation with no window between them.
+    //
+    // runValidators: true because Mongoose skips the schema's rules on an
+    // update unless asked. Without it an edit stored a message that create
+    // would have refused.
     const updatedAbiding = await this.abidingModel
       .findOneAndUpdate({ _id: id, deletedAt: null, ...this.ownedBy(caller) }, update, {
         returnDocument: "after",
+        runValidators: true,
       })
       .exec();
 
@@ -157,11 +188,11 @@ export class AbidingsService {
     // An edit can introduce tags the registry has never seen. Tags the edit
     // removed stay registered on purpose: a tag outlives the abidings that
     // used it, so the dropdown keeps offering it.
-    const hashtags = updateAbidingDto.message
-      ? extractHashtagDisplays(updateAbidingDto.message)
-      : new Map();
-    if (updateAbidingDto.message !== undefined && hashtags.size > 0) {
-      await this.hashtagsService.registerTags(hashtags);
+    if (message !== undefined) {
+      const displays = extractHashtagDisplays(message);
+      if (displays.size > 0) {
+        await this.hashtagsService.registerTags(displays);
+      }
     }
 
     return this.toResponseDto(updatedAbiding);
@@ -203,6 +234,16 @@ export class AbidingsService {
     }
   }
 
+  // A reply has to point at an abiding a reader can open. Mongo has no
+  // foreign keys, so nothing else would stop a reply to an id that was never
+  // there, or to an abiding hidden with its deleted author.
+  private async assertReplyTargetExists(replyToId: string): Promise<void> {
+    const exists = await this.abidingModel.exists({ _id: replyToId, deletedAt: null }).exec();
+    if (!exists) {
+      throw new NotFoundException("The abiding being replied to was not found");
+    }
+  }
+
   // --- Private helpers ---
 
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
@@ -210,7 +251,7 @@ export class AbidingsService {
       id: abiding._id.toString(),
       userId: abiding.userId,
       message: abiding.message,
-      username: abiding.username || undefined,
+      imageUrl: abiding.imageUrl ?? null,
       createdAt: abiding.createdAt ?? "",
       updatedAt: abiding.updatedAt ?? "",
       replyToId: abiding.replyToId ?? undefined,

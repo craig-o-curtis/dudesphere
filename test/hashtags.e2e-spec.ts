@@ -11,22 +11,27 @@ import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
-// Needs the databases running. Each run registers one throwaway user and
-// leaves behind that user, two abidings and one hashtag, which ends the run
-// live again after being deleted and restored.
+// Needs the databases running. Each run registers one throwaway user, two
+// abidings and one hashtag, which ends the run live again after being deleted
+// and restored. test/global-setup.ts deletes all of them when the run ends.
 describe("Hashtag delete and restore (e2e)", () => {
   let app: INestApplication<App>;
 
   // Signed here rather than logged in, so nothing depends on a seeded user.
   // RolesGuard reads the role from the token and looks nothing up.
-  const tokenFor = (role: UserRole) =>
-    app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "e2e", role });
+  function tokenFor(role: UserRole) {
+    return app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "e2e", role });
+  }
 
-  const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+  function bearer(token: string) {
+    return { authorization: `Bearer ${token}` };
+  }
 
   // Letters and digits only, so it survives normalizeHashtag, and random, so
   // it cannot collide with a tag someone really used.
-  const unusedSlug = () => `e2e${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  function unusedSlug() {
+    return `e2e${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -150,7 +155,7 @@ describe("Hashtag delete and restore (e2e)", () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${slug}`)
         .set(bearer(await tokenFor(UserRole.ADMIN)))
-        .expect(200);
+        .expect(204);
     });
 
     it("then reads as not found, and is gone from the list", async () => {

@@ -126,7 +126,7 @@ describe("AbidingsController id params (over HTTP)", () => {
     });
 
     it("DELETE passes the id to the service as a string", async () => {
-      await request(app.getHttpServer()).delete(`/abidings/${VALID_ID}`).expect(200);
+      await request(app.getHttpServer()).delete(`/abidings/${VALID_ID}`).expect(204);
 
       expect(abidingService.deleteAbiding.mock.calls[0][0]).toBe(VALID_ID);
       expect(typeof abidingService.deleteAbiding.mock.calls[0][0]).toBe("string");

@@ -25,7 +25,7 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/login with email + password.
+  //   1. Frontend calls POST /auth with email + password.
   //   2. Backend validates credentials and returns a signed JWT token.
   //   3. Frontend stores the token and sends it on every protected request:
   //        Authorization: Bearer <token>

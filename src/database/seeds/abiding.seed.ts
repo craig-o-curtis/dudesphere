@@ -10,7 +10,6 @@ type AbidingSeedData = {
   userId: number;
   message: string;
   replyToId: string | null;
-  username: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -24,7 +23,11 @@ export class AbidingSeedService {
     private readonly abidingModel: Model<Abiding>,
   ) {}
 
-  async seed(nodeEnv: string, adminEmail: string): Promise<void> {
+  // adminUserId is the id UsersSeedService gave the admin, or null when it
+  // seeded none. The sample abidings are written as that user. The id used to
+  // be a fixed 1, which is only the admin's id in a database that has never
+  // held another user.
+  async seed(nodeEnv: string, adminUserId: number | null): Promise<void> {
     if (nodeEnv !== "development") {
       this.logger.log("Skipping Abiding seed — not in development environment");
       return;
@@ -37,26 +40,24 @@ export class AbidingSeedService {
       return;
     }
 
-    if (!adminEmail) {
-      this.logger.warn("EMAIL not set — skipping Abiding seed");
+    if (adminUserId === null) {
+      this.logger.warn("No admin user was seeded — skipping Abiding seed");
       return;
     }
 
     const now = getUtcNow();
     const sampleAbidings: AbidingSeedData[] = [
       {
-        userId: 1,
+        userId: adminUserId,
         message:
           "Welcome to Dudesphere! This is your first abiding. Share your thoughts with the community.",
-        username: "Admin",
         replyToId: null,
         createdAt: now,
         updatedAt: now,
       },
       {
-        userId: 1,
+        userId: adminUserId,
         message: "Abidings are like micro-posts. Keep them short, sweet, and authentic.",
-        username: "Admin",
         replyToId: null,
         createdAt: now,
         updatedAt: now,

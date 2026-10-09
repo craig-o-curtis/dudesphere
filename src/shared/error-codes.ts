@@ -4,6 +4,14 @@
 //
 // Each code is thrown with one HTTP status, noted beside it. Keep that true:
 // a client that sees EMAIL_TAKEN should never have to check the status too.
+// CLOCK_UNAVAILABLE is temporary. gmt's getUtcNow() documents "" as its
+// result when the clock cannot be read, so every caller checks for it and
+// throws this. The clock cannot in fact fail, and gmt 1.19.0 takes "" out of
+// the contract (https://github.com/northguild/gmt/issues/303). When that
+// version is installed, remove this code, each check that throws it
+// (UserAbidingsService.softDeleteForUser, HashtagsService.deleteBySlug), the
+// matching check in HashtagsService.registerTags, and the vi.mock of gmt in
+// hashtags.service.spec.ts.
 export enum ErrorCode {
   EMAIL_TAKEN = "EMAIL_TAKEN", // 409 Conflict
   USERNAME_TAKEN = "USERNAME_TAKEN", // 409 Conflict
