@@ -30,7 +30,7 @@ describe("PaginationQueryDto (over HTTP)", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    profilesService.getProfiles.mockResolvedValue([]);
+    profilesService.getProfiles.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [ProfilesController],
@@ -49,13 +49,19 @@ describe("PaginationQueryDto (over HTTP)", () => {
   it("defaults to limit 10 and page 1", async () => {
     await request(app.getHttpServer()).get("/profiles").expect(200);
 
-    expect(profilesService.getProfiles).toHaveBeenCalledWith(10, 1);
+    expect(profilesService.getProfiles).toHaveBeenCalledWith({ limit: 10, page: 1 });
   });
 
   it("passes a limit and page through as numbers", async () => {
     await request(app.getHttpServer()).get("/profiles?limit=5&page=2").expect(200);
 
-    expect(profilesService.getProfiles).toHaveBeenCalledWith(5, 2);
+    expect(profilesService.getProfiles).toHaveBeenCalledWith({ limit: 5, page: 2 });
+  });
+
+  it("accepts the largest limit", async () => {
+    await request(app.getHttpServer()).get("/profiles?limit=100").expect(200);
+
+    expect(profilesService.getProfiles).toHaveBeenCalledWith({ limit: 100, page: 1 });
   });
 
   // The bug: page 0 became OFFSET -10, which Postgres rejects, so the caller
