@@ -1,7 +1,7 @@
-import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
+import { ArgumentsHost, Catch, Logger } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
-import { ErrorCode } from "../error-codes.js";
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
@@ -39,13 +39,7 @@ export class QueryFailedFilter extends AllExceptionsFilter {
       this.logger.warn(
         `${this.requestLine(host)}: unique violation reached the database: ${exception.message}`,
       );
-      super.catch(
-        new ConflictException("That value is already taken", {
-          cause: exception,
-          errorCode: ErrorCode.VALUE_TAKEN,
-        }),
-        host,
-      );
+      super.catch(new ValueTakenException(undefined, { cause: exception }), host);
       return;
     }
 

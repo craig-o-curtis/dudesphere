@@ -1,7 +1,7 @@
-import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
+import { ArgumentsHost, Catch, Logger } from "@nestjs/common";
 import { Error as MongooseError, mongo } from "mongoose";
 
-import { ErrorCode } from "../error-codes.js";
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable } from "./database-unavailable.js";
@@ -48,13 +48,7 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       this.logger.warn(
         `${this.requestLine(host)}: duplicate key reached Mongo: ${exception.message}`,
       );
-      super.catch(
-        new ConflictException("That value is already taken", {
-          cause: exception,
-          errorCode: ErrorCode.VALUE_TAKEN,
-        }),
-        host,
-      );
+      super.catch(new ValueTakenException(undefined, { cause: exception }), host);
       return;
     }
 

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
@@ -11,6 +6,7 @@ import { DataSource, In, IsNull, Not } from "typeorm";
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
+import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { User } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
@@ -257,7 +253,7 @@ describe("UsersService", () => {
 
       await expect(
         service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(ValueTakenException);
 
       expect(manager.save).not.toHaveBeenCalled();
     });
