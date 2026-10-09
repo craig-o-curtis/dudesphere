@@ -15,5 +15,5 @@ export enum ErrorCode {
   NOT_OWNER = "NOT_OWNER", // 403 Forbidden, editing or deleting someone else's row
   ROLE_REQUIRED = "ROLE_REQUIRED", // 403 Forbidden, the route needs a role the caller does not have
   CLOCK_UNAVAILABLE = "CLOCK_UNAVAILABLE", // 503 Service Unavailable, getUtcNow() returned ""
-  DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE", // 503 Service Unavailable, Mongo write failed or unreachable
+  DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE", // 503 Service Unavailable, Postgres or Mongo cannot be reached
 }

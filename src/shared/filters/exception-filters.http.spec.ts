@@ -58,6 +58,21 @@ class BoomController {
     );
   }
 
+  // What pg throws when Postgres cannot be reached: a plain Error with a
+  // socket code, not a QueryFailedError.
+  @Get("pg-down")
+  pgDown(): never {
+    throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5432"), {
+      code: "ECONNREFUSED",
+    });
+  }
+
+  // What TypeORM throws when the connection drops while a query runs.
+  @Get("pg-dropped")
+  pgDropped(): never {
+    throw new QueryFailedError("SELECT ...", [], new Error("Connection terminated unexpectedly"));
+  }
+
   @Get("mongo-dup")
   mongoDup(): never {
     throw new mongo.MongoServerError({ message: "E11000", code: DUPLICATE_KEY });
@@ -158,6 +173,21 @@ describe("Exception filters (over HTTP)", () => {
     expect(body.message).toBe("Database unavailable");
     expect(body.errorCode).toBe("DATABASE_UNAVAILABLE");
   });
+
+  // The same body whichever database is down, so a client needs one branch.
+  it.each(["/boom/pg-down", "/boom/pg-dropped", "/boom/mongo-down"])(
+    "answers %s with the 503 for a database that cannot be reached",
+    async (route) => {
+      const { body } = await request(app.getHttpServer()).get(route).expect(503);
+
+      expect(body).toEqual({
+        statusCode: 503,
+        message: "Database unavailable",
+        error: "Service Unavailable",
+        errorCode: "DATABASE_UNAVAILABLE",
+      });
+    },
+  );
 
   it("returns the request id header on an error response", async () => {
     const res = await request(app.getHttpServer())

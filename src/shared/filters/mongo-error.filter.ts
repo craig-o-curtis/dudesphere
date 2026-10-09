@@ -1,14 +1,9 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ConflictException,
-  Logger,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
 import { mongo } from "mongoose";
 
 import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
+import { databaseUnavailable } from "./database-unavailable.js";
 
 /** MongoDB duplicate key. */
 export const DUPLICATE_KEY = 11000;
@@ -47,13 +42,7 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       exception instanceof mongo.MongoNetworkError ||
       exception instanceof mongo.MongoServerSelectionError
     ) {
-      super.catch(
-        new ServiceUnavailableException("Database unavailable", {
-          cause: exception,
-          errorCode: ErrorCode.DATABASE_UNAVAILABLE,
-        }),
-        host,
-      );
+      super.catch(databaseUnavailable(exception), host);
       return;
     }
 
