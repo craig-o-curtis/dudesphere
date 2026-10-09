@@ -21,14 +21,20 @@ const UTC_NOW = "2026-10-06T09:25:42.204006202Z";
 describe("HashtagsService", () => {
   let service: HashtagsService;
 
-  // find().sort().exec() — the service chains sort before exec.
+  // find().sort().skip().limit().exec() — the list chains all three before
+  // exec. The other queries only call exec.
   const queryOf = <T>(value: T) => ({
     sort: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
     exec: vi.fn().mockResolvedValue(value),
   });
 
+  const firstPage = { limit: 10, page: 1 };
+
   const hashtagModel = {
     find: vi.fn(),
+    countDocuments: vi.fn(),
     findOne: vi.fn(),
     bulkWrite: vi.fn(),
     updateOne: vi.fn(),
@@ -38,6 +44,7 @@ describe("HashtagsService", () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     hashtagModel.find.mockReturnValue(queryOf([]));
+    hashtagModel.countDocuments.mockReturnValue(queryOf(0));
     hashtagModel.findOne.mockReturnValue(queryOf(null));
     // Default: the delete found a live tag to stamp.
     hashtagModel.updateOne.mockReturnValue(queryOf({ matchedCount: 1 }));
@@ -57,28 +64,42 @@ describe("HashtagsService", () => {
     expect(service).toBeDefined();
   });
 
-  describe("listAll", () => {
-    it("returns every tag, sorted by slug for a dropdown", async () => {
+  describe("list", () => {
+    it("returns a page of tags, sorted by slug for a dropdown, with the count of all of them", async () => {
       const query = queryOf([
         { slug: "dude", display: "Dude", firstUsedAt: "2026-10-05T00:00:00.000Z" },
         { slug: "sunday", display: "Sunday", firstUsedAt: "2026-10-05T00:00:00.000Z" },
       ]);
       hashtagModel.find.mockReturnValue(query);
+      hashtagModel.countDocuments.mockReturnValue(queryOf(42));
 
-      const result = await service.listAll();
+      const result = await service.list(firstPage);
 
       expect(query.sort).toHaveBeenCalledWith({ slug: 1 });
-      expect(result.map((h) => h.slug)).toEqual(["dude", "sunday"]);
-      expect(result.map((h) => h.display)).toEqual(["Dude", "Sunday"]);
+      expect(result.items.map((h) => h.slug)).toEqual(["dude", "sunday"]);
+      expect(result.items.map((h) => h.display)).toEqual(["Dude", "Sunday"]);
+      expect(result.total).toBe(42);
+    });
+
+    it("reads one page: skips the earlier pages and stops at the limit", async () => {
+      const query = queryOf([]);
+      hashtagModel.find.mockReturnValue(query);
+
+      await service.list({ limit: 5, page: 3 });
+
+      expect(query.skip).toHaveBeenCalledWith(10);
+      expect(query.limit).toHaveBeenCalledWith(5);
     });
 
     // The filter is what hides a deleted tag from the dropdown. Mongo matches
     // `deletedAt: null` against a missing field too, so rows written before
-    // the field existed still count as live.
-    it("leaves out tags an admin has deleted", async () => {
-      await service.listAll();
+    // the field existed still count as live. The count uses the same filter,
+    // so a deleted tag is not counted either.
+    it("leaves out tags an admin has deleted, from the page and from the count", async () => {
+      await service.list(firstPage);
 
       expect(hashtagModel.find).toHaveBeenCalledWith({ deletedAt: null });
+      expect(hashtagModel.countDocuments).toHaveBeenCalledWith({ deletedAt: null });
     });
   });
 

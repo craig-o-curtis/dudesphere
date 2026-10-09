@@ -8,7 +8,7 @@ describe("HashtagsController", () => {
   let controller: HashtagsController;
 
   const hashtagsService = {
-    listAll: vi.fn(),
+    list: vi.fn(),
     getBySlug: vi.fn(),
     deleteBySlug: vi.fn(),
     restoreBySlug: vi.fn(),
@@ -30,11 +30,24 @@ describe("HashtagsController", () => {
   });
 
   describe("getHashtags", () => {
-    it("returns the full registry", async () => {
+    // 5 and 2 differ from the defaults (10 and 1), and from each other, so a
+    // swapped or dropped value shows up as a failure.
+    it("passes limit and page to the service and wraps its page", async () => {
       const hashtags = [{ slug: "dude", display: "Dude", firstUsedAt: "2026-10-05T00:00:00.000Z" }];
-      hashtagsService.listAll.mockResolvedValue(hashtags);
+      hashtagsService.list.mockResolvedValue({ items: hashtags, total: 12 });
 
-      expect(await controller.getHashtags()).toEqual(hashtags);
+      const result = await controller.getHashtags({ limit: 5, page: 2 });
+
+      expect(hashtagsService.list).toHaveBeenCalledWith({ limit: 5, page: 2 });
+      // toBe: the service's own array, not a copy of it.
+      expect(result.data).toBe(hashtags);
+      expect(result.meta).toEqual({
+        itemsPerPage: 5,
+        totalItems: 12,
+        currentPage: 2,
+        totalPages: 3,
+      });
+      expect(result.links.next).toBe("/hashtags?limit=5&page=3");
     });
   });
 
