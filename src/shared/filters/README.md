@@ -18,7 +18,9 @@ the HTTP response. `@Catch(SomeError)` names the errors a filter handles.
   A value that does not fit its column becomes a 400. Every other database
   error stays a 500, logged without the values the query ran with.
 - `mongo-error.filter.ts` handles Mongo errors. A duplicate key (code `11000`)
-  becomes a 409. Mongo being unreachable becomes a 503. The rest stay a 500.
+  becomes a 409. Mongo being unreachable becomes a 503. A value Mongoose
+  itself refuses (a `ValidationError` or a `CastError`) becomes a 400. The
+  rest stay a 500.
 - `database-unavailable.ts` holds what the three share: the test for "the
   database cannot be reached" and the one 503 body, with `DATABASE_UNAVAILABLE`.
 - `invalid-value.ts` holds the one 400 body for a value the database refused,

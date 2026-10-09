@@ -15,7 +15,7 @@ import { inspect } from "node:util";
 
 import { Controller, Get, INestApplication, Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { mongo } from "mongoose";
+import { Error as MongooseError, mongo } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { QueryFailedError } from "typeorm";
@@ -85,6 +85,21 @@ class BoomController {
   @Get("pg-dropped")
   pgDropped(): never {
     throw new QueryFailedError("SELECT ...", [], new Error("Connection terminated unexpectedly"));
+  }
+
+  // What Mongoose raises when a value breaks a rule in a schema, which a DTO
+  // should have stopped first.
+  @Get("mongoose-invalid")
+  mongooseInvalid(): never {
+    const error = new MongooseError.ValidationError();
+    error.addError(
+      "message",
+      new MongooseError.ValidatorError({
+        path: "message",
+        message: "Message cannot exceed 280 characters",
+      }),
+    );
+    throw error;
   }
 
   @Get("mongo-dup")
@@ -184,6 +199,19 @@ describe("Exception filters (over HTTP)", () => {
         "a DTO should have stopped (22001): value too long for type character varying(100)",
     );
     expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("answers a value Mongoose refused with the same 400", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/mongoose-invalid").expect(400);
+
+    expect(body).toEqual({
+      statusCode: 400,
+      message: "A value in the request is not valid",
+      error: "Bad Request",
+    });
+    expect(logWarn).toHaveBeenCalledWith(
+      expect.stringContaining("GET /boom/mongoose-invalid for user anonymous"),
+    );
   });
 
   it("still lets QueryFailedFilter turn a unique violation into a 409", async () => {
