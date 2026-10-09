@@ -6,6 +6,11 @@ This is a vanilla NestJS project with two databases: PostgreSQL through TypeORM 
 
 Ensure you use the plain-english skill for all prose, commit messages, PR titles, PR descriptions, and text displayed to me. See `.agents/skills/plain-english`.
 
+## Context files
+
+- overview: `./context/overview.md`
+- coding-standards: `./context/coding-standards.md`
+
 ## Skills
 
 - nestjs-best-practices: `.agents/skills/nestjs-best-practices`
