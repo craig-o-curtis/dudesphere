@@ -278,8 +278,11 @@ export class AbidingsService {
     return { items: abidings.map((abiding) => this.toResponseDto(abiding)), total };
   }
 
+  // A real instance, not an object literal. ClassSerializerInterceptor only
+  // applies the DTO's @Expose and @Transform rules to an instance of the
+  // class, and a list hands these straight to toPaginatedResponse.
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
-    return {
+    return new AbidingResponseDto({
       id: abiding._id.toString(),
       userId: abiding.userId,
       message: abiding.message,
@@ -288,6 +291,6 @@ export class AbidingsService {
       updatedAt: abiding.updatedAt ?? "",
       replyToId: abiding.replyToId ?? undefined,
       hashtags: abiding.hashtags ?? [],
-    };
+    });
   }
 }

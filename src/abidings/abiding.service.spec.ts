@@ -10,6 +10,7 @@ import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
+import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 
 describe("AbidingsService", () => {
   let service: AbidingsService;
@@ -161,6 +162,19 @@ describe("AbidingsService", () => {
 
       expect(result.items.map((abiding) => abiding.id)).toEqual([mockAbiding._id.toString()]);
       expect(result.total).toBe(41);
+    });
+
+    // toPaginatedResponse passes items through, and the serializer applies
+    // the DTO's @Transform rules by looking at each item's class. An object
+    // literal has none.
+    it("returns real AbidingResponseDto instances", async () => {
+      abidingModel.find.mockReturnValue(
+        listQueryOf([{ _id: new mongoose.Types.ObjectId(), userId: 1, message: "hello" }]),
+      );
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items[0]).toBeInstanceOf(AbidingResponseDto);
     });
   });
 
