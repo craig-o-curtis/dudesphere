@@ -55,15 +55,19 @@ describe("RolesGuard", () => {
   // Before this guard existed, HashtagsController threw 401 here by hand.
   it("throws ForbiddenException when a user hits an admin route", () => {
     getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
+    const attempt = () => guard.canActivate(signedIn(UserRole.USER));
 
-    expect(() => guard.canActivate(signedIn(UserRole.USER))).toThrow(ForbiddenException);
+    expect(attempt).toThrow(ForbiddenException);
+    expect(attempt).toThrow(expect.objectContaining({ errorCode: "ROLE_REQUIRED" }));
   });
 
   // Unreachable while JwtAuthGuard runs first, which is why it is worth
   // pinning: a role rule with nobody to check is a missing identity, so 401.
   it("throws UnauthorizedException when a role is required and nobody is signed in", () => {
     getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
+    const attempt = () => guard.canActivate(contextFor({}));
 
-    expect(() => guard.canActivate(contextFor({}))).toThrow(UnauthorizedException);
+    expect(attempt).toThrow(UnauthorizedException);
+    expect(attempt).toThrow(expect.objectContaining({ errorCode: "TOKEN_MISSING" }));
   });
 });

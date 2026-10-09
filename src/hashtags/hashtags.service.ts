@@ -3,6 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
+import { ErrorCode } from "../shared/error-codes.js";
 import { normalizeHashtag } from "../shared/utils/hashtag.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
 import { Hashtag, HashtagDocument } from "./hashtag.schema.js";
@@ -132,7 +133,9 @@ export class HashtagsService {
     // blank timestamp, which is how UserAbidingsService treats the same case.
     const deletedAt = getUtcNow();
     if (!deletedAt) {
-      throw new ServiceUnavailableException("Could not read the current UTC time");
+      throw new ServiceUnavailableException("Could not read the current UTC time", {
+        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
+      });
     }
 
     // deletedAt: null so a tag that is already deleted keeps its first

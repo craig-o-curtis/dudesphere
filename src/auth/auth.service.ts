@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
+import { ErrorCode } from "../shared/error-codes.js";
 import { UsersService } from "../users/users.service.js";
 import type { JwtPayload } from "./auth-user.js";
 import { LoginUserDto } from "./dto/login-user.dto.js";
@@ -18,7 +19,9 @@ export class AuthService {
     // One message for both cases, so the response doesn't reveal which
     // emails have an account.
     if (!user) {
-      throw new UnauthorizedException("Invalid email or password");
+      throw new UnauthorizedException("Invalid email or password", {
+        errorCode: ErrorCode.BAD_CREDENTIALS,
+      });
     }
 
     const payload: JwtPayload = { sub: user.id, username: user.username, role: user.role };

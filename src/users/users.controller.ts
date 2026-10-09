@@ -5,8 +5,8 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
+import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
-import { ListUsersQueryDto } from "./dto/list-users-query.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
@@ -23,7 +23,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Get()
   // @HttpCode(200)
-  getUsers(@Query() query: ListUsersQueryDto): Promise<UserResponseDto[]> {
+  getUsers(@Query() query: PaginationQueryDto): Promise<UserResponseDto[]> {
     return this.usersService.getUsers(query.limit, query.page);
   }
 

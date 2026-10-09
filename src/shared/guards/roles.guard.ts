@@ -10,6 +10,7 @@ import { Reflector } from "@nestjs/core";
 import type { AuthUser } from "../../auth/auth-user.js";
 import type { UserRole } from "../../users/user.entity.js";
 import { ROLES_KEY } from "../auth-metadata.js";
+import { ErrorCode } from "../error-codes.js";
 
 interface RequestWithUser {
   user?: AuthUser;
@@ -47,13 +48,15 @@ export class RolesGuard implements CanActivate {
     // role rule with nobody to check is a missing identity, not a refused
     // one, so 401 rather than 403.
     if (!user) {
-      throw new UnauthorizedException("Not signed in");
+      throw new UnauthorizedException("Not signed in", { errorCode: ErrorCode.TOKEN_MISSING });
     }
 
     if (!required.includes(user.role)) {
       // Thrown, not `return false`, so the message is ours and a test can
       // assert it. Either way the status is 403.
-      throw new ForbiddenException("Not authorized to perform this action");
+      throw new ForbiddenException("Not authorized to perform this action", {
+        errorCode: ErrorCode.ROLE_REQUIRED,
+      });
     }
 
     return true;
