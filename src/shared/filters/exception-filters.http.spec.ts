@@ -27,6 +27,8 @@ import { DUPLICATE_KEY } from "./mongo-error.filter.js";
 import { UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
 const PASSWORD_HASH = "$2b$10$hash-that-must-never-be-logged";
+const FOREIGN_KEY_MESSAGE =
+  'insert or update on table "profile" violates foreign key constraint "FK_profile_userId"';
 
 // A controller that exists only to throw. Each route stands for one kind of
 // error the filters have to sort out, so this file proves the filter order
@@ -47,14 +49,26 @@ class BoomController {
     );
   }
 
-  // A failed insert that is not a conflict: 22001 is "value too long". The
-  // parameters stand for what a real user insert would carry.
+  // A failed insert that is a real fault: 23503 is a foreign key violation,
+  // which no caller input can cause here. The parameters stand for what a
+  // real user insert would carry.
   @Get("query")
   query(): never {
     throw new QueryFailedError(
       'INSERT INTO "user" ...',
       ["walter@example.com", PASSWORD_HASH],
-      Object.assign(new Error("value too long for type character varying(96)"), { code: "22001" }),
+      Object.assign(new Error(FOREIGN_KEY_MESSAGE), { code: "23503" }),
+    );
+  }
+
+  // A value the column cannot hold, which a DTO should have stopped: 22001 is
+  // "value too long".
+  @Get("bad-value")
+  badValue(): never {
+    throw new QueryFailedError(
+      'UPDATE "profile" ...',
+      ["a first name that is far too long"],
+      Object.assign(new Error("value too long for type character varying(100)"), { code: "22001" }),
     );
   }
 
@@ -87,11 +101,12 @@ class BoomController {
 describe("Exception filters (over HTTP)", () => {
   let app: INestApplication<App>;
   let logError: MockInstance<Logger["error"]>;
+  let logWarn: MockInstance<Logger["warn"]>;
 
   beforeEach(async () => {
     // Every route here logs an error on purpose. Keep the test output clean.
     logError = vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
-    vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
+    logWarn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
 
     const moduleFixture = await Test.createTestingModule({
       controllers: [BoomController],
@@ -139,9 +154,36 @@ describe("Exception filters (over HTTP)", () => {
 
     const logged = inspect(logError.mock.calls, { depth: null });
     expect(logged).toContain("GET /boom/query failed for user anonymous");
-    expect(logged).toContain("value too long for type character varying(96)");
+    expect(logged).toContain(FOREIGN_KEY_MESSAGE);
     expect(logged).not.toContain(PASSWORD_HASH);
     expect(logged).not.toContain("walter@example.com");
+  });
+
+  // The safety net for a value a DTO let through. The body is fixed, so it
+  // cannot quote the value, and it is a 400 because the caller sent it.
+  it("answers a value Postgres refused with a 400 that hides the driver message", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/bad-value").expect(400);
+
+    expect(body).toEqual({
+      statusCode: 400,
+      message: "A value in the request is not valid",
+      error: "Bad Request",
+    });
+  });
+
+  // A hit on the net means a DTO rule is missing. The warning is how someone
+  // finds out which route needs it.
+  it("logs a warning for that 400, naming the route and the request id", async () => {
+    await request(app.getHttpServer())
+      .get("/boom/bad-value")
+      .set("x-request-id", "trace-42")
+      .expect(400);
+
+    expect(logWarn).toHaveBeenCalledWith(
+      "GET /boom/bad-value for user anonymous (request trace-42): Postgres refused a value " +
+        "a DTO should have stopped (22001): value too long for type character varying(100)",
+    );
+    expect(logError).not.toHaveBeenCalled();
   });
 
   it("still lets QueryFailedFilter turn a unique violation into a 409", async () => {
