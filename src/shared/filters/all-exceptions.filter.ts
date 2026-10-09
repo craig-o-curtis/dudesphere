@@ -70,16 +70,33 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
   }
 
   private logFault(exception: unknown, host: ArgumentsHost): void {
-    const request = host.switchToHttp().getRequest<RequestLike>();
-    const route = `${request.method} ${request.originalUrl ?? request.url}`;
-    const user = request.user?.userId ?? "anonymous";
-    const requestId = request.headers[REQUEST_ID_HEADER] ?? "-";
+    const { route, caller } = this.requestParts(host);
     const message = exception instanceof Error ? exception.message : String(exception);
 
-    this.faultLogger.error(
-      `${route} failed for user ${user} (request ${String(requestId)}): ${message}`,
-      this.traceOf(exception),
-    );
+    this.faultLogger.error(`${route} failed for ${caller}: ${message}`, this.traceOf(exception));
+  }
+
+  /**
+   * Which request this is, for a log line: "PATCH /users/me for user 7
+   * (request abc)". The database filters put it on their warnings, so a
+   * warning can be traced to the route that caused it.
+   */
+  protected requestLine(host: ArgumentsHost): string {
+    const { route, caller } = this.requestParts(host);
+    return `${route} for ${caller}`;
+  }
+
+  private requestParts(host: ArgumentsHost): { route: string; caller: string } {
+    if (host.getType() !== "http") {
+      return { route: "A call outside HTTP", caller: "an unknown caller" };
+    }
+    const request = host.switchToHttp().getRequest<RequestLike>();
+    const user = request.user?.userId ?? "anonymous";
+    const requestId = request.headers[REQUEST_ID_HEADER] ?? "-";
+    return {
+      route: `${request.method} ${request.originalUrl ?? request.url}`,
+      caller: `user ${user} (request ${String(requestId)})`,
+    };
   }
 
   // Base logs an unknown error itself, stack included, so only an

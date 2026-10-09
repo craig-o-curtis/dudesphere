@@ -11,6 +11,7 @@ import { QueryFailedError } from "typeorm";
 import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
+import { invalidValue, isBadValueState } from "./invalid-value.js";
 
 /** Postgres unique_violation. */
 export const UNIQUE_VIOLATION = "23505";
@@ -21,6 +22,8 @@ export const UNIQUE_VIOLATION = "23505";
  * A unique violation means two callers raced, or a service forgot a lookup.
  * Either way it is a conflict, not a server fault, so it becomes a 409.
  * A lost connection becomes a 503, the same answer MongoErrorFilter gives.
+ * A value that does not fit its column becomes a 400: see invalid-value.ts
+ * for which codes count and which do not.
  * Every other database error keeps falling through to a 500 — those are real
  * faults and hiding them would only delay the fix.
  *
@@ -37,7 +40,9 @@ export class QueryFailedFilter extends AllExceptionsFilter {
     if (code === UNIQUE_VIOLATION) {
       // The driver message names the constraint and the conflicting value,
       // so it is logged rather than returned to the caller.
-      this.logger.warn(`Unique violation reached the database: ${exception.message}`);
+      this.logger.warn(
+        `${this.requestLine(host)}: unique violation reached the database: ${exception.message}`,
+      );
       super.catch(
         new ConflictException("That value is already taken", {
           cause: exception,
@@ -53,6 +58,19 @@ export class QueryFailedFilter extends AllExceptionsFilter {
     // again, so it is a 503 and not a 500.
     if (isDatabaseUnreachable(exception.driverError)) {
       super.catch(databaseUnavailable(exception), host);
+      return;
+    }
+
+    // Postgres refused a value: too long, not a date, not valid text. That is
+    // the caller's mistake, so it is a 400. It is also ours: a DTO should have
+    // stopped it first. The warning names the route so the missing rule can
+    // be found and added.
+    if (isBadValueState(code)) {
+      this.logger.warn(
+        `${this.requestLine(host)}: Postgres refused a value a DTO should have stopped ` +
+          `(${code}): ${exception.message}`,
+      );
+      super.catch(invalidValue(exception), host);
       return;
     }
 
