@@ -1,4 +1,3 @@
-import { ServiceUnavailableException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test } from "@nestjs/testing";
 
@@ -37,15 +36,13 @@ describe("UserAbidingsService", () => {
       );
     });
 
-    it("wraps a Mongo failure in a 503 that carries the original error as cause", async () => {
+    // The driver error itself, not a wrapper. UsersService needs the rejection
+    // to roll its transaction back, and MongoErrorFilter decides the status.
+    it("lets a Mongo failure escape unchanged", async () => {
       const driverError = new Error("socket closed");
       abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
 
-      const failure = await service.softDeleteForUser(3).catch((e: unknown) => e);
-
-      expect(failure).toBeInstanceOf(ServiceUnavailableException);
-      expect((failure as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-      expect((failure as ServiceUnavailableException).cause).toBe(driverError);
+      await expect(service.softDeleteForUser(3)).rejects.toBe(driverError);
     });
   });
 
@@ -59,15 +56,11 @@ describe("UserAbidingsService", () => {
       );
     });
 
-    it("wraps a Mongo failure in a 503 that carries the original error as cause", async () => {
+    it("lets a Mongo failure escape unchanged", async () => {
       const driverError = new Error("socket closed");
       abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
 
-      const failure = await service.restoreForUser(3).catch((e: unknown) => e);
-
-      expect(failure).toBeInstanceOf(ServiceUnavailableException);
-      expect((failure as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-      expect((failure as ServiceUnavailableException).cause).toBe(driverError);
+      await expect(service.restoreForUser(3)).rejects.toBe(driverError);
     });
   });
 });
