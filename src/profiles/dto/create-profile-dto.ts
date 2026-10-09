@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsOptional, IsString, IsUrl, MinLength, ValidateIf } from "class-validator";
 
 import { IsUtcDateTime } from "../../shared/decorators/is-utc-date-time.decorator.js";
 import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
@@ -26,7 +26,9 @@ export class CreateProfileDto {
   @NoNulCharacter()
   bio?: string;
 
-  @IsString()
+  // Same rule as an abiding's imageUrl. @NoNulCharacter stays: @IsUrl lets a
+  // NUL through.
+  @IsUrl()
   @IsOptional()
   @NoNulCharacter()
   profileImageUrl?: string;
