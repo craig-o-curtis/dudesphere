@@ -35,8 +35,9 @@ describe("PaginationQueryDto", () => {
     expect(plainToInstance(PaginationQueryDto, {})).toMatchObject({ limit: 10, page: 1 });
   });
 
-  // A missing key never reaches the @Transform. A key that is present with no
-  // value does, and the transform has to hand the default back.
+  // A missing key never reaches the @Transform. A key set to undefined does,
+  // and the transform has to hand the default back. Only code can do that:
+  // a query string cannot, and its empty value (?limit=) is "" and a 400.
   it("keeps the defaults when a key is present but undefined", async () => {
     const dto = plainToInstance(PaginationQueryDto, { limit: undefined, page: undefined });
 

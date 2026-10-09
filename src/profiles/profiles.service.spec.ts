@@ -15,7 +15,6 @@ describe("ProfilesService", () => {
 
   // A fake repository: only the methods ProfilesService actually calls.
   const profileRepository = {
-    find: vi.fn(),
     findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
