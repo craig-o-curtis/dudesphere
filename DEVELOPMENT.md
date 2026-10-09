@@ -141,6 +141,48 @@ db.abidings.updateMany({}, { $unset: { username: "" } });
 that only the seed ever wrote, and every response already read the current
 name from Postgres.
 
+### When you change an index
+
+Indexes are declared at the bottom of each schema file with
+`Schema.index(...)`. Mongoose builds any that are missing when the app starts.
+It never drops one. So after you change an index, the new one appears on the
+next start and the old one stays behind. An unused index does no harm to a
+read, but every write still updates it.
+
+List what is there:
+
+```js
+db.abidings.getIndexes();
+```
+
+Drop one by name:
+
+```js
+db.abidings.dropIndex("createdAt_-1");
+```
+
+The list routes sort by `{ createdAt: -1, _id: -1 }`, and four indexes were
+changed to end with those two keys. These are the four they replaced. Drop
+them once, in `mongosh` or Mongo Express, in any database that had them:
+
+```js
+db.abidings.dropIndex("createdAt_-1");
+db.abidings.dropIndex("userId_1_createdAt_-1");
+db.abidings.dropIndex("hashtags_1_createdAt_-1");
+db.abidings.dropIndex("userId_1_hashtags_1");
+```
+
+To check that a query reads from an index, ask Mongo for its plan. A `SORT`
+stage in the answer means it sorted in memory and the index did not help:
+
+```js
+db.abidings
+  .find({ deletedAt: null, userId: 1 })
+  .sort({ createdAt: -1, _id: -1 })
+  .limit(10)
+  .explain("executionStats");
+```
+
 ## Seeds and Backfills
 
 ### Seed data
@@ -291,8 +333,13 @@ these rules leaves rows behind on every run.
   `test/listen-on-loopback.ts` explains how.
 - **Suites run in parallel, against one database.** Make every name random, and
   never assert on a count that another suite or your own dev data could change,
-  such as the length of `GET /abidings`. Use
+  such as `meta.totalItems` on `GET /abidings`. A count is safe once the list
+  is filtered by something only your suite made, such as its own user id. Use
   `randomUUID()`: the lint rules ban `Date.now()`.
+- **A list comes back one page at a time.** The row you are looking for may
+  not be on page 1 of the dev database. To check that a row is on a list, or
+  is not, follow `links.next` to the end, as `listEverySlug` does in
+  `test/hashtags.e2e-spec.ts`.
 - **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
   links its abidings to the e2e run, and no later run removes them. If that
   happens, delete the stranded abidings in Mongo Express.

@@ -157,31 +157,34 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 
 ## API Endpoints
 
+Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, default 1), and answers with `data`, `meta` and `links`. Follow `links.next` until it is `null` to read a whole list. See "How to paginate a list" in [src/shared/dto/README.md](src/shared/dto/README.md).
+
 ### Users
 
-| Method | Endpoint   | Description    |
-| ------ | ---------- | -------------- |
-| GET    | /users     | Get all users  |
-| GET    | /users/:id | Get user by ID |
-| POST   | /users     | Create a user  |
-| PATCH  | /users/:id | Update a user  |
-| DELETE | /users/:id | Delete a user  |
+| Method | Endpoint   | Description                        |
+| ------ | ---------- | ---------------------------------- |
+| GET    | /users     | List users, paginated (admin only) |
+| GET    | /users/:id | Get user by ID                     |
+| POST   | /users     | Create a user                      |
+| PATCH  | /users/:id | Update a user                      |
+| DELETE | /users/:id | Delete a user                      |
 
 ### Abidings
 
-| Method | Endpoint     | Description       |
-| ------ | ------------ | ----------------- |
-| GET    | /abiding     | Get all abidings  |
-| GET    | /abiding/:id | Get abiding by ID |
-| POST   | /abiding     | Create a abiding  |
-| PATCH  | /abiding/:id | Update a abiding  |
-| DELETE | /abiding/:id | Delete a abiding  |
+| Method | Endpoint      | Description                                        |
+| ------ | ------------- | -------------------------------------------------- |
+| GET    | /abidings     | List abidings, paginated, newest first             |
+| GET    | /abidings/me  | The caller's own abidings, paginated, newest first |
+| GET    | /abidings/:id | Get abiding by ID                                  |
+| POST   | /abidings     | Create an abiding                                  |
+| PATCH  | /abidings/:id | Update an abiding                                  |
+| DELETE | /abidings/:id | Delete an abiding                                  |
 
 ### Hashtags
 
 | Method | Endpoint                | Description                                      |
 | ------ | ----------------------- | ------------------------------------------------ |
-| GET    | /hashtags               | List every live hashtag, alphabetically          |
+| GET    | /hashtags               | List live hashtags, paginated, alphabetically    |
 | GET    | /hashtags/:slug         | Get one hashtag                                  |
 | DELETE | /hashtags/:slug         | Soft-delete a hashtag from the list (admin only) |
 | POST   | /hashtags/:slug/restore | Restore a deleted hashtag (admin only)           |
