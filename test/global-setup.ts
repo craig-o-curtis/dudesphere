@@ -5,18 +5,24 @@
 // if the previous run was killed, and ends with nothing left behind.
 //
 // Every e2e suite creates its users with an e2e- email and username, and its
-// hashtags with an e2e slug (see unusedSlug in hashtags.e2e-spec.ts). Those
-// prefixes are the contract this file relies on: a suite that creates rows
-// under another name leaves them behind.
+// hashtags as e2e plus 12 hex characters (see unusedSlug in
+// hashtags.e2e-spec.ts). Those shapes are the contract this file relies on: a
+// suite that creates rows under another name leaves them behind.
 //
-// The seeded admin and any real dev data do not match the prefixes, so this
+// The seeded admin and any real dev data do not match the shapes, so this
 // never touches them.
 import "dotenv/config";
 import { mongo } from "mongoose";
 import { DataSource } from "typeorm";
 
 const E2E_EMAIL = "e2e-%@example.com";
-const E2E_SLUG = /^e2e/;
+// The whole slug, not just its start. A slug cannot hold a hyphen, so there is
+// no e2e- prefix to lean on, and /^e2e/ alone would also delete a real tag
+// such as #e2etesting.
+const E2E_SLUG = /^e2e[0-9a-f]{12}$/;
+// The app's own default (src/config/env.validate.ts). An unset or empty
+// MONGO_URI is valid there, so it has to work here too.
+const DEFAULT_MONGO_URI = "mongodb://localhost:27017/dude-abidings";
 
 async function cleanup(label: string): Promise<void> {
   // Not src/database/data-source.ts: that one lists the *.entity.ts files by
@@ -30,16 +36,24 @@ async function cleanup(label: string): Promise<void> {
     password: process.env.PG_ADMIN_PW,
     database: process.env.PG_DATABASE,
   });
-  const client = new mongo.MongoClient(process.env.MONGO_URI ?? "");
+  // || and not ??: an empty MONGO_URI counts as unset, as it does in the app.
+  const client = new mongo.MongoClient(process.env.MONGO_URI || DEFAULT_MONGO_URI);
   await dataSource.initialize();
 
   try {
-    // The ids first: the Mongo abidings are keyed by userId, so they have to
-    // be found before the users go.
     const found = (await dataSource.query(`SELECT id FROM "user" WHERE email LIKE $1`, [
       E2E_EMAIL,
     ])) as { id: number }[];
     const ids = found.map((row) => row.id);
+
+    // Mongo before Postgres. The abidings are keyed by userId, and the user
+    // rows are the only place those ids can be read from. If the users went
+    // first and Mongo then failed, no later run could find the abidings. This
+    // way round, a failure here leaves the users in place for the next run.
+    await client.connect();
+    const db = client.db();
+    const abidings = await db.collection("abidings").deleteMany({ userId: { $in: ids } });
+    const hashtags = await db.collection("hashtags").deleteMany({ slug: E2E_SLUG });
 
     // The profile first, because its foreign key points at the user. These are
     // real DELETEs: the app only ever soft-deletes, so this is the one place
@@ -52,11 +66,6 @@ async function cleanup(label: string): Promise<void> {
     const [, users] = (await dataSource.query(`DELETE FROM "user" WHERE id = ANY($1::int[])`, [
       ids,
     ])) as [unknown, number];
-
-    await client.connect();
-    const db = client.db();
-    const abidings = await db.collection("abidings").deleteMany({ userId: { $in: ids } });
-    const hashtags = await db.collection("hashtags").deleteMany({ slug: E2E_SLUG });
 
     console.log(
       `[e2e ${label}] removed ${users} users, ${profiles} profiles, ` +
