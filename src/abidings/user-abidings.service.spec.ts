@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test } from "@nestjs/testing";
 
@@ -35,6 +36,16 @@ describe("UserAbidingsService", () => {
         { $set: { deletedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/) } },
       );
     });
+
+    it("wraps a Mongo failure in a 503 that carries the original error as cause", async () => {
+      const driverError = new Error("socket closed");
+      abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
+
+      const failure = await service.softDeleteForUser(3).catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      expect((failure as ServiceUnavailableException).cause).toBe(driverError);
+    });
   });
 
   describe("restoreForUser", () => {
@@ -45,6 +56,16 @@ describe("UserAbidingsService", () => {
         { userId: 3, deletedAt: { $ne: null } },
         { $set: { deletedAt: null } },
       );
+    });
+
+    it("wraps a Mongo failure in a 503 that carries the original error as cause", async () => {
+      const driverError = new Error("socket closed");
+      abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
+
+      const failure = await service.restoreForUser(3).catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      expect((failure as ServiceUnavailableException).cause).toBe(driverError);
     });
   });
 });
