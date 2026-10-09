@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsNotEmpty, IsString, ValidateIf } from "class-validator";
 
 import { UpdateUserDto } from "./update-user.dto.js";
 
@@ -14,7 +14,10 @@ export class UpdateMyUserDto extends UpdateUserDto {
   // two fields, and it also has to compare this against the stored hash.
   // No length rule, for the reason LoginUserDto gives: a rule here that
   // differs from sign-up's would lock out users with a valid password.
-  @IsOptional()
+  //
+  // Not @IsOptional(): that also skips null, and a null here reached the
+  // password hasher and came back as a 500. This skips a missing field only.
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   currentPassword?: string;
