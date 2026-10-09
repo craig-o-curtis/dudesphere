@@ -42,6 +42,8 @@ Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose)
   - Flag code that loads a page with `getUsers()` and then calls `.find()` on it. Anyone past the first page is missed.
   - Flag one lookup per item. That's an N+1.
 - **Bound Mongo lists.** A per-user list needs a sort and a limit. The `{ userId: 1, createdAt: -1 }` index exists for this.
+- **Check references in the service.** Mongo has no foreign keys. A field that names another document, such as an abiding's `replyToId`, needs its shape checked in the DTO (`@IsMongoId`) and its target checked in the service (`AbidingsService.assertReplyTargetExists`). Flag a new reference field with neither.
+- **Updates skip the schema.** `findOneAndUpdate`, `updateOne` and `updateMany` run no schema validators unless the call passes `runValidators: true`.
 - **Nesting across databases.** Putting Mongo data inside a Postgres-backed response ties the endpoint to both databases. It also tends to create module cycles; see [Module boundaries](#module-boundaries).
 
 ## DTOs and entities
@@ -54,6 +56,8 @@ Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose)
 Services return DTOs built by a mapper, such as `UsersService.toResponseDto` or `ProfileResponseDto.fromEntity`. They never return entities.
 
 - **Loaded isn't returned.** A relation loaded with `relations` but not passed to the mapper never reaches the client. Follow each new field from the query, through the mapper, to the DTO.
+- **Hand-built responses drop fields.** `AbidingsController` builds `AbidingResponseDto` by hand in five places. A field added to the DTO must be added to each one, or it is stored and never returned: `imageUrl` and `updatedAt` were both lost this way. Flag a new field on a response DTO that is not set at every place the DTO is built.
+- **Accepted is not stored.** Follow each field of a create or update DTO to the write. `CreateAbidingDto.imageUrl` was validated and then never passed to the model.
 - **`undefined` vs `null`.** `undefined` keys disappear from the JSON, while `null` keys stay. Choose deliberately.
 - **Secrets stay out.** `password` is `@Exclude()`d and never mapped.
 
@@ -88,7 +92,8 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 - **A value the database refuses is a 400, and a bug.** `QueryFailedFilter` turns the Postgres codes listed in `src/shared/filters/invalid-value.ts` (too long, not a date, a NUL character, bad text for the type) into a 400 with a fixed message, and logs a warning with the route and request id. The DTO is still the place to stop the value: flag a new field stored in Postgres that lacks `@MaxCodePoints` for a sized column or `@NoNulCharacter` for a string, and flag an update DTO built with `PartialType` that does not pass `{ skipNullProperties: false }`. A not-null violation (`23502`) stays a 500 on purpose; do not add it to the list. `MongoErrorFilter` does the same for Mongoose's `ValidationError` and `CastError`. A Mongoose write that should obey the schema needs `runValidators: true`: `findOneAndUpdate`, `updateOne` and `updateMany` skip the schema's rules without it.
 - **A database that cannot be reached is a 503.** All three filters answer it with `databaseUnavailable()` from `src/shared/filters/database-unavailable.ts`, so the body and `DATABASE_UNAVAILABLE` are the same for Postgres and Mongo. `AllExceptionsFilter` handles the case where a driver throws a plain `Error`, as pg does when Postgres refuses the connection. Flag a service that catches a database error to build its own 503: the error must escape so a transaction rolls back, and the filters already map it.
 - **Requests have a time limit.** `TimeoutInterceptor` (`src/shared/interceptors/`) answers 408 after `REQUEST_TIMEOUT_MS`. It ends the wait, not the work. Mongo's `serverSelectionTimeoutMS` in `app.module.ts` must stay below that limit, or a Mongo outage answers 408 and not 503.
-- **Query parameters stay out of the log.** A `QueryFailedError` carries the values its query ran with, such as an email and a password hash. `QueryFailedFilter` wraps its 500 so only the stack is logged. Flag code that hands a raw `QueryFailedError` to Nest's base filter or to a logger.
+- **A plain socket error is read as a database outage.** `AllExceptionsFilter` answers `ECONNREFUSED` and its like with the `DATABASE_UNAVAILABLE` 503, because today only the two databases open outbound connections. Flag a new outbound client (HTTP, mail, a queue) that lets its connection errors escape: it must catch them and throw its own exception.
+- **Query parameters stay out of the log.** A `QueryFailedError` carries the values its query ran with, such as an email and a password hash. `QueryFailedFilter` wraps its 500 so only the stack is logged. `MongoErrorFilter` does the same, because a Mongo server error can hold the document it refused. Both use `databaseFault()` from `src/shared/filters/database-fault.ts`. Flag code that hands a raw `QueryFailedError` or Mongo error to Nest's base filter or to a logger.
 - **Filter order.** In `configureApp`, `AllExceptionsFilter` is registered first. Nest tries global filters last to first, so a catch-all registered later would swallow the specific ones. Flag a reorder.
 - **No timestamps in error bodies.** The body is Nest's `{ statusCode, message, error }` plus `errorCode`. A timestamp would need `Date`, which app code does not use.
 
@@ -101,6 +106,7 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 ## Tests
 
 - **Logic tests go in service specs.** Controller specs only check delegation: the right arguments reach the service, and the result comes back unchanged (`toBe`). Pipes, guards, filters, status codes, error bodies and serialization only run on real HTTP requests. Those that need no database go in a `*.http.spec.ts` next to the code, with mocked services (see `src/shared/dto/id-param.http.spec.ts`). Those that need real data go in e2e tests (`test/`, `pnpm test:e2e`).
+- **E2E runs only against local databases.** `test/global-setup.ts` refuses to start unless Postgres and Mongo are on this machine (`test/local-databases.ts`), because the suites write rows and the cleanup hard-deletes them. Flag a change that weakens that check. E2E users keep an `e2e-…@example.com` email, and test messages hold no `#tag`.
 - **Bug fixes need a test.** It should fail without the fix.
 - **Use distinct values.** Pass arguments that differ from the defaults and from each other, like `getUsers(5, 2)` rather than `(10, 1)`, so swapped arguments fail.
 - **Keep mocks in their own variable.** Store `vi.fn()` mocks for `EntityManager` methods in a variable. Reading them off an object cast `as EntityManager` triggers the `unbound-method` lint warning.
