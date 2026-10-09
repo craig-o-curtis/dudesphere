@@ -34,13 +34,13 @@ export class UsersService {
     private readonly hashingProvider: HashingProvider,
   ) {}
 
-  async getUsers(request: PageRequest): Promise<Page<UserResponseDto>> {
+  async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
     const [users, total] = await this.usersRepository.findAndCount({
       // A fixed order. Without one Postgres may return rows in any order, so
       // two pages of the same list could repeat a user or skip one.
       order: { id: "ASC" },
-      skip: toSkip(request),
-      take: request.limit,
+      skip: toSkip(pageRequest),
+      take: pageRequest.limit,
     });
     return { items: users.map((user) => this.toResponseDto(user)), total };
   }
