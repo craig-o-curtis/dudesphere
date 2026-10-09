@@ -4,6 +4,7 @@ import { Model } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { ErrorCode } from "../shared/error-codes.js";
 import {
   extractHashtagDisplays,
   extractHashtags,
@@ -148,7 +149,9 @@ export class AbidingsService {
 
     if (!updatedAbiding) {
       await this.assertExists(id);
-      throw new ForbiddenException("Not authorized to edit this abiding");
+      throw new ForbiddenException("Not authorized to edit this abiding", {
+        errorCode: ErrorCode.NOT_OWNER,
+      });
     }
 
     // An edit can introduce tags the registry has never seen. Tags the edit
@@ -173,7 +176,9 @@ export class AbidingsService {
       .exec();
     if (!result) {
       await this.assertExists(abidingId);
-      throw new ForbiddenException("Not authorized to delete this abiding");
+      throw new ForbiddenException("Not authorized to delete this abiding", {
+        errorCode: ErrorCode.NOT_OWNER,
+      });
     }
   }
 

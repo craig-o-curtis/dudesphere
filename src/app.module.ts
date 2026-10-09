@@ -68,6 +68,11 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [mongoConfig.KEY],
       useFactory: (mongo: ConfigType<typeof mongoConfig>) => ({
         uri: mongo.uri,
+        // How long a query waits for a reachable server. The driver's default
+        // is 30 seconds, longer than the 10 second request limit, so a Mongo
+        // outage would answer 408. At 5 seconds MongoErrorFilter still gets
+        // the error and answers 503 with DATABASE_UNAVAILABLE.
+        serverSelectionTimeoutMS: 5_000,
       }),
     }),
     UsersModule,

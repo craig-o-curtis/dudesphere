@@ -13,6 +13,7 @@ import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
+import { ErrorCode } from "../shared/error-codes.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -109,7 +110,8 @@ export class UsersService {
         withDeleted: true,
       });
       if (existing) {
-        throw new ConflictException(takenFieldMessage(existing, createUserDto));
+        const { message, errorCode } = takenField(existing, createUserDto);
+        throw new ConflictException(message, { errorCode });
       }
 
       const user = await manager.save(
@@ -154,7 +156,9 @@ export class UsersService {
       // 403, not 401. The caller is signed in, so a client must not treat
       // this as an expired session and log them out.
       if (!matches) {
-        throw new ForbiddenException("Current password is incorrect");
+        throw new ForbiddenException("Current password is incorrect", {
+          errorCode: ErrorCode.WRONG_PASSWORD,
+        });
       }
     }
 
@@ -186,7 +190,8 @@ export class UsersService {
         withDeleted: true,
       });
       if (existing) {
-        throw new ConflictException(takenFieldMessage(existing, updateUserDto));
+        const { message, errorCode } = takenField(existing, updateUserDto);
+        throw new ConflictException(message, { errorCode });
       }
     }
 
@@ -272,17 +277,18 @@ export class UsersService {
 }
 
 /**
- * Names the field that collided so a 409 tells the caller what to change.
+ * Names the field that collided so a 409 tells the caller what to change,
+ * and gives it a code the client can branch on.
  * Only email is compared directly — a row that came back without matching the
  * attempted email must have matched on username, because those are the two
  * fields the lookup searched.
  */
-function takenFieldMessage(
+function takenField(
   existing: Pick<User, "email" | "username">,
   attempted: { email?: string; username?: string },
-): string {
+): { message: string; errorCode: ErrorCode } {
   if (attempted.email && existing.email === attempted.email) {
-    return "Email already registered";
+    return { message: "Email already registered", errorCode: ErrorCode.EMAIL_TAKEN };
   }
-  return "Username already taken";
+  return { message: "Username already taken", errorCode: ErrorCode.USERNAME_TAKEN };
 }

@@ -1,6 +1,5 @@
 import "reflect-metadata";
 import * as path from "path";
-import * as process from "process";
 
 import { NestFactory } from "@nestjs/core";
 import * as dotenv from "dotenv";
@@ -25,7 +24,9 @@ async function runSeeds() {
 
   if (!adminEmail || !adminPassword) {
     console.error("EMAIL and PASSWORD must be set in .env");
-    process.exit(1);
+    process.exitCode = 1;
+    await app.close();
+    return;
   }
 
   try {
@@ -45,7 +46,9 @@ async function runSeeds() {
     // The message only. A failed query's error object also carries the values
     // it was run with, and for the admin row those include the password hash.
     console.error("Error running seeds:", error instanceof Error ? error.message : error);
-    process.exit(1);
+    // exitCode rather than exit(): exit() skips the finally below and leaves
+    // the connections open until the process is killed.
+    process.exitCode = 1;
   } finally {
     await app.close();
   }

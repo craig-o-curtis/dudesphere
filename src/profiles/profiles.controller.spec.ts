@@ -48,13 +48,11 @@ describe("ProfilesController", () => {
   });
 
   describe("getProfiles", () => {
-    // The defaults come from DefaultValuePipe, which only runs on a real
-    // request, so a unit test can't cover them.
     it("delegates to ProfilesService.getProfiles with the limit and page", async () => {
       const profiles = [mockProfile];
       profilesServiceMock.getProfiles.mockResolvedValue(profiles);
 
-      const result = await controller.getProfiles(5, 3);
+      const result = await controller.getProfiles({ limit: 5, page: 3 });
 
       expect(profilesServiceMock.getProfiles).toHaveBeenCalledWith(5, 3);
       expect(result).toBe(profiles);

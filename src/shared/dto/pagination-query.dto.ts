@@ -1,9 +1,12 @@
 import { Type } from "class-transformer";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
 
-export class ListUsersQueryDto {
+// Far past any real list, and far below where an OFFSET stops fitting.
+export const MAX_PAGE = 1_000_000;
+
+export class PaginationQueryDto {
   // Query params arrive as strings. @Type converts before @IsInt runs — the
-  // global ValidationPipe in main.ts does not enable implicit conversion.
+  // global ValidationPipe in src/app-setup.ts does not enable implicit conversion.
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -18,5 +21,8 @@ export class ListUsersQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  // The other end of the same bug. A page of 1e20 passes @IsInt, and its
+  // OFFSET overflows Postgres's bigint, which is also a 500.
+  @Max(MAX_PAGE)
   page: number = 1;
 }

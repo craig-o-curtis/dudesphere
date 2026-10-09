@@ -325,9 +325,10 @@ describe("ProfilesService", () => {
       // It exists, so nothing matching means the caller does not own it.
       profileRepository.findOne.mockResolvedValue(mockProfile);
 
-      await expect(service.updateProfile(1, { bio: "x" }, other)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      const attempt = service.updateProfile(1, { bio: "x" }, other);
+
+      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });
 });

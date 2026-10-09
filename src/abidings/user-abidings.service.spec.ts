@@ -35,6 +35,15 @@ describe("UserAbidingsService", () => {
         { $set: { deletedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/) } },
       );
     });
+
+    // The driver error itself, not a wrapper. UsersService needs the rejection
+    // to roll its transaction back, and MongoErrorFilter decides the status.
+    it("lets a Mongo failure escape unchanged", async () => {
+      const driverError = new Error("socket closed");
+      abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
+
+      await expect(service.softDeleteForUser(3)).rejects.toBe(driverError);
+    });
   });
 
   describe("restoreForUser", () => {
@@ -45,6 +54,13 @@ describe("UserAbidingsService", () => {
         { userId: 3, deletedAt: { $ne: null } },
         { $set: { deletedAt: null } },
       );
+    });
+
+    it("lets a Mongo failure escape unchanged", async () => {
+      const driverError = new Error("socket closed");
+      abidingModel.updateMany.mockReturnValueOnce({ exec: vi.fn().mockRejectedValue(driverError) });
+
+      await expect(service.restoreForUser(3)).rejects.toBe(driverError);
     });
   });
 });
