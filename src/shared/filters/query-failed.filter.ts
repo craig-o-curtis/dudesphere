@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
+import {
+  ArgumentsHost,
+  Catch,
+  ConflictException,
+  HttpStatus,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
 import { ErrorCode } from "../error-codes.js";
@@ -16,7 +23,7 @@ export const UNIQUE_VIOLATION = "23505";
  * faults and hiding them would only delay the fix.
  *
  * Extends AllExceptionsFilter so the 500 path gets the same log line as
- * every other fault.
+ * every other fault. That path never logs the query's parameters.
  */
 @Catch(QueryFailedError)
 export class QueryFailedFilter extends AllExceptionsFilter {
@@ -39,6 +46,17 @@ export class QueryFailedFilter extends AllExceptionsFilter {
       return;
     }
 
-    super.catch(exception, host);
+    // Not passed on as it is. Base would print the whole QueryFailedError,
+    // and that object carries the values the query ran with: for a user
+    // insert, the email and the password hash. Wrapped, the fault is logged
+    // as the context line plus the stack, which names the driver message and
+    // nothing else. The body is the one Base writes for any unknown error.
+    super.catch(
+      new InternalServerErrorException(
+        { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: "Internal server error" },
+        { cause: exception },
+      ),
+      host,
+    );
   }
 }
