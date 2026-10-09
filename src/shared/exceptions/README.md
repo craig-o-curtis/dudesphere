@@ -20,6 +20,9 @@ throw new NotOwnerException("Not authorized to edit this abiding");
 A custom exception is still its built-in parent. Nest answers it the same
 way, with the same body, and no filter has to know about it.
 
+The full lesson, with how to write and test one, is in
+`reference/NESTJS_CUSTOM_EXCEPTIONS.md`.
+
 ## When a failure gets a class here
 
 A failure gets its own class when either of these is true:
