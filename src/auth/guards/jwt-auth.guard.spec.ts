@@ -60,14 +60,46 @@ describe("JwtAuthGuard", () => {
     expect(verifyAsync).not.toHaveBeenCalled();
   });
 
-  // A public route is reached by callers with no token at all, so the guard
-  // must not look at the header.
-  it("lets a @Public() route through without reading the header", async () => {
-    getAllAndOverride.mockReturnValue(true);
+  // On a public route the token is optional. Nobody has to send one, but a
+  // caller who sends a good one is still that user.
+  describe("on a @Public() route", () => {
+    beforeEach(() => {
+      getAllAndOverride.mockReturnValue(true);
+    });
 
-    await expect(guard.canActivate(contextFor({ headers: {} }))).resolves.toBe(true);
+    it("lets a caller with no token through, and verifies nothing", async () => {
+      const request: { headers: object; user?: unknown } = { headers: {} };
 
-    expect(verifyAsync).not.toHaveBeenCalled();
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(verifyAsync).not.toHaveBeenCalled();
+      expect(request.user).toBeUndefined();
+    });
+
+    // Without this a fault on a public route was logged as "anonymous" even
+    // for a signed-in caller.
+    it("puts the user on the request when the token is good", async () => {
+      verifyAsync.mockResolvedValue({ sub: 25, username: "walter", role: UserRole.USER });
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer signed.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(request.user).toEqual({ userId: 25, username: "walter", role: UserRole.USER });
+    });
+
+    // An expired token must not lock anyone out of a page that needs none.
+    it("still lets the caller through, as nobody, when the token is bad", async () => {
+      verifyAsync.mockRejectedValue(new Error("jwt expired"));
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer stale.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(request.user).toBeUndefined();
+    });
   });
 
   it("throws 401 when the token is forged or expired, and keeps the reason as cause", async () => {
