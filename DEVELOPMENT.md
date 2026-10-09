@@ -177,6 +177,104 @@ It walks the whole collection with a cursor, so it does not load every abiding
 into memory, but it does write to every abiding. On a large collection, expect
 it to take a while.
 
+## End-to-End Tests
+
+```bash
+pnpm test:e2e                              # every suite
+pnpm test:e2e test/hashtags.e2e-spec.ts    # one suite
+```
+
+The suites live in `test/*.e2e-spec.ts`. They run against the databases named
+in `.env`, which are your dev databases. There is no separate test database.
+
+Before the first run:
+
+```bash
+docker compose up -d
+pnpm migration:run
+pnpm seed:run
+```
+
+The seed matters. `authorization.e2e-spec.ts` and `profile-me.e2e-spec.ts` log
+in as the seeded admin, with `EMAIL` and `PASSWORD` from `.env`.
+
+### How the cleanup works
+
+`test/global-setup.ts` deletes what the suites wrote. `vitest.config.e2e.ts`
+registers it as `globalSetup`, so vitest runs it once before the first suite
+and once after the last one. Both runs do the same cleanup. A run that was
+killed halfway is cleaned up by the start of the next one.
+
+It finds e2e data by its shape, in this order:
+
+1. **Users.** It reads the ids of every `user` row whose email matches
+   `e2e-%@example.com`.
+2. **Abidings (Mongo).** It deletes every abiding whose `userId` is one of
+   those ids.
+3. **Hashtags (Mongo).** It deletes every hashtag whose slug is `e2e` followed
+   by exactly 12 hex characters, such as `e2e3f7af56bef13`.
+4. **Profiles, then users (Postgres).** It deletes the `profile` rows for those
+   ids, then the `user` rows.
+
+These are real deletes, not soft deletes. The seeded admin and your own dev
+data match none of the shapes, so the cleanup leaves them alone.
+
+Mongo goes before Postgres on purpose. An abiding holds nothing that marks it
+as e2e data except its `userId`, and the `user` row is the only place that id
+can be read from. If the Mongo step fails, the users are still there, so the
+next run finds the same abidings and tries again.
+
+Each cleanup prints one line:
+
+```text
+[e2e before] removed 0 users, 0 profiles, 0 abidings, 0 hashtags
+[e2e after] removed 6 users, 6 profiles, 4 abidings, 1 hashtags
+```
+
+A `before` line with numbers above zero means the last run did not finish. That
+is fine: this run has now cleaned up after it.
+
+### Rules for a new suite
+
+The cleanup can only delete what it can recognise. A suite that breaks one of
+these rules leaves rows behind on every run.
+
+- **Give every user an `e2e-` email at `example.com` and an `e2e-` username.**
+  Copy `registerAndLogin` in `authorization.e2e-spec.ts`.
+- **Post abidings as a user you registered.** `POST /abidings` takes the author
+  from the token and answers 404 when that user is deleted or does not exist.
+  So a forged token can only post when its `sub` is the id of a real user, and
+  that user must be an e2e one. This check is what keeps every abiding tied to
+  a `user` row the cleanup can find.
+- **Build hashtags as `e2e` plus 12 hex characters.** Copy `unusedSlug` in
+  `hashtags.e2e-spec.ts`. A slug cannot hold a hyphen, so there is no `e2e-`
+  prefix to match on. The cleanup matches the whole shape so that it cannot
+  delete a real tag such as `#e2etesting`.
+- **If a suite writes to a new table or collection, add it to
+  `test/global-setup.ts`** in the same change.
+
+### Tips
+
+- **`pnpm start:dev` can stay running.** Each suite starts its own copy of the
+  app on a free port.
+- **Start each suite the way the others do.** Call `configureApp(app)`, then
+  `listenOnLoopback(app)` in place of `app.init()`. The first gives the suite
+  the same pipes, filters and interceptors as `main.ts`. The second stops a
+  request from reaching another program on your machine. The comment in
+  `test/listen-on-loopback.ts` explains how.
+- **Suites run in parallel, against one database.** Make every name random, and
+  never assert on a count that another suite or your own dev data could change,
+  such as the length of `GET /abidings`. Use
+  `randomUUID()`: the lint rules ban `Date.now()`.
+- **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
+  links its abidings to the e2e run, and no later run removes them. If that
+  happens, delete the stranded abidings in Mongo Express.
+- **Guards can only be tested here.** `JwtAuthGuard` and `RolesGuard` are
+  registered in `AppModule`, and a unit controller spec never loads them. A
+  401 or 403 test belongs in an e2e suite.
+- **CI runs the same suites** against empty databases that it throws away. See
+  "Continuous Integration" in the [README](README.md).
+
 ## Troubleshooting
 
 ### "role does not exist" error
