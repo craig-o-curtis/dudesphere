@@ -44,18 +44,19 @@ describe("JwtAuthGuard", () => {
   });
 
   it("throws 401 when there is no Authorization header", async () => {
-    await expect(guard.canActivate(contextFor({ headers: {} }))).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    const attempt = guard.canActivate(contextFor({ headers: {} }));
+
+    await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(attempt).rejects.toMatchObject({ errorCode: "TOKEN_MISSING" });
     expect(verifyAsync).not.toHaveBeenCalled();
   });
 
   it("throws 401 when the header is not a Bearer token", async () => {
     const request = { headers: { authorization: "Basic abc123" } };
+    const attempt = guard.canActivate(contextFor(request));
 
-    await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(attempt).rejects.toMatchObject({ errorCode: "TOKEN_MISSING" });
     expect(verifyAsync).not.toHaveBeenCalled();
   });
 
@@ -69,15 +70,18 @@ describe("JwtAuthGuard", () => {
     expect(verifyAsync).not.toHaveBeenCalled();
   });
 
-  it("throws 401 when the token is forged or expired", async () => {
-    verifyAsync.mockRejectedValue(new Error("jwt expired"));
+  it("throws 401 when the token is forged or expired, and keeps the reason as cause", async () => {
+    const reason = new Error("jwt expired");
+    verifyAsync.mockRejectedValue(reason);
     const request: { headers: object; user?: unknown } = {
       headers: { authorization: "Bearer stale.jwt.token" },
     };
 
-    await expect(guard.canActivate(contextFor(request))).rejects.toThrow(
-      "Invalid or expired token",
-    );
+    await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+      message: "Invalid or expired token",
+      errorCode: "TOKEN_INVALID",
+      cause: reason,
+    });
     expect(request.user).toBeUndefined();
   });
 });
