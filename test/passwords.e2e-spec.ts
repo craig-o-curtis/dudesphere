@@ -22,9 +22,11 @@ describe("Passwords (e2e)", () => {
   let dataSource: DataSource;
   const createdUserIds: number[] = [];
 
-  const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+  function bearer(token: string) {
+    return { authorization: `Bearer ${token}` };
+  }
 
-  const register = async (password: string) => {
+  async function register(password: string) {
     // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
     // keep the username under its 24-character limit.
     const tag = randomUUID().slice(0, 8);
@@ -38,18 +40,19 @@ describe("Passwords (e2e)", () => {
       createdUserIds.push(id);
     }
     return { email, userId: id, status: response.status };
-  };
+  }
 
-  const login = (email: string, password: string) =>
-    request(app.getHttpServer()).post("/auth").send({ email, password });
+  function login(email: string, password: string) {
+    return request(app.getHttpServer()).post("/auth").send({ email, password });
+  }
 
-  const storedPassword = async (userId: number | undefined): Promise<string> => {
+  async function storedPassword(userId: number | undefined): Promise<string> {
     const rows: { password: string }[] = await dataSource.query(
       `SELECT "password" FROM "user" WHERE "id" = $1`,
       [userId],
     );
     return rows[0].password;
-  };
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -153,14 +156,15 @@ describe("Passwords (e2e)", () => {
   });
 
   describe("changing your own password", () => {
-    const signUp = async () => {
+    async function signUp() {
       const { email } = await register("secret123");
       const { body } = await login(email, "secret123").expect(201);
       return { email, token: (body as { token: string }).token };
-    };
+    }
 
-    const changePassword = (token: string, body: object) =>
-      request(app.getHttpServer()).patch("/users/me").set(bearer(token)).send(body);
+    function changePassword(token: string, body: object) {
+      return request(app.getHttpServer()).patch("/users/me").set(bearer(token)).send(body);
+    }
 
     it("is refused with a 400 when the current password is not sent", async () => {
       const { email, token } = await signUp();

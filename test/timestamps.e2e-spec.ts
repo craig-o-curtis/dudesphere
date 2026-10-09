@@ -39,11 +39,13 @@ describe("Timestamps (e2e)", () => {
   // to differ a little. The bug this guards against was hours, not seconds.
   const CLOCK_SLACK_SECONDS = 120;
 
-  const secondsFromNow = (value: string) =>
-    Math.abs(diffUtc(value, getUtcNow(), "seconds") as number);
+  function secondsFromNow(value: string) {
+    return Math.abs(diffUtc(value, getUtcNow(), "seconds") as number);
+  }
 
-  const authed = (method: "get" | "patch", path: string) =>
-    request(app.getHttpServer())[method](path).set("Authorization", `Bearer ${token}`);
+  function authed(method: "get" | "patch", path: string) {
+    return request(app.getHttpServer())[method](path).set("Authorization", `Bearer ${token}`);
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({

@@ -4,8 +4,9 @@ import { validate } from "class-validator";
 import { UpdateProfileDto } from "./update-profile-dto.js";
 
 describe("UpdateProfileDto", () => {
-  const invalidFields = async (body: object) =>
-    (await validate(plainToInstance(UpdateProfileDto, body))).map((error) => error.property);
+  async function invalidFields(body: object) {
+    return (await validate(plainToInstance(UpdateProfileDto, body))).map((error) => error.property);
+  }
 
   it("accepts an empty body: every field is optional", async () => {
     expect(await invalidFields({})).toEqual([]);

@@ -10,4 +10,6 @@ import { ROLES_KEY } from "../auth-metadata.js";
  * any signed-in caller, so this says "narrower than signed in", never "signed
  * in" on its own — JwtAuthGuard already covers that.
  */
-export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
+export function Roles(...roles: UserRole[]) {
+  return SetMetadata(ROLES_KEY, roles);
+}

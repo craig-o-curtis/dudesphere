@@ -16,7 +16,9 @@ describe("AbidingsService", () => {
 
   // Mongoose query methods return a Query, and the service calls .exec() on it.
   // create() is the exception: it returns a promise directly.
-  const queryOf = <T>(value: T) => ({ exec: vi.fn().mockResolvedValue(value) });
+  function queryOf<T>(value: T) {
+    return { exec: vi.fn().mockResolvedValue(value) };
+  }
 
   // A list query is a chain: find().sort().skip().limit().exec(). Each step
   // returns the same query, so a test can ask what any of them was called with.
@@ -409,8 +411,9 @@ describe("AbidingsService", () => {
     // could never be turned back into a plain abiding.
     describe("replyToId and imageUrl", () => {
       const PARENT_ID = "65f000000000000000000001";
-      const writtenUpdate = () =>
-        abidingModel.findOneAndUpdate.mock.calls[0][1] as Record<string, unknown>;
+      function writtenUpdate() {
+        return abidingModel.findOneAndUpdate.mock.calls[0][1] as Record<string, unknown>;
+      }
 
       beforeEach(() => {
         abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", message: "m" }));

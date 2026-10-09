@@ -26,7 +26,9 @@ describe("AbidingSeedService", () => {
     seedService = module.get(AbidingSeedService);
   });
 
-  const seededRows = () => abidingModel.insertMany.mock.calls[0][0] as Record<string, unknown>[];
+  function seededRows() {
+    return abidingModel.insertMany.mock.calls[0][0] as Record<string, unknown>[];
+  }
 
   // The id used to be a fixed 1, which is only the admin's id in a database
   // that has never held another user.
