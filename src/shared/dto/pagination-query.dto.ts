@@ -3,7 +3,7 @@ import { IsInt, IsOptional, Max, Min } from "class-validator";
 
 export class PaginationQueryDto {
   // Query params arrive as strings. @Type converts before @IsInt runs — the
-  // global ValidationPipe in main.ts does not enable implicit conversion.
+  // global ValidationPipe in src/app-setup.ts does not enable implicit conversion.
   @IsOptional()
   @Type(() => Number)
   @IsInt()

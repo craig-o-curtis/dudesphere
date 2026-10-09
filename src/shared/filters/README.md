@@ -9,8 +9,9 @@ the HTTP response. `@Catch(SomeError)` names the errors a filter handles.
 ## In this folder
 
 - `all-exceptions.filter.ts` is the catch-all. It leaves the response as Nest
-  writes it, `{ statusCode, message, error }`. It adds one log line for every
-  5xx: the route, the user and the request id.
+  writes it, `{ statusCode, message, error }`, plus `errorCode` when the throw
+  set one. It adds one log line for every 5xx: the route, the user and the
+  request id.
 - `query-failed.filter.ts` handles Postgres errors. A unique violation (code
   `23505`) becomes a 409. Every other database error stays a 500.
 - `mongo-error.filter.ts` handles Mongo errors. A duplicate key (code `11000`)
