@@ -45,7 +45,7 @@ Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose)
   - The controller calls `toPaginatedResponse` by hand, on purpose. The generic rule against wrapping a response in the handler does not apply to it.
   - Each item in `data` must be an instance of its response DTO. A spread copy loses its class, and `@Exclude` with it.
 - **Sort every list.** A paged query with no fixed order can repeat a row or skip one. Postgres lists use `order: { id: "ASC" }`. Abidings sort by `{ createdAt: -1, _id: -1 }`, and each list index in `abiding.schema.ts` ends with those two keys. Flag a new list filter that no index serves.
-- **Count with the filter you read with.** `totalItems` has to describe the list the caller is paging through.
+- **Count with the filter you read with.** `totalItems` has to describe the list the caller is paging through. The Mongo counts read every matching document, which is accepted and explained on `AbidingsService.findPage`. Don't flag it again; do flag a new count that reads more than its list's filter matches.
 - **Cap a list that arrives in the URL.** `GET /abidings` takes at most `MAX_TAGS` tags (`@MaxCommaSeparated`). Mongo sorts in memory once an `$in` passes 200 values. Flag a new comma-separated or repeated param with no limit.
 - **Check references in the service.** Mongo has no foreign keys. A field that names another document, such as an abiding's `replyToId`, needs its shape checked in the DTO (`@IsMongoId`) and its target checked in the service (`AbidingsService.assertReplyTargetExists`). Flag a new reference field with neither.
 - **Updates skip the schema.** `findOneAndUpdate`, `updateOne` and `updateMany` run no schema validators unless the call passes `runValidators: true`.

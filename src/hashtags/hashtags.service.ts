@@ -24,6 +24,9 @@ export class HashtagsService {
   //
   // slug is unique, so the sort has no ties and the pages cannot overlap.
   //
+  // The count reads every tag, because no index holds deletedAt. That is
+  // accepted: see findPage in src/abidings/abidings.service.ts.
+  //
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
