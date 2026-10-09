@@ -262,6 +262,14 @@ export class AbidingsService {
   // The two queries run side by side, not in a transaction. An abiding posted
   // between them can leave the total one ahead of the page, which a list of
   // posts can live with.
+  //
+  // The count is the costly half, and that is accepted, not solved. The page
+  // comes off an index, but no index holds deletedAt, so the count reads
+  // every abiding the filter matches: the whole collection when there is no
+  // filter. The response shape needs a total, so it is paid on every request.
+  // The query time limit in src/app.module.ts bounds it. If the collection
+  // grows large, the fix is a stored count or a cursor with no total, not
+  // another index: Mongo cannot count { deletedAt: null } from an index alone.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     request: PageRequest,

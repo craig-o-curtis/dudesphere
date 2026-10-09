@@ -198,6 +198,12 @@ db.abidings
 Mongo 8 merges up to 200 tags this way. At 201 the plan changes to a plain
 `SORT`. `GET /abidings` takes at most 10 tags, so no request gets there.
 
+A count is different. `countDocuments({ deletedAt: null })` reads every
+document, because no index holds `deletedAt`, and Mongo cannot answer a
+`null` match from an index alone. Every list request runs one for
+`meta.totalItems`. The comment on `findPage` in
+`src/abidings/abidings.service.ts` says why that is accepted.
+
 ## Seeds and Backfills
 
 ### Seed data
