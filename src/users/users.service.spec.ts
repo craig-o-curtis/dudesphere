@@ -216,7 +216,7 @@ describe("UsersService", () => {
 
       await expect(
         service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
-      ).rejects.toThrow("Email already registered");
+      ).rejects.toMatchObject({ message: "Email already registered", errorCode: "EMAIL_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
       expect(profilesService.createProfileForUser).not.toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe("UsersService", () => {
 
       await expect(
         service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
-      ).rejects.toThrow("Username already taken");
+      ).rejects.toMatchObject({ message: "Username already taken", errorCode: "USERNAME_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
     });
@@ -292,9 +292,10 @@ describe("UsersService", () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
       hashingProvider.compare.mockResolvedValue(false);
 
-      await expect(
-        service.updateMyUser(3, { password: "secret2", currentPassword: "not-it" }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      const attempt = service.updateMyUser(3, { password: "secret2", currentPassword: "not-it" });
+
+      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "WRONG_PASSWORD" });
       expect(hashingProvider.hash).not.toHaveBeenCalled();
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
