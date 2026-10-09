@@ -64,11 +64,11 @@ and two pages of one list can repeat a row or skip one.
 
 ```ts
 // src/profiles/profiles.service.ts
-async getProfiles(request: PageRequest): Promise<Page<ProfileResponseDto>> {
+async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
   const [profiles, total] = await this.profileRepository.findAndCount({
     order: { id: "ASC" },
-    skip: toSkip(request),
-    take: request.limit,
+    skip: toSkip(pageRequest),
+    take: pageRequest.limit,
   });
   return { items: profiles.map((profile) => ProfileResponseDto.fromEntity(profile)), total };
 }

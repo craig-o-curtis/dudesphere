@@ -30,14 +30,14 @@ export class HashtagsService {
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
-  async list(request: PageRequest): Promise<Page<HashtagResponseDto>> {
+  async list(pageRequest: PageRequest): Promise<Page<HashtagResponseDto>> {
     const filter = { deletedAt: null };
     const [hashtags, total] = await Promise.all([
       this.hashtagModel
         .find(filter)
         .sort({ slug: 1 })
-        .skip(toSkip(request))
-        .limit(request.limit)
+        .skip(toSkip(pageRequest))
+        .limit(pageRequest.limit)
         .exec(),
       this.hashtagModel.countDocuments(filter).exec(),
     ]);

@@ -35,7 +35,7 @@ export class AbidingsController {
     // unusable value is a 400 before it reaches here.
     const userId = query.userId;
     // Only limit and page go to the service. The filters are passed by name.
-    const request: PageRequest = { limit: query.limit, page: query.page };
+    const pageRequest: PageRequest = { limit: query.limit, page: query.page };
     // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
     // tag still goes through the dedicated single-tag call rather than the
     // multi-tag one, since that's the call the rest of the service (and any
@@ -44,10 +44,10 @@ export class AbidingsController {
 
     const abidings =
       tags.length === 0
-        ? await this.AbidingsService.getAbidings(request, userId)
+        ? await this.AbidingsService.getAbidings(pageRequest, userId)
         : tags.length === 1
-          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], request, userId)
-          : await this.AbidingsService.getAbidingsByHashtags(tags, request, userId);
+          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], pageRequest, userId)
+          : await this.AbidingsService.getAbidingsByHashtags(tags, pageRequest, userId);
     // The authors of this page only, so at most one id per abiding on it.
     const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
     const users = await this.usersService.getUsersByIds(authorIds);
@@ -61,7 +61,7 @@ export class AbidingsController {
     );
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
-    return toPaginatedResponse({ items, total: abidings.total }, request, "/abidings", {
+    return toPaginatedResponse({ items, total: abidings.total }, pageRequest, "/abidings", {
       userId,
       hashtag: tags.length > 0 ? tags.join(",") : undefined,
     });

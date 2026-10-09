@@ -24,14 +24,14 @@ export class AbidingsService {
     private readonly hashtagsService: HashtagsService,
   ) {}
 
-  async getAbidings(request: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
+  async getAbidings(pageRequest: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
     // deletedAt: null hides abidings of soft-deleted users
     const query: QueryFilter<AbidingDocument> = { deletedAt: null };
     if (userId) {
       query.userId = userId;
     }
 
-    return this.findPage(query, request);
+    return this.findPage(query, pageRequest);
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
@@ -44,15 +44,15 @@ export class AbidingsService {
 
   async getAbidingsByUserId(
     userId: number,
-    request: PageRequest,
+    pageRequest: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
-    return this.findPage({ userId, deletedAt: null }, request);
+    return this.findPage({ userId, deletedAt: null }, pageRequest);
   }
 
   // One tag. userId narrows to that author's abidings, same as getAbidings.
   async getAbidingsByHashtag(
     hashtag: string,
-    request: PageRequest,
+    pageRequest: PageRequest,
     userId?: number,
   ): Promise<Page<AbidingResponseDto>> {
     // Normalized here, not in the controller, so any other caller gets the
@@ -70,14 +70,14 @@ export class AbidingsService {
       query.userId = userId;
     }
 
-    return this.findPage(query, request);
+    return this.findPage(query, pageRequest);
   }
 
   // Several tags, matched with OR: an abiding needs only one of them.
   // userId narrows to that author's abidings, same as getAbidings.
   async getAbidingsByHashtags(
     hashtags: string[],
-    request: PageRequest,
+    pageRequest: PageRequest,
     userId?: number,
   ): Promise<Page<AbidingResponseDto>> {
     const normalized = [
@@ -103,7 +103,7 @@ export class AbidingsService {
       query.userId = userId;
     }
 
-    return this.findPage(query, request);
+    return this.findPage(query, pageRequest);
   }
 
   // The author is the caller, taken from the verified token. It was previously
@@ -272,14 +272,14 @@ export class AbidingsService {
   // another index: Mongo cannot count { deletedAt: null } from an index alone.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
-    request: PageRequest,
+    pageRequest: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
     const [abidings, total] = await Promise.all([
       this.abidingModel
         .find(filter)
         .sort({ createdAt: -1, _id: -1 })
-        .skip(toSkip(request))
-        .limit(request.limit)
+        .skip(toSkip(pageRequest))
+        .limit(pageRequest.limit)
         .exec(),
       this.abidingModel.countDocuments(filter).exec(),
     ]);

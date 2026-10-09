@@ -18,13 +18,13 @@ export class ProfilesService {
     private readonly profileRepository: Repository<Profile>,
   ) {}
 
-  async getProfiles(request: PageRequest): Promise<Page<ProfileResponseDto>> {
+  async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
     const [profiles, total] = await this.profileRepository.findAndCount({
       // A fixed order. Without one Postgres may return rows in any order, so
       // two pages of the same list could repeat a profile or skip one.
       order: { id: "ASC" },
-      skip: toSkip(request),
-      take: request.limit,
+      skip: toSkip(pageRequest),
+      take: pageRequest.limit,
     });
     return { items: profiles.map((profile) => ProfileResponseDto.fromEntity(profile)), total };
   }
