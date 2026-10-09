@@ -1,20 +1,20 @@
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 
-import { ListUsersQueryDto } from "./list-users-query.dto.js";
+import { PaginationQueryDto } from "./pagination-query.dto.js";
 
-describe("ListUsersQueryDto", () => {
+describe("PaginationQueryDto", () => {
   it("should be defined", () => {
-    expect(new ListUsersQueryDto()).toBeDefined();
+    expect(new PaginationQueryDto()).toBeDefined();
   });
 
   it("rejects page 0", async () => {
-    const dto = plainToInstance(ListUsersQueryDto, { page: "0" });
+    const dto = plainToInstance(PaginationQueryDto, { page: "0" });
     const errors = await validate(dto);
     expect(errors).toHaveLength(1);
   });
 
   it("defaults to limit 10 and page 1", () => {
-    expect(plainToInstance(ListUsersQueryDto, {})).toMatchObject({ limit: 10, page: 1 });
+    expect(plainToInstance(PaginationQueryDto, {})).toMatchObject({ limit: 10, page: 1 });
   });
 });

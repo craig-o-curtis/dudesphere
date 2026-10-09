@@ -1,18 +1,10 @@
-import {
-  Body,
-  Controller,
-  DefaultValuePipe,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Query,
-} from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
+import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -23,11 +15,8 @@ export class ProfilesController {
 
   @Public()
   @Get()
-  getProfiles(
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-  ): Promise<ProfileResponseDto[]> {
-    return this.profilesService.getProfiles(limit, page);
+  getProfiles(@Query() query: PaginationQueryDto): Promise<ProfileResponseDto[]> {
+    return this.profilesService.getProfiles(query.limit, query.page);
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token
