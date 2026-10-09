@@ -204,6 +204,7 @@ export class AbidingsService {
     // deletedAt: null so an abiding hidden with its deleted user is a 404 here
     // too, and comes back intact if the user is restored. ownedBy adds the
     // authorization rule to the same filter.
+    // so owners get the passed userId, but admins get no user id there for can delete all
     const result = await this.abidingModel
       .findOneAndDelete({ _id: abidingId, deletedAt: null, ...this.ownedBy(caller) })
       .exec();
