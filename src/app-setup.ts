@@ -1,6 +1,7 @@
 import { ClassSerializerInterceptor, INestApplication, ValidationPipe } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import { AllExceptionsFilter } from "./shared/filters/all-exceptions.filter.js";
 import { QueryFailedFilter } from "./shared/filters/query-failed.filter.js";
 import { requestId } from "./shared/middleware/request-id.middleware.js";
 /**
@@ -32,6 +33,9 @@ export function configureApp(app: INestApplication): void {
     }),
   );
 
-  // Turns a unique violation that slipped past the service layer into a 409.
-  app.useGlobalFilters(new QueryFailedFilter(app.getHttpAdapter()));
+  // Order matters. Nest tries global filters last to first, so the catch-all
+  // goes first and the specific ones after it. See "Catch everything" on
+  // https://docs.nestjs.com/exception-filters
+  const adapter = app.getHttpAdapter();
+  app.useGlobalFilters(new AllExceptionsFilter(adapter), new QueryFailedFilter(adapter));
 }
