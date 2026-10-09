@@ -28,7 +28,7 @@ The `pg` driver puts the code on `error.code`. TypeORM wraps that error in a
 
 Each code from `23505` to `22P05`, and `57014`, was raised against Postgres
 18.6 to confirm it. The outage codes in the last three rows were not raised. Their names are
-the ones `database-unavailable.ts` gives.
+the ones `database-unreachable.ts` gives.
 
 | Code                      | Postgres name                                            | How to cause it                                | Status here                 |
 | ------------------------- | -------------------------------------------------------- | ---------------------------------------------- | --------------------------- |
@@ -51,7 +51,7 @@ can find the field and add the missing rule.
 ## Postgres codes that stay 500
 
 Any code not in the table above stays a 500. Three are left out on purpose,
-and [src/shared/filters/invalid-value.ts](../src/shared/filters/invalid-value.ts)
+and [src/shared/filters/bad-value-states.ts](../src/shared/filters/bad-value-states.ts)
 says why:
 
 | Code    | Postgres name                | Why it stays 500                                                                                          |
@@ -100,16 +100,15 @@ reaches Mongo.
 
 - [src/shared/filters/query-failed.filter.ts](../src/shared/filters/query-failed.filter.ts)
   maps the Postgres codes.
-- [src/shared/filters/invalid-value.ts](../src/shared/filters/invalid-value.ts)
+- [src/shared/filters/bad-value-states.ts](../src/shared/filters/bad-value-states.ts)
   holds the list of codes that become a 400.
-- [src/shared/filters/database-unavailable.ts](../src/shared/filters/database-unavailable.ts)
-  holds the test for "cannot be reached" and the one 503 body.
+- [src/shared/filters/database-unreachable.ts](../src/shared/filters/database-unreachable.ts)
+  holds the test for "cannot be reached".
 - [src/shared/filters/mongo-error.filter.ts](../src/shared/filters/mongo-error.filter.ts)
   maps the Mongo errors.
-- [src/shared/filters/query-timed-out.ts](../src/shared/filters/query-timed-out.ts)
-  holds the 408 for a query that ran past its time limit.
-- [src/shared/filters/database-fault.ts](../src/shared/filters/database-fault.ts)
-  holds the plain 500 for everything else. It keeps the driver error out of
-  the log, where it would print the query's values or a document.
+- [src/shared/exceptions/](../src/shared/exceptions/README.md) holds the
+  answers themselves, one class each: the 409, the 503, the 400, the 408 and
+  the plain 500. The 500 keeps the driver error out of the log, where it
+  would print the query's values or a document.
 
 Docs: <https://www.postgresql.org/docs/current/errcodes-appendix.html>
