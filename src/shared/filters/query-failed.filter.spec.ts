@@ -1,7 +1,6 @@
 import {
   ArgumentsHost,
   BadRequestException,
-  ConflictException,
   InternalServerErrorException,
   Logger,
   RequestTimeoutException,
@@ -9,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { QueryFailedFilter, UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
@@ -50,9 +50,9 @@ describe("QueryFailedFilter", () => {
 
     expect(baseCatch).toHaveBeenCalledTimes(1);
     const [passed, passedHost] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ConflictException);
-    expect((passed as ConflictException).message).toBe("That value is already taken");
-    expect((passed as ConflictException).errorCode).toBe("VALUE_TAKEN");
+    expect(passed).toBeInstanceOf(ValueTakenException);
+    expect((passed as ValueTakenException).message).toBe("That value is already taken");
+    expect((passed as ValueTakenException).errorCode).toBe("VALUE_TAKEN");
     expect(passedHost).toBe(host);
   });
 

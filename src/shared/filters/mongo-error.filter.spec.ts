@@ -1,7 +1,6 @@
 import {
   ArgumentsHost,
   BadRequestException,
-  ConflictException,
   InternalServerErrorException,
   Logger,
   RequestTimeoutException,
@@ -9,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Error as MongooseError, mongo } from "mongoose";
 
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { DUPLICATE_KEY, MongoErrorFilter } from "./mongo-error.filter.js";
 
@@ -49,10 +49,10 @@ describe("MongoErrorFilter", () => {
     new MongoErrorFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ConflictException);
-    expect((passed as ConflictException).message).toBe("That value is already taken");
-    expect((passed as ConflictException).errorCode).toBe("VALUE_TAKEN");
-    expect((passed as ConflictException).cause).toBe(exception);
+    expect(passed).toBeInstanceOf(ValueTakenException);
+    expect((passed as ValueTakenException).message).toBe("That value is already taken");
+    expect((passed as ValueTakenException).errorCode).toBe("VALUE_TAKEN");
+    expect((passed as ValueTakenException).cause).toBe(exception);
   });
 
   it("turns a network error into a 503", () => {
