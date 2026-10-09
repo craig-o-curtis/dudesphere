@@ -124,6 +124,23 @@ To write one, follow `src/database/seeds/hashtag-backfill.seed.ts`: a service
 that is safe to run twice, a thin runner like `backfill-hashtags.ts`, a script
 in `package.json`, and a spec.
 
+### When you remove a field
+
+Take it out of the schema, and out of anything that wrote it. Documents that
+still hold a value do no harm: Mongoose ignores a stored field the schema
+does not name, so it never reaches the app.
+
+To clear the stored values as well, unset the field once, in `mongosh` or
+Mongo Express:
+
+```js
+db.abidings.updateMany({}, { $unset: { username: "" } });
+```
+
+`Abiding.username` was removed this way. It was a copy of the author's name
+that only the seed ever wrote, and every response already read the current
+name from Postgres.
+
 ## Seeds and Backfills
 
 ### Seed data

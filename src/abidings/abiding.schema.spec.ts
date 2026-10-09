@@ -57,3 +57,12 @@ describe("Abiding schema: message length", () => {
     expect(await schemaAccepts("")).toBe(false);
   });
 });
+
+describe("Abiding schema: fields", () => {
+  // The schema once had a username field that only the seed wrote. A stored
+  // copy of the author's name goes stale when they rename, so responses read
+  // the current one from Postgres, and the copy was never used.
+  it("keeps no copy of the author's username", () => {
+    expect(AbidingSchema.path("username")).toBeUndefined();
+  });
+});

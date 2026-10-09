@@ -60,18 +60,17 @@ holds a JavaScript `Date`.
 
 ### MongoDB — `abidings` collection
 
-| Field       | Type               | Description                                                      |
-| ----------- | ------------------ | ---------------------------------------------------------------- |
-| `_id`       | ObjectId           | Auto-generated                                                   |
-| `userId`    | number             | The author's `user.id`                                           |
-| `message`   | string             | The abiding, 1 to 280 characters                                 |
-| `imageUrl`  | string or null     | A URL                                                            |
-| `replyToId` | string or null     | The `_id` of the abiding this one replies to                     |
-| `username`  | string or null     | Written only by the seed. Responses use the author's current one |
-| `hashtags`  | string[]           | Normalized slugs, derived from `message` — never set directly    |
-| `createdAt` | date               | Set by Mongoose; returned as an ISO string                       |
-| `updatedAt` | date               | Set by Mongoose; returned as an ISO string                       |
-| `deletedAt` | ISO string or null | Set when the author is soft-deleted, cleared when restored       |
+| Field       | Type               | Description                                                   |
+| ----------- | ------------------ | ------------------------------------------------------------- |
+| `_id`       | ObjectId           | Auto-generated                                                |
+| `userId`    | number             | The author's `user.id`                                        |
+| `message`   | string             | The abiding, 1 to 280 characters                              |
+| `imageUrl`  | string or null     | A URL                                                         |
+| `replyToId` | string or null     | The `_id` of the abiding this one replies to                  |
+| `hashtags`  | string[]           | Normalized slugs, derived from `message` — never set directly |
+| `createdAt` | date               | Set by Mongoose; returned as an ISO string                    |
+| `updatedAt` | date               | Set by Mongoose; returned as an ISO string                    |
+| `deletedAt` | ISO string or null | Set when the author is soft-deleted, cleared when restored    |
 
 ### MongoDB — `hashtags` collection
 
