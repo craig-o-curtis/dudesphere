@@ -41,6 +41,25 @@ method replaces the controller's list for that method.
 
 The guard side is in `../guards/README.md`.
 
+### Validation
+
+These go on DTO fields, next to the class-validator decorators. Each one
+stops a value that the database could not hold, so the caller gets a 400 and
+not a 500.
+
+- `@MaxCodePoints(n)` is a length limit that counts the way a Postgres
+  `varchar(n)` does. Use it with the column's own length. `@MaxLength` leaves
+  out variation selectors, so a value could pass it and still overflow the
+  column.
+- `@NoNulCharacter()` rejects the NUL character, which Postgres cannot store
+  in text. Use it on every string field stored in Postgres.
+- `@IsUtcDateTime()` accepts one shape only: a real instant in UTC, such as
+  `2026-10-06T12:00:00Z`. The check is gmt's `isValidUtc` with its
+  `rfc3339DateTime` pattern.
+
+`src/shared/dto/entity-rules.spec.ts` reads the entities and fails when a
+field is missing the first two.
+
 ### Timestamp columns
 
 Each one wraps a TypeORM column and returns the value as an ISO 8601 UTC string.

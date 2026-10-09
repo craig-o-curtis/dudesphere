@@ -1,5 +1,6 @@
-import { IsBoolean, IsISO8601, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
 
+import { IsUtcDateTime } from "../../shared/decorators/is-utc-date-time.decorator.js";
 import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
 import { NoNulCharacter } from "../../shared/decorators/no-nul-character.decorator.js";
 
@@ -38,8 +39,10 @@ export class CreateProfileDto {
   @ValidateIf((_, value) => value !== undefined)
   isDude?: boolean;
 
-  // Optional ordination date as ISO 8601 UTC string (e.g., "2026-10-06T12:00:00.000Z")
-  @IsISO8601({ strict: false })
+  // Optional ordination date: an instant in UTC, such as
+  // "2026-10-06T12:00:00Z". A date with no time is not accepted. gmt checks
+  // that the instant is real; see is-utc-date-time.decorator.ts.
+  @IsUtcDateTime()
   @IsOptional()
   ordainedDate?: string;
 }
