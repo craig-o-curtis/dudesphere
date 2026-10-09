@@ -1,5 +1,6 @@
-import { Transform } from "class-transformer";
-import { IsInt, Max, Min } from "class-validator";
+import { Max, Min } from "class-validator";
+
+import { IntFromDigits } from "../decorators/int-from-digits.decorator.js";
 
 /** The largest value a Postgres `integer` column can hold. */
 export const PG_INT_MAX = 2_147_483_647;
@@ -14,21 +15,16 @@ export const PG_INT_MAX = 2_147_483_647;
  * converts unique violations, so the caller got a 500 for what was plainly a
  * bad request.
  *
- * Validated by the global ValidationPipe rather than a pipe of our own. The
- * @Transform is what coerces the string, because that pipe runs with
- * transform: true but not enableImplicitConversion.
- *
- * It is digits-only on purpose. A plain @Type(() => Number) would also accept
- * "0x10" as 16, "1e5" as 100000 and "+5" as 5, so one row would answer to
- * several URLs. Anything that is not digits becomes NaN here and @IsInt turns
- * it into a 400.
+ * Validated by the global ValidationPipe rather than a pipe of our own.
+ * @IntFromDigits converts the string and accepts plain digits only. Without
+ * that rule "0x10" would reach row 16 and "+5" row 5, so one row would answer
+ * to several URLs.
  *
  * Mongo-backed routes do not use this. An abiding's id is an ObjectId, so it
  * goes through ParseObjectIdPipe, and a hashtag is keyed by its slug.
  */
 export class IdParamDto {
-  @Transform(({ value }) => (/^\d+$/.test(String(value)) ? Number(value) : Number.NaN))
-  @IsInt()
+  @IntFromDigits()
   @Min(1)
   @Max(PG_INT_MAX)
   id: number;

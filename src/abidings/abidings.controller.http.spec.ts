@@ -179,6 +179,16 @@ describe("AbidingsController id params (over HTTP)", () => {
       expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, 3);
     });
 
+    // Number() reads each of these as a number. %2B is an encoded "+".
+    it.each(["userId=0x10", "userId=1e1", "userId=%2B5", "userId=abc"])(
+      "rejects ?%s with 400",
+      async (query) => {
+        await request(app.getHttpServer()).get(`/abidings?${query}`).expect(400);
+
+        expect(abidingService.getAbidings).not.toHaveBeenCalled();
+      },
+    );
+
     it.each(["limit=101", "limit=0", "page=0", "limit=abc"])(
       "rejects ?%s with 400",
       async (query) => {
