@@ -1,3 +1,5 @@
+import { inspect } from "node:util";
+
 import { ArgumentsHost, Catch, HttpException, Logger } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
 
@@ -23,7 +25,8 @@ interface RequestLike {
  * context, and never logs an HttpException, not even a 503. So:
  * - unknown error: this logs the context line, Base logs the stack;
  * - HttpException with status >= 500: this logs the context line and the
- *   `cause` stack, which is the only place a cause is ever read;
+ *   `cause` stack, which is the only place a cause is ever read. With no
+ *   cause it logs the exception's own stack;
  * - anything below 500 is the caller's problem and is not logged.
  *
  * Registered first in configureApp. Nest tries global filters last to first,
@@ -49,8 +52,11 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
       return exception.getStatus() >= 500;
     }
     // body-parser errors (malformed JSON, body too large) carry their own
-    // 4xx status, and Base answers with it. Nothing to log.
-    return !this.isHttpError(exception);
+    // status, and Base answers with it. A 4xx one is the caller's problem.
+    if (this.isHttpError(exception)) {
+      return exception.statusCode >= 500;
+    }
+    return true;
   }
 
   private logFault(exception: unknown, host: ArgumentsHost): void {
@@ -59,11 +65,30 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
     const user = request.user?.userId ?? "anonymous";
     const requestId = request.headers[REQUEST_ID_HEADER] ?? "-";
     const message = exception instanceof Error ? exception.message : String(exception);
-    const cause = exception instanceof HttpException ? exception.cause : undefined;
 
     this.faultLogger.error(
       `${route} failed for user ${user} (request ${String(requestId)}): ${message}`,
-      cause instanceof Error ? cause.stack : undefined,
+      this.traceOf(exception),
     );
+  }
+
+  // Base logs an unknown error itself, stack included, so only an
+  // HttpException needs a trace from here: Base never logs those.
+  private traceOf(exception: unknown): string | undefined {
+    if (!(exception instanceof HttpException)) {
+      return undefined;
+    }
+    const { cause } = exception;
+    if (cause instanceof Error) {
+      return cause.stack;
+    }
+    // No Error to take a stack from, so the exception's own stack says where
+    // it was thrown. A cause that is not an Error (a thrown string, say) has
+    // no stack of its own; its text is added so it is not lost.
+    const thrownAt = exception.stack ?? exception.message;
+    if (cause === undefined) {
+      return thrownAt;
+    }
+    return `${thrownAt}\nCaused by: ${typeof cause === "string" ? cause : inspect(cause)}`;
   }
 }
