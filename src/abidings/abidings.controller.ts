@@ -123,8 +123,13 @@ export class AbidingsController {
     @Body() createAbidingDto: CreateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
+    // Looked up before the write, not after. A token proves who logged in, not
+    // that the account still exists: it stays valid until it expires, even
+    // after the user is deleted. getMyUser throws a 404 for a user who is
+    // deleted or was never there, so no abiding is written for an author
+    // nobody can find.
+    const author = await this.usersService.getMyUser(user.userId);
     const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto, user);
-    const [author] = await this.usersService.getUsersByIds([newAbiding.userId]);
     return new AbidingResponseDto({
       id: newAbiding.id,
       userId: newAbiding.userId,
@@ -133,7 +138,7 @@ export class AbidingsController {
       createdAt: newAbiding.createdAt,
       updatedAt: newAbiding.updatedAt,
       replyToId: newAbiding.replyToId ?? null,
-      username: author?.username || "Unknown",
+      username: author.username,
       hashtags: newAbiding.hashtags,
     });
   }

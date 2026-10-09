@@ -17,7 +17,8 @@ import { listenOnLoopback } from "./listen-on-loopback.js";
 // 401 or 403 is unreachable there.
 //
 // Needs the databases running and the admin user seeded (`pnpm seed:run`).
-// Creates two throwaway users and one abiding, so each run leaves those behind.
+// Creates throwaway e2e- users and their abidings. test/global-setup.ts
+// deletes them when the run ends.
 describe("Authorization (e2e)", () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
@@ -243,6 +244,22 @@ describe("Authorization (e2e)", () => {
         .expect(201);
 
       expect((posted.body as { userId: number }).userId).toBe(stranger.userId);
+    });
+
+    // Signed by this app, so the guard lets it through, but no user has this
+    // id. The abiding would have an author nobody can find.
+    it("404 when the token's user does not exist", async () => {
+      const token = await jwt.signAsync({
+        sub: 2_000_000_000,
+        username: "e2e-nobody",
+        role: UserRole.USER,
+      });
+
+      await request(app.getHttpServer())
+        .post("/abidings")
+        .set(bearer(token))
+        .send({ message: "posted by nobody" })
+        .expect(404);
     });
   });
 
