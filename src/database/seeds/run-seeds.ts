@@ -32,14 +32,14 @@ async function runSeeds() {
   try {
     // Run PostgreSQL seeds (User and Profile)
     const usersSeed = app.get(UsersSeedService);
-    await usersSeed.seed(adminEmail, adminPassword);
+    const adminUserId = await usersSeed.seed(adminEmail, adminPassword);
 
     const profilesSeed = app.get(ProfilesSeedService);
     await profilesSeed.seed(adminEmail);
 
     // Run MongoDB seed (Abiding)
     const abidingSeed = app.get(AbidingSeedService);
-    await abidingSeed.seed(environment, adminEmail);
+    await abidingSeed.seed(environment, adminUserId);
 
     console.log("All seeds completed successfully!");
   } catch (error) {

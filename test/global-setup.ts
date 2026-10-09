@@ -15,6 +15,8 @@ import "dotenv/config";
 import { mongo } from "mongoose";
 import { DataSource } from "typeorm";
 
+import { assertLocalDatabases } from "./local-databases.js";
+
 const E2E_EMAIL = "e2e-%@example.com";
 // The whole slug, not just its start. A slug cannot hold a hyphen, so there is
 // no e2e- prefix to lean on, and /^e2e/ alone would also delete a real tag
@@ -25,6 +27,13 @@ const E2E_SLUG = /^e2e[0-9a-f]{12}$/;
 const DEFAULT_MONGO_URI = "mongodb://localhost:27017/dude-abidings";
 
 async function cleanup(label: string): Promise<void> {
+  // Before any connection is opened. This runs ahead of the first suite, so
+  // throwing here also stops the suites from writing anything.
+  assertLocalDatabases(
+    process.env.PG_HOST ?? "localhost",
+    process.env.MONGO_URI || DEFAULT_MONGO_URI,
+  );
+
   // Not src/database/data-source.ts: that one lists the *.entity.ts files by
   // glob, and this file runs in plain Node, where TypeORM cannot load them.
   // Raw SQL needs no entities, so this source registers none.

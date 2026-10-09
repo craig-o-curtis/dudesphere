@@ -18,6 +18,7 @@ import postgresConfig from "./config/postgres.config.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
 import { RolesGuard } from "./shared/guards/roles.guard.js";
+import { REQUEST_TIMEOUT_MS } from "./shared/interceptors/timeout.interceptor.js";
 import { UsersModule } from "./users/users.module.js";
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -59,6 +60,13 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         password: pg.password,
         database: pg.database,
         autoLoadEntities: true,
+        // Passed to the pg pool. Postgres cancels any statement that runs
+        // longer than this, which frees its connection. Without it a stuck
+        // query held a connection for good, even after TimeoutInterceptor
+        // had answered the caller. The limit is the request's own, so no
+        // statement outlives the request that asked for it. Migrations use
+        // src/database/data-source.ts and are not limited.
+        extra: { statement_timeout: REQUEST_TIMEOUT_MS },
         synchronize: false, // migrations are the single source of truth for the schema, so synchronize stays off in every environment
         // logging: ["query", "error"],
         // logger: "formatted-console", // ← puts each part of the query on its own line
@@ -73,6 +81,10 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         // outage would answer 408. At 5 seconds MongoErrorFilter still gets
         // the error and answers 503 with DATABASE_UNAVAILABLE.
         serverSelectionTimeoutMS: 5_000,
+        // The driver's limit for one whole operation, read or write. It
+        // tells Mongo to stop the work and throws MongoOperationTimeoutError.
+        // The same number as the Postgres limit above, for the same reason.
+        timeoutMS: REQUEST_TIMEOUT_MS,
       }),
     }),
     UsersModule,

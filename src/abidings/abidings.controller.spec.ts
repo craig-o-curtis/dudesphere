@@ -1,3 +1,4 @@
+import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Types } from "mongoose";
 
@@ -22,6 +23,7 @@ describe("AbidingsController", () => {
 
   const usersService = {
     getUsersByIds: vi.fn(),
+    getMyUser: vi.fn(),
   };
 
   // The user JwtAuthGuard puts on the request. The write routes pass it
@@ -185,23 +187,25 @@ describe("AbidingsController", () => {
   // These used to load the first page of users and search it, so an author
   // past that page came back as "Unknown".
   describe("postAbiding", () => {
-    it("looks up the author by id and returns their username", async () => {
+    it("looks up the caller by the id in the token and returns their username", async () => {
       abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "new" });
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      usersService.getMyUser.mockResolvedValue({ id: 25, username: "walter" });
 
       const result = await controller.postAbiding({ message: "new" }, caller);
 
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
+      expect(usersService.getMyUser).toHaveBeenCalledWith(25);
       expect(result.username).toBe("walter");
     });
 
-    it("falls back to Unknown when the author is not found", async () => {
-      abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 99, message: "new" });
-      usersService.getUsersByIds.mockResolvedValue([]);
+    // A token outlives its user: it stays valid until it expires. Without
+    // this, a deleted user could keep posting, and the abidings would be live.
+    it("writes nothing when the caller's user is deleted or missing", async () => {
+      usersService.getMyUser.mockRejectedValue(new NotFoundException("My User #25 not found"));
 
-      const result = await controller.postAbiding({ message: "new" }, caller);
-
-      expect(result.username).toBe("Unknown");
+      await expect(controller.postAbiding({ message: "new" }, caller)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(abidingService.createAbiding).not.toHaveBeenCalled();
     });
   });
 

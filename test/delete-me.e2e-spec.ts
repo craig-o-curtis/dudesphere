@@ -9,8 +9,8 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
-// Needs the databases running. Creates a throwaway user and soft-deletes it,
-// so each run leaves one deleted user behind.
+// Needs the databases running. Creates a throwaway user and soft-deletes it.
+// test/global-setup.ts deletes the row when the run ends.
 describe("DELETE /users/me (e2e)", () => {
   let app: INestApplication<App>;
 
@@ -55,6 +55,13 @@ describe("DELETE /users/me (e2e)", () => {
       .set("Authorization", `Bearer ${token}`)
       .expect(404);
     await request(app.getHttpServer()).post("/auth").send(credentials).expect(401);
+
+    // The token is still valid until it expires, but it can no longer post.
+    await request(app.getHttpServer())
+      .post("/abidings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ message: "posted after deleting my account" })
+      .expect(404);
 
     // A second delete with the same token finds nothing to delete.
     await request(app.getHttpServer())

@@ -5,26 +5,29 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  MaxLength,
   MinLength,
   ValidateNested,
 } from "class-validator";
 
 import { CreateProfileDto } from "../../profiles/dto/create-profile-dto.js";
+import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
+import { NoNulCharacter } from "../../shared/decorators/no-nul-character.decorator.js";
 
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
   // 24 to match varchar(24) on the column. A longer value used to pass
-  // validation and then fail in Postgres as a 500.
-  @MaxLength(24)
+  // validation and then fail in Postgres as a 500. @MaxCodePoints, not
+  // @MaxLength, because it counts the way the column does.
+  @MaxCodePoints(24)
+  @NoNulCharacter()
   username: string;
 
   @IsString()
   @IsNotEmpty()
   @IsEmail()
-  @MaxLength(100)
+  @MaxCodePoints(100)
   email: string;
 
   @IsString()

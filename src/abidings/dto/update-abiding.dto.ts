@@ -1,17 +1,13 @@
-import { IsOptional, IsString, IsUrl, MaxLength, MinLength } from "class-validator";
+import { PartialType } from "@nestjs/mapped-types";
 
-export class UpdateAbidingDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(280)
-  message?: string;
+import { CreateAbidingDto } from "./create-abiding.dto.js";
 
-  @IsOptional()
-  @IsUrl()
-  imageUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  replyToId?: string;
-}
+// Every field of CreateAbidingDto, each one optional.
+//
+// skipNullProperties: false, so a missing field is skipped but a null one is
+// not. { "message": null } used to pass and be quietly ignored; it is now a
+// 400. imageUrl and replyToId still accept null, because their own
+// @IsOptional() on CreateAbidingDto says so.
+export class UpdateAbidingDto extends PartialType(CreateAbidingDto, {
+  skipNullProperties: false,
+}) {}

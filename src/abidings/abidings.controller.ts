@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ParseObjectIdPipe } from "@nestjs/mongoose";
 import type { Types as MongooseTypes } from "mongoose";
 
@@ -46,18 +46,7 @@ export class AbidingsController {
     const users = await this.usersService.getUsersByIds(authorIds);
     const usernames = new Map(users.map((u) => [u.id, u.username]));
 
-    return abidings.map(
-      (a) =>
-        new AbidingResponseDto({
-          id: a.id,
-          userId: a.userId,
-          message: a.message,
-          username: usernames.get(a.userId) || "Unknown",
-          createdAt: a.createdAt || "",
-          replyToId: a.replyToId ?? undefined,
-          hashtags: a.hashtags,
-        }),
-    );
+    return abidings.map((a) => this.toResponse(a, usernames.get(a.userId) || "Unknown"));
   }
 
   // The caller's own abidings. The user id comes from the JWT token in the
@@ -66,7 +55,7 @@ export class AbidingsController {
   // id — see UsersController's deleteMe, which has the same ordering reason.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/login with email + password.
+  //   1. Frontend calls POST /auth with email + password.
   //   2. Backend validates credentials and returns a signed JWT token.
   //   3. Frontend stores the token and sends it on every protected request:
   //        Authorization: Bearer <token>
@@ -76,18 +65,7 @@ export class AbidingsController {
   @Get("me")
   public async getMyAbidings(@CurrentUser() user: AuthUser): Promise<AbidingResponseDto[]> {
     const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId);
-    return myAbidings.map(
-      (a) =>
-        new AbidingResponseDto({
-          id: a.id,
-          userId: a.userId,
-          message: a.message,
-          username: user.username,
-          createdAt: a.createdAt || "",
-          replyToId: a.replyToId ?? undefined,
-          hashtags: a.hashtags,
-        }),
-    );
+    return myAbidings.map((a) => this.toResponse(a, user.username));
   }
 
   @Public()
@@ -101,15 +79,7 @@ export class AbidingsController {
   ): Promise<AbidingResponseDto> {
     const abiding = await this.AbidingsService.getAbidingById(id.toString());
     const [author] = await this.usersService.getUsersByIds([abiding.userId]);
-    return new AbidingResponseDto({
-      id: abiding.id,
-      userId: abiding.userId,
-      message: abiding.message,
-      createdAt: abiding.createdAt,
-      replyToId: abiding.replyToId ?? null,
-      username: author?.username || "Unknown",
-      hashtags: abiding.hashtags,
-    });
+    return this.toResponse(abiding, author?.username || "Unknown");
   }
 
   @Post()
@@ -117,17 +87,14 @@ export class AbidingsController {
     @Body() createAbidingDto: CreateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
+    // Looked up before the write, not after. A token proves who logged in, not
+    // that the account still exists: it stays valid until it expires, even
+    // after the user is deleted. getMyUser throws a 404 for a user who is
+    // deleted or was never there, so no abiding is written for an author
+    // nobody can find.
+    const author = await this.usersService.getMyUser(user.userId);
     const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto, user);
-    const [author] = await this.usersService.getUsersByIds([newAbiding.userId]);
-    return new AbidingResponseDto({
-      id: newAbiding.id,
-      userId: newAbiding.userId,
-      message: newAbiding.message,
-      createdAt: newAbiding.createdAt,
-      replyToId: newAbiding.replyToId ?? null,
-      username: author?.username || "Unknown",
-      hashtags: newAbiding.hashtags,
-    });
+    return this.toResponse(newAbiding, author.username);
   }
 
   // Author or admin. The service enforces it, in the same filter as the write.
@@ -143,23 +110,32 @@ export class AbidingsController {
       user,
     );
     const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
-    return new AbidingResponseDto({
-      id: updatedAbiding.id,
-      userId: updatedAbiding.userId,
-      message: updatedAbiding.message,
-      createdAt: updatedAbiding.createdAt,
-      replyToId: updatedAbiding.replyToId ?? null,
-      username: author?.username || "Unknown",
-      hashtags: updatedAbiding.hashtags,
-    });
+    return this.toResponse(updatedAbiding, author?.username || "Unknown");
   }
 
   // Author or admin, same rule as PATCH above.
   @Delete(":id")
+  @HttpCode(204) // needs 204 No Content instead of default 200 OK
   async deleteAbiding(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
     await this.AbidingsService.deleteAbiding(id.toString(), user);
+  }
+
+  // The one place an abiding becomes a response. Everything the service
+  // returned is passed on, so a field added there reaches the caller with no
+  // change here. Five routes each used to list the fields by hand, and two
+  // fields, imageUrl and updatedAt, were left off all five.
+  //
+  // Only the username is added. It is the author's current one, read from
+  // Postgres, because the abiding itself lives in Mongo.
+  private toResponse(abiding: AbidingResponseDto, username: string): AbidingResponseDto {
+    // The constructor copies every field across. A real instance is needed,
+    // not a copy made with spread: ClassSerializerInterceptor only applies
+    // the DTO's @Expose and @Transform rules to an instance of the class.
+    const response = new AbidingResponseDto(abiding);
+    response.username = username;
+    return response;
   }
 }

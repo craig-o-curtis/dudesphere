@@ -172,10 +172,67 @@ describe("AbidingsService", () => {
       expect(abidingModel.create).toHaveBeenCalledWith({
         userId: 1,
         message: "new abiding",
+        imageUrl: null,
         replyToId: null,
         hashtags: [],
       });
       expect(result.message).toBe("new abiding");
+    });
+
+    // The DTO always accepted imageUrl, and this method used to drop it: a
+    // post with an image was stored without one and returned without one.
+    it("stores the image url and returns it", async () => {
+      abidingModel.create.mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        userId: 1,
+        message: "with a picture",
+        imageUrl: "https://example.com/rug.png",
+      });
+
+      const result = await service.createAbiding(
+        { message: "with a picture", imageUrl: "https://example.com/rug.png" },
+        author,
+      );
+
+      expect(abidingModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ imageUrl: "https://example.com/rug.png" }),
+      );
+      expect(result.imageUrl).toBe("https://example.com/rug.png");
+    });
+
+    // Mongo has no foreign keys, so the service is the only thing that can
+    // stop a reply to an abiding that is not there.
+    describe("a reply", () => {
+      const PARENT_ID = "65f000000000000000000001";
+
+      it("is written when the abiding it replies to exists", async () => {
+        abidingModel.create.mockResolvedValue({ _id: new mongoose.Types.ObjectId(), userId: 1 });
+
+        await service.createAbiding({ message: "yeah, well", replyToId: PARENT_ID }, author);
+
+        expect(abidingModel.exists).toHaveBeenCalledWith({ _id: PARENT_ID, deletedAt: null });
+        expect(abidingModel.create).toHaveBeenCalledWith(
+          expect.objectContaining({ replyToId: PARENT_ID }),
+        );
+      });
+
+      it("is refused with a 404, and nothing is written, when that abiding is missing", async () => {
+        abidingModel.exists.mockReturnValue(queryOf(null));
+
+        await expect(
+          service.createAbiding({ message: "yeah, well", replyToId: PARENT_ID }, author),
+        ).rejects.toThrow("The abiding being replied to was not found");
+
+        expect(abidingModel.create).not.toHaveBeenCalled();
+      });
+
+      it("skips the lookup when the abiding is not a reply", async () => {
+        abidingModel.create.mockResolvedValue({ _id: new mongoose.Types.ObjectId(), userId: 1 });
+
+        await service.createAbiding({ message: "not a reply" }, author);
+
+        expect(abidingModel.exists).not.toHaveBeenCalled();
+      });
     });
 
     it("derives hashtags from the message", async () => {
@@ -254,7 +311,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.objectContaining({ message: "New #Dude message", hashtags: ["dude"] }),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -264,6 +321,57 @@ describe("AbidingsService", () => {
       await service.patchAbiding("x", { message: "Now about #Walter" }, author);
 
       expect(hashtagsService.registerTags).toHaveBeenCalledWith(new Map([["walter", "Walter"]]));
+    });
+
+    // A missing field and a null mean different things. Missing leaves the
+    // stored value alone. Null clears it, and it used to be dropped: a reply
+    // could never be turned back into a plain abiding.
+    describe("replyToId and imageUrl", () => {
+      const PARENT_ID = "65f000000000000000000001";
+      const writtenUpdate = () =>
+        abidingModel.findOneAndUpdate.mock.calls[0][1] as Record<string, unknown>;
+
+      beforeEach(() => {
+        abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", message: "m" }));
+      });
+
+      it("writes null for each, which clears it", async () => {
+        await service.patchAbiding("x", { replyToId: null, imageUrl: null }, author);
+
+        expect(writtenUpdate()).toMatchObject({ replyToId: null, imageUrl: null });
+      });
+
+      it("leaves each undefined when the body does not mention it", async () => {
+        await service.patchAbiding("x", { message: "only the message" }, author);
+
+        expect(writtenUpdate().replyToId).toBeUndefined();
+        expect(writtenUpdate().imageUrl).toBeUndefined();
+      });
+
+      it("writes a new replyToId when the abiding it names exists", async () => {
+        await service.patchAbiding("x", { replyToId: PARENT_ID }, author);
+
+        expect(abidingModel.exists).toHaveBeenCalledWith({ _id: PARENT_ID, deletedAt: null });
+        expect(writtenUpdate()).toMatchObject({ replyToId: PARENT_ID });
+      });
+
+      it("refuses a replyToId that names a missing abiding, and writes nothing", async () => {
+        abidingModel.exists.mockReturnValue(queryOf(null));
+
+        await expect(service.patchAbiding("x", { replyToId: PARENT_ID }, author)).rejects.toThrow(
+          "The abiding being replied to was not found",
+        );
+
+        expect(abidingModel.findOneAndUpdate).not.toHaveBeenCalled();
+      });
+
+      it("refuses an abiding that replies to itself, and writes nothing", async () => {
+        await expect(
+          service.patchAbiding(PARENT_ID, { replyToId: PARENT_ID }, author),
+        ).rejects.toThrow("An abiding cannot reply to itself");
+
+        expect(abidingModel.findOneAndUpdate).not.toHaveBeenCalled();
+      });
     });
 
     it("doesn't touch the registry when the message doesn't change", async () => {
@@ -282,7 +390,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.not.objectContaining({ hashtags: expect.anything() }),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -296,7 +404,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 2 },
         expect.anything(),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -308,7 +416,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null },
         expect.anything(),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 

@@ -15,7 +15,7 @@ import { inspect } from "node:util";
 
 import { Controller, Get, INestApplication, Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { mongo } from "mongoose";
+import { Error as MongooseError, mongo } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { QueryFailedError } from "typeorm";
@@ -27,6 +27,9 @@ import { DUPLICATE_KEY } from "./mongo-error.filter.js";
 import { UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
 const PASSWORD_HASH = "$2b$10$hash-that-must-never-be-logged";
+const STORED_TEXT = "the text of a document that must never be logged";
+const FOREIGN_KEY_MESSAGE =
+  'insert or update on table "profile" violates foreign key constraint "FK_profile_userId"';
 
 // A controller that exists only to throw. Each route stands for one kind of
 // error the filters have to sort out, so this file proves the filter order
@@ -47,14 +50,26 @@ class BoomController {
     );
   }
 
-  // A failed insert that is not a conflict: 22001 is "value too long". The
-  // parameters stand for what a real user insert would carry.
+  // A failed insert that is a real fault: 23503 is a foreign key violation,
+  // which no caller input can cause here. The parameters stand for what a
+  // real user insert would carry.
   @Get("query")
   query(): never {
     throw new QueryFailedError(
       'INSERT INTO "user" ...',
       ["walter@example.com", PASSWORD_HASH],
-      Object.assign(new Error("value too long for type character varying(96)"), { code: "22001" }),
+      Object.assign(new Error(FOREIGN_KEY_MESSAGE), { code: "23503" }),
+    );
+  }
+
+  // A value the column cannot hold, which a DTO should have stopped: 22001 is
+  // "value too long".
+  @Get("bad-value")
+  badValue(): never {
+    throw new QueryFailedError(
+      'UPDATE "profile" ...',
+      ["a first name that is far too long"],
+      Object.assign(new Error("value too long for type character varying(100)"), { code: "22001" }),
     );
   }
 
@@ -73,6 +88,47 @@ class BoomController {
     throw new QueryFailedError("SELECT ...", [], new Error("Connection terminated unexpectedly"));
   }
 
+  // What Mongoose raises when a value breaks a rule in a schema, which a DTO
+  // should have stopped first.
+  @Get("mongoose-invalid")
+  mongooseInvalid(): never {
+    const error = new MongooseError.ValidationError();
+    error.addError(
+      "message",
+      new MongooseError.ValidatorError({
+        path: "message",
+        message: "Message cannot exceed 280 characters",
+      }),
+    );
+    throw error;
+  }
+
+  // A Mongo fault that is not a conflict or an outage. 121 is "document
+  // failed validation", and the server sends back the value it refused.
+  @Get("mongo-fault")
+  mongoFault(): never {
+    throw new mongo.MongoServerError({
+      message: "Document failed validation",
+      code: 121,
+      errInfo: { details: { consideredValue: STORED_TEXT } },
+    });
+  }
+
+  // What each database throws when it gives up on a query that ran too long.
+  @Get("pg-slow")
+  pgSlow(): never {
+    throw new QueryFailedError(
+      "SELECT ...",
+      [],
+      Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" }),
+    );
+  }
+
+  @Get("mongo-slow")
+  mongoSlow(): never {
+    throw new mongo.MongoOperationTimeoutError("Timed out during socket read (10000ms)");
+  }
+
   @Get("mongo-dup")
   mongoDup(): never {
     throw new mongo.MongoServerError({ message: "E11000", code: DUPLICATE_KEY });
@@ -87,11 +143,12 @@ class BoomController {
 describe("Exception filters (over HTTP)", () => {
   let app: INestApplication<App>;
   let logError: MockInstance<Logger["error"]>;
+  let logWarn: MockInstance<Logger["warn"]>;
 
   beforeEach(async () => {
     // Every route here logs an error on purpose. Keep the test output clean.
     logError = vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
-    vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
+    logWarn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
 
     const moduleFixture = await Test.createTestingModule({
       controllers: [BoomController],
@@ -139,9 +196,59 @@ describe("Exception filters (over HTTP)", () => {
 
     const logged = inspect(logError.mock.calls, { depth: null });
     expect(logged).toContain("GET /boom/query failed for user anonymous");
-    expect(logged).toContain("value too long for type character varying(96)");
+    expect(logged).toContain(FOREIGN_KEY_MESSAGE);
     expect(logged).not.toContain(PASSWORD_HASH);
     expect(logged).not.toContain("walter@example.com");
+  });
+
+  // The safety net for a value a DTO let through. The body is fixed, so it
+  // cannot quote the value, and it is a 400 because the caller sent it.
+  it("answers a value Postgres refused with a 400 that hides the driver message", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/bad-value").expect(400);
+
+    expect(body).toEqual({
+      statusCode: 400,
+      message: "A value in the request is not valid",
+      error: "Bad Request",
+    });
+  });
+
+  // A hit on the net means a DTO rule is missing. The warning is how someone
+  // finds out which route needs it.
+  it("logs a warning for that 400, naming the route and the request id", async () => {
+    await request(app.getHttpServer())
+      .get("/boom/bad-value")
+      .set("x-request-id", "trace-42")
+      .expect(400);
+
+    expect(logWarn).toHaveBeenCalledWith(
+      "GET /boom/bad-value for user anonymous (request trace-42): Postgres refused a value " +
+        "a DTO should have stopped (22001): value too long for type character varying(100)",
+    );
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("answers a value Mongoose refused with the same 400", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/mongoose-invalid").expect(400);
+
+    expect(body).toEqual({
+      statusCode: 400,
+      message: "A value in the request is not valid",
+      error: "Bad Request",
+    });
+    expect(logWarn).toHaveBeenCalledWith(
+      expect.stringContaining("GET /boom/mongoose-invalid for user anonymous"),
+    );
+  });
+
+  it("logs a Mongo fault without the document the error carries", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/mongo-fault").expect(500);
+
+    expect(body).toEqual({ statusCode: 500, message: "Internal server error" });
+    const logged = inspect(logError.mock.calls, { depth: null });
+    expect(logged).toContain("GET /boom/mongo-fault failed for user anonymous");
+    expect(logged).toContain("Document failed validation");
+    expect(logged).not.toContain(STORED_TEXT);
   });
 
   it("still lets QueryFailedFilter turn a unique violation into a 409", async () => {
@@ -173,6 +280,18 @@ describe("Exception filters (over HTTP)", () => {
     expect(body.message).toBe("Database unavailable");
     expect(body.errorCode).toBe("DATABASE_UNAVAILABLE");
   });
+
+  // The same body TimeoutInterceptor writes, so "took too long" is one answer
+  // whichever of the three limits trips first.
+  it.each(["/boom/pg-slow", "/boom/mongo-slow"])(
+    "answers %s with the 408 for a query that ran too long",
+    async (route) => {
+      const { body } = await request(app.getHttpServer()).get(route).expect(408);
+
+      expect(body).toEqual({ statusCode: 408, message: "Request Timeout" });
+      expect(logWarn).toHaveBeenCalledWith(expect.stringContaining(`GET ${route} for user`));
+    },
+  );
 
   // The same body whichever database is down, so a client needs one branch.
   it.each(["/boom/pg-down", "/boom/pg-dropped", "/boom/mongo-down"])(

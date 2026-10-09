@@ -17,7 +17,8 @@ import { listenOnLoopback } from "./listen-on-loopback.js";
 // 401 or 403 is unreachable there.
 //
 // Needs the databases running and the admin user seeded (`pnpm seed:run`).
-// Creates two throwaway users and one abiding, so each run leaves those behind.
+// Creates throwaway e2e- users and their abidings. test/global-setup.ts
+// deletes them when the run ends.
 describe("Authorization (e2e)", () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
@@ -89,6 +90,19 @@ describe("Authorization (e2e)", () => {
       ["/profiles", 200],
     ] as const)("GET %s is %i", async (path, status) => {
       await request(app.getHttpServer()).get(path).expect(status);
+    });
+
+    // On a public route the token is optional. A good one identifies the
+    // caller; a bad one is ignored and must never turn the route into a 401.
+    it.each([
+      ["a token this app did not sign", "Bearer not.a.token"],
+      ["a header that is not a bearer token", "Basic abc123"],
+    ])("GET /abidings is still 200 with %s", async (_what, authorization) => {
+      await request(app.getHttpServer()).get("/abidings").set({ authorization }).expect(200);
+    });
+
+    it("GET /abidings is 200 with a good token too", async () => {
+      await request(app.getHttpServer()).get("/abidings").set(bearer(owner.token)).expect(200);
     });
 
     // Both have to stay open or there is no way to get a first token.
@@ -243,6 +257,22 @@ describe("Authorization (e2e)", () => {
         .expect(201);
 
       expect((posted.body as { userId: number }).userId).toBe(stranger.userId);
+    });
+
+    // Signed by this app, so the guard lets it through, but no user has this
+    // id. The abiding would have an author nobody can find.
+    it("404 when the token's user does not exist", async () => {
+      const token = await jwt.signAsync({
+        sub: 2_000_000_000,
+        username: "e2e-nobody",
+        role: UserRole.USER,
+      });
+
+      await request(app.getHttpServer())
+        .post("/abidings")
+        .set(bearer(token))
+        .send({ message: "posted by nobody" })
+        .expect(404);
     });
   });
 
