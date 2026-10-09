@@ -141,9 +141,14 @@ export class AbidingsService {
     // It replaces the older { new: true }, which Mongoose has deprecated.
     // ownedBy puts the authorization rule in the filter, so the check and the
     // write are one operation with no window between them.
+    //
+    // runValidators: true because Mongoose skips the schema's rules on an
+    // update unless asked. Without it an edit stored a message that create
+    // would have refused.
     const updatedAbiding = await this.abidingModel
       .findOneAndUpdate({ _id: id, deletedAt: null, ...this.ownedBy(caller) }, update, {
         returnDocument: "after",
+        runValidators: true,
       })
       .exec();
 

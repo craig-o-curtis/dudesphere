@@ -1,7 +1,11 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { maxLength } from "class-validator";
 import { Document } from "mongoose";
 
 export type AbidingDocument = Abiding & Document;
+
+/** The longest message an abiding may carry. The DTOs and the schema share it. */
+export const ABIDING_MESSAGE_MAX = 280;
 
 @Schema({ timestamps: true })
 export class Abiding extends Document {
@@ -12,7 +16,18 @@ export class Abiding extends Document {
     type: String,
     required: true,
     minlength: [1, "Message must be at least 1 character"],
-    maxlength: [280, "Message cannot exceed 280 characters"],
+    // Not Mongoose's own `maxlength`. That counts UTF-16 units, so one emoji
+    // counts as two and a red heart (U+2764 U+FE0F) as two as well, while the
+    // DTO's @MaxLength counts each of them as one. A message the DTO accepted
+    // then failed here as a 500. Calling the same function the DTO uses means
+    // the two can never disagree.
+    //
+    // The function reads only `value`. On an edit Mongoose calls it with
+    // `this` set to the query, not the document.
+    validate: {
+      validator: (value: string) => maxLength(value, ABIDING_MESSAGE_MAX),
+      message: `Message cannot exceed ${ABIDING_MESSAGE_MAX} characters`,
+    },
   })
   message: string;
 

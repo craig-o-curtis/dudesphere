@@ -254,7 +254,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.objectContaining({ message: "New #Dude message", hashtags: ["dude"] }),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -282,7 +282,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 1 },
         expect.not.objectContaining({ hashtags: expect.anything() }),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -296,7 +296,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null, userId: 2 },
         expect.anything(),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
@@ -308,7 +308,7 @@ describe("AbidingsService", () => {
       expect(abidingModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "x", deletedAt: null },
         expect.anything(),
-        { returnDocument: "after" },
+        { returnDocument: "after", runValidators: true },
       );
     });
 
