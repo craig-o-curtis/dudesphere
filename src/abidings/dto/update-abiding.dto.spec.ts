@@ -25,6 +25,14 @@ describe("UpdateAbidingDto", () => {
     expect(await invalidFields({ message: "" })).toEqual(["message"]);
   });
 
+  it("accepts a replyToId shaped like an abiding id", async () => {
+    expect(await invalidFields({ replyToId: "65f000000000000000000001" })).toEqual([]);
+  });
+
+  it("rejects a replyToId that is not shaped like an abiding id", async () => {
+    expect(await invalidFields({ replyToId: "not-an-id" })).toEqual(["replyToId"]);
+  });
+
   it.each(["imageUrl", "replyToId"])("accepts null for %s", async (field) => {
     expect(await invalidFields({ [field]: null })).toEqual([]);
   });
