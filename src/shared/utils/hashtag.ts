@@ -7,7 +7,9 @@
 // than silently truncated to its first 64 characters.
 const HASHTAG_PATTERN = /#([\p{L}\p{N}_]+)/gu;
 const MAX_TAG_LENGTH = 64;
-const MAX_TAGS = 10;
+// The most tags one abiding carries. GET /abidings also takes at most this
+// many in its ?hashtag= filter: see ListAbidingsQueryDto.
+export const MAX_TAGS = 10;
 
 export function extractHashtags(message: string): string[] {
   const seen = new Set<string>();

@@ -35,6 +35,7 @@ describe("AbidingsController id params (over HTTP)", () => {
 
   const abidingService = {
     getAbidings: vi.fn(),
+    getAbidingsByHashtags: vi.fn(),
     getAbidingById: vi.fn(),
     getAbidingsByUserId: vi.fn(),
     patchAbiding: vi.fn(),
@@ -53,6 +54,7 @@ describe("AbidingsController id params (over HTTP)", () => {
     abidingService.deleteAbiding.mockResolvedValue(undefined);
     abidingService.getAbidingsByUserId.mockResolvedValue({ items: [], total: 0 });
     abidingService.getAbidings.mockResolvedValue({ items: [], total: 0 });
+    abidingService.getAbidingsByHashtags.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
@@ -197,6 +199,37 @@ describe("AbidingsController id params (over HTTP)", () => {
         expect(abidingService.getAbidings).not.toHaveBeenCalled();
       },
     );
+  });
+
+  // Mongo merges sorted index runs for up to 200 tags and sorts in memory
+  // past that. The limit is 10, the most one abiding can carry.
+  describe("GET /abidings limits how many tags one request may filter by", () => {
+    function tags(count: number) {
+      return Array.from({ length: count }, (_, i) => `tag${i}`).join(",");
+    }
+
+    it("accepts 10 tags", async () => {
+      await request(app.getHttpServer())
+        .get(`/abidings?hashtag=${tags(10)}`)
+        .expect(200);
+
+      expect(abidingService.getAbidingsByHashtags.mock.calls[0][0]).toHaveLength(10);
+    });
+
+    it("rejects 11 tags with 400", async () => {
+      await request(app.getHttpServer())
+        .get(`/abidings?hashtag=${tags(11)}`)
+        .expect(400);
+
+      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+    });
+
+    // Empty parts are dropped before the tags are counted.
+    it("does not count empty parts towards the limit", async () => {
+      await request(app.getHttpServer())
+        .get(`/abidings?hashtag=${tags(10)},,,`)
+        .expect(200);
+    });
   });
 
   it("rejects a bad page on GET /abidings/me with 400", async () => {

@@ -61,6 +61,10 @@ not a 500.
   `@IsInt` itself. Use it, and not `@Type(() => Number)`, on any number that
   arrives as a string: a route param, a query param or an environment
   variable.
+- `@MaxCommaSeparated(n)` limits how many values a comma-separated string may
+  hold, such as the `?hashtag=dude,sunday` filter on `GET /abidings`. Empty
+  parts do not count. It counts with `splitCommaSeparated` from
+  `src/shared/utils/comma-separated.ts`; read the value with the same function.
 
 `src/shared/dto/entity-rules.spec.ts` reads the entities and fails when a
 field is missing the first two.

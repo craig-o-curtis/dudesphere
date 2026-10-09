@@ -162,16 +162,16 @@ shows the full shape.
 
 ### Abidings (MongoDB)
 
-| Method | Endpoint              | Access          | Description                                        |
-| ------ | --------------------- | --------------- | -------------------------------------------------- |
-| GET    | `/abidings`           | Public          | List abidings, paginated, newest first             |
-| GET    | `/abidings?userId=X`  | Public          | Filter by author                                   |
-| GET    | `/abidings?hashtag=X` | Public          | Filter by tag. Several, comma-separated, match any |
-| GET    | `/abidings/me`        | Token           | The caller's own abidings, paginated, newest first |
-| GET    | `/abidings/:id`       | Public          | One abiding                                        |
-| POST   | `/abidings`           | Token           | Post an abiding, or a reply with `replyToId`       |
-| PATCH  | `/abidings/:id`       | Author or admin | Edit an abiding                                    |
-| DELETE | `/abidings/:id`       | Author or admin | Delete an abiding                                  |
+| Method | Endpoint              | Access          | Description                                         |
+| ------ | --------------------- | --------------- | --------------------------------------------------- |
+| GET    | `/abidings`           | Public          | List abidings, paginated, newest first              |
+| GET    | `/abidings?userId=X`  | Public          | Filter by author                                    |
+| GET    | `/abidings?hashtag=X` | Public          | Filter by tag. Up to 10, comma-separated, match any |
+| GET    | `/abidings/me`        | Token           | The caller's own abidings, paginated, newest first  |
+| GET    | `/abidings/:id`       | Public          | One abiding                                         |
+| POST   | `/abidings`           | Token           | Post an abiding, or a reply with `replyToId`        |
+| PATCH  | `/abidings/:id`       | Author or admin | Edit an abiding                                     |
+| DELETE | `/abidings/:id`       | Author or admin | Delete an abiding                                   |
 
 ### Hashtags (MongoDB)
 

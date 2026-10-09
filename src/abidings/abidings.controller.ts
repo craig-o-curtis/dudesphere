@@ -11,6 +11,7 @@ import {
   toPaginatedResponse,
 } from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -39,12 +40,7 @@ export class AbidingsController {
     // tag still goes through the dedicated single-tag call rather than the
     // multi-tag one, since that's the call the rest of the service (and any
     // future caller) should reach for when it only has one tag.
-    const tags = query.hashtag
-      ? query.hashtag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean)
-      : [];
+    const tags = query.hashtag ? splitCommaSeparated(query.hashtag) : [];
 
     const abidings =
       tags.length === 0
