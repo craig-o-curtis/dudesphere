@@ -15,6 +15,12 @@ This folder holds the ones several features share.
   by a Postgres row (`user`, `profile`). It accepts digits only, from 1 to
   2,147,483,647, the largest Postgres `integer`. Anything else is a 400.
 - `id-param.http.spec.ts` tests it over HTTP.
+- `pagination-query.dto.ts` holds `PaginationQueryDto`, the `?limit=&page=`
+  query on list routes (`GET /users`, `GET /profiles`). `limit` is 1 to 100,
+  default 10. `page` is 1 or more, default 1. Page 0 used to reach Postgres as
+  a negative OFFSET and come back as a 500.
+- `pagination-query.dto.spec.ts` tests the defaults and bounds directly, and
+  `pagination-query.http.spec.ts` tests them over HTTP.
 
 ## How to use it
 
