@@ -4,7 +4,7 @@
 // does for the seed services.
 //
 // Run with: pnpm backfill:hashtags
-import "reflect-metadata"; // TODO say what this is package is for
+import "reflect-metadata";
 import * as path from "path";
 
 import { NestFactory } from "@nestjs/core";
