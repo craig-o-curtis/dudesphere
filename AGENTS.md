@@ -1,6 +1,6 @@
 # Agent instructions
 
-This is a vanilla Nestjs project. The goal is to setup with raw databases, no fancy ORMs.
+This is a vanilla NestJS project with two databases: PostgreSQL through TypeORM and MongoDB through Mongoose. Keep it to those two. Do not add another ORM or data layer.
 
 ## Language
 
