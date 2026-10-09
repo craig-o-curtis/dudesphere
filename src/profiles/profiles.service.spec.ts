@@ -1,9 +1,10 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -320,14 +321,14 @@ describe("ProfilesService", () => {
       );
     });
 
-    it("throws ForbiddenException when the profile exists but is someone else's", async () => {
+    it("throws NotOwnerException when the profile exists but is someone else's", async () => {
       profileRepository.update.mockResolvedValue({ affected: 0 });
       // It exists, so nothing matching means the caller does not own it.
       profileRepository.findOne.mockResolvedValue(mockProfile);
 
       const attempt = service.updateProfile(1, { bio: "x" }, other);
 
-      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toBeInstanceOf(NotOwnerException);
       await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });

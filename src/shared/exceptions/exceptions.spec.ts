@@ -1,5 +1,13 @@
-import { ConflictException, type HttpException, type Type } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  type HttpException,
+  type Type,
+  UnauthorizedException,
+} from "@nestjs/common";
 
+import { NotOwnerException } from "./not-owner.exception.js";
+import { TokenMissingException } from "./token-missing.exception.js";
 import { ValueTakenException } from "./value-taken.exception.js";
 
 // One table for every exception class in this folder. Each row pins what a
@@ -66,6 +74,36 @@ describe("the app's own exception classes", () => {
         },
         errorCode: "VALUE_TAKEN",
         cause,
+      },
+    ],
+    [
+      "NotOwnerException",
+      () => new NotOwnerException("Not authorized to edit this abiding"),
+      {
+        parent: ForbiddenException,
+        status: 403,
+        body: {
+          statusCode: 403,
+          message: "Not authorized to edit this abiding",
+          error: "Forbidden",
+          errorCode: "NOT_OWNER",
+        },
+        errorCode: "NOT_OWNER",
+      },
+    ],
+    [
+      "TokenMissingException",
+      () => new TokenMissingException("Missing or invalid authorization header"),
+      {
+        parent: UnauthorizedException,
+        status: 401,
+        body: {
+          statusCode: 401,
+          message: "Missing or invalid authorization header",
+          error: "Unauthorized",
+          errorCode: "TOKEN_MISSING",
+        },
+        errorCode: "TOKEN_MISSING",
       },
     ],
   ];

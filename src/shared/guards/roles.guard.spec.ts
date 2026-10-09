@@ -1,7 +1,8 @@
-import { ExecutionContext, ForbiddenException, UnauthorizedException } from "@nestjs/common";
+import { ExecutionContext, ForbiddenException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
 import { UserRole } from "../../users/user.entity.js";
+import { TokenMissingException } from "../exceptions/token-missing.exception.js";
 import { RolesGuard } from "./roles.guard.js";
 
 describe("RolesGuard", () => {
@@ -63,11 +64,11 @@ describe("RolesGuard", () => {
 
   // Unreachable while JwtAuthGuard runs first, which is why it is worth
   // pinning: a role rule with nobody to check is a missing identity, so 401.
-  it("throws UnauthorizedException when a role is required and nobody is signed in", () => {
+  it("throws TokenMissingException when a role is required and nobody is signed in", () => {
     getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
     const attempt = () => guard.canActivate(contextFor({}));
 
-    expect(attempt).toThrow(UnauthorizedException);
+    expect(attempt).toThrow(TokenMissingException);
     expect(attempt).toThrow(expect.objectContaining({ errorCode: "TOKEN_MISSING" }));
   });
 });
