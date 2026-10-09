@@ -4,8 +4,9 @@ import { validate } from "class-validator";
 import { CreateProfileDto } from "./create-profile-dto.js";
 
 describe("CreateProfileDto", () => {
-  const invalidFields = async (body: object) =>
-    (await validate(plainToInstance(CreateProfileDto, body))).map((error) => error.property);
+  async function invalidFields(body: object) {
+    return (await validate(plainToInstance(CreateProfileDto, body))).map((error) => error.property);
+  }
 
   it("accepts an empty body: a profile starts with defaults", async () => {
     expect(await invalidFields({})).toEqual([]);

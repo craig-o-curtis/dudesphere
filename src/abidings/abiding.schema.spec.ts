@@ -14,18 +14,18 @@ import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 describe("Abiding schema: message length", () => {
   const AbidingModel = model("AbidingSchemaSpec", AbidingSchema);
 
-  const schemaAccepts = async (message: string) => {
+  async function schemaAccepts(message: string) {
     const error: unknown = await new AbidingModel({ userId: 1, message })
       .validate()
       .then(() => null)
       .catch((reason: unknown) => reason);
     return error === null;
-  };
+  }
 
-  const dtoAccepts = async (message: string) => {
+  async function dtoAccepts(message: string) {
     const errors = await validate(plainToInstance(CreateAbidingDto, { message }));
     return errors.length === 0;
-  };
+  }
 
   // One visible character each, but more than one UTF-16 unit, and for the
   // heart more than one code point.

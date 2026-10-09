@@ -12,15 +12,17 @@ describe("RolesGuard", () => {
 
   // A fake ExecutionContext. getHandler and getClass are only there to be
   // handed to Reflector, which is mocked, so their values do not matter.
-  const contextFor = (request: object) =>
-    ({
+  function contextFor(request: object) {
+    return {
       switchToHttp: () => ({ getRequest: () => request }),
       getHandler: () => () => undefined,
       getClass: () => class {},
-    }) as unknown as ExecutionContext;
+    } as unknown as ExecutionContext;
+  }
 
-  const signedIn = (role: UserRole) =>
-    contextFor({ user: { userId: 1, username: "walter", role } });
+  function signedIn(role: UserRole) {
+    return contextFor({ user: { userId: 1, username: "walter", role } });
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,7 +58,9 @@ describe("RolesGuard", () => {
   // Before this guard existed, HashtagsController threw 401 here by hand.
   it("throws ForbiddenException when a user hits an admin route", () => {
     getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
-    const attempt = () => guard.canActivate(signedIn(UserRole.USER));
+    function attempt() {
+      return guard.canActivate(signedIn(UserRole.USER));
+    }
 
     expect(attempt).toThrow(ForbiddenException);
     expect(attempt).toThrow(expect.objectContaining({ errorCode: "ROLE_REQUIRED" }));
@@ -66,7 +70,9 @@ describe("RolesGuard", () => {
   // pinning: a role rule with nobody to check is a missing identity, so 401.
   it("throws TokenMissingException when a role is required and nobody is signed in", () => {
     getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
-    const attempt = () => guard.canActivate(contextFor({}));
+    function attempt() {
+      return guard.canActivate(contextFor({}));
+    }
 
     expect(attempt).toThrow(TokenMissingException);
     expect(attempt).toThrow(expect.objectContaining({ errorCode: "TOKEN_MISSING" }));

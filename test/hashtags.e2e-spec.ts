@@ -132,12 +132,13 @@ describe("Hashtag delete and restore (e2e)", () => {
     let authorToken: string;
     let firstUsedAt: string;
 
-    const postWithTag = (tag: string) =>
-      request(app.getHttpServer())
+    function postWithTag(tag: string) {
+      return request(app.getHttpServer())
         .post("/abidings")
         .set(bearer(authorToken))
         .send({ message: `the dude abides #${tag}` })
         .expect(201);
+    }
 
     beforeAll(async () => {
       // A real user, because POST /abidings records the caller as the author.

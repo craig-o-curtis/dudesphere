@@ -25,8 +25,13 @@ describe("QueryFailedFilter", () => {
 
   // TypeORM copies the driver error's fields, `code` among them, onto the
   // QueryFailedError. That is the field the filter reads.
-  const queryFailed = (code: string, driverMessage = "driver error") =>
-    new QueryFailedError("INSERT INTO ...", [], Object.assign(new Error(driverMessage), { code }));
+  function queryFailed(code: string, driverMessage = "driver error") {
+    return new QueryFailedError(
+      "INSERT INTO ...",
+      [],
+      Object.assign(new Error(driverMessage), { code }),
+    );
+  }
 
   // The filter hands every outcome to AllExceptionsFilter.catch, so what it
   // passes there is the whole of its behaviour.

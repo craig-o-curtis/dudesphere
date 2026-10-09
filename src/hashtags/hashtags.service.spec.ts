@@ -23,12 +23,14 @@ describe("HashtagsService", () => {
 
   // find().sort().skip().limit().exec() — the list chains all three before
   // exec. The other queries only call exec.
-  const queryOf = <T>(value: T) => ({
-    sort: vi.fn().mockReturnThis(),
-    skip: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    exec: vi.fn().mockResolvedValue(value),
-  });
+  function queryOf<T>(value: T) {
+    return {
+      sort: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      exec: vi.fn().mockResolvedValue(value),
+    };
+  }
 
   const firstPage = { limit: 10, page: 1 };
 

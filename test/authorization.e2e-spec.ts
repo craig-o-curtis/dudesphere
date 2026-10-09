@@ -29,7 +29,7 @@ describe("Authorization (e2e)", () => {
   let adminToken: string;
   let ownersAbidingId: string;
 
-  const registerAndLogin = async (): Promise<{ token: string; userId: number }> => {
+  async function registerAndLogin(): Promise<{ token: string; userId: number }> {
     // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
     // keep the username under its 24-character limit.
     const tag = randomUUID().slice(0, 8);
@@ -43,9 +43,11 @@ describe("Authorization (e2e)", () => {
     const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
-  };
+  }
 
-  const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+  function bearer(token: string) {
+    return { authorization: `Bearer ${token}` };
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
