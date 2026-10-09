@@ -20,10 +20,12 @@ export class UsersSeedService {
     private readonly hashingProvider: HashingProvider,
   ) {}
 
-  async seed(adminEmail: string, adminPassword: string): Promise<void> {
+  // Returns the admin's id, so the seeds that follow can write rows as that
+  // user. Null when there was nothing to seed.
+  async seed(adminEmail: string, adminPassword: string): Promise<number | null> {
     if (!adminEmail || !adminPassword) {
       this.logger.warn("EMAIL or PASSWORD not set — skipping admin seed");
-      return;
+      return null;
     }
 
     // The seed writes to the table directly, so it hashes for itself. Every
@@ -40,7 +42,7 @@ export class UsersSeedService {
       admin.username = "Admin";
       admin.password = passwordHash;
       admin.role = UserRole.ADMIN;
-      await this.usersRepository.save(admin);
+      admin = await this.usersRepository.save(admin);
       this.logger.log(`Updated admin user (${adminEmail}) with role ${UserRole.ADMIN}`);
     } else {
       // Create new admin
@@ -54,8 +56,10 @@ export class UsersSeedService {
         updatedAt: nowUtc,
       });
 
-      await this.usersRepository.save(admin);
+      admin = await this.usersRepository.save(admin);
       this.logger.log(`Seeded admin user (${adminEmail}) with role ${UserRole.ADMIN}`);
     }
+
+    return admin.id;
   }
 }
