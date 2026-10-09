@@ -56,6 +56,11 @@ not a 500.
 - `@IsUtcDateTime()` accepts one shape only: a real instant in UTC, such as
   `2026-10-06T12:00:00Z`. The check is gmt's `isValidUtc` with its
   `rfc3339DateTime` pattern.
+- `@IntFromDigits(fallback?)` converts a string to a whole number and accepts
+  plain digits only, so `0x10`, `1e1` and `+5` are rejected. It applies
+  `@IsInt` itself. Use it, and not `@Type(() => Number)`, on any number that
+  arrives as a string: a route param, a query param or an environment
+  variable.
 
 `src/shared/dto/entity-rules.spec.ts` reads the entities and fails when a
 field is missing the first two.

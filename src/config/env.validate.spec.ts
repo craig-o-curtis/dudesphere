@@ -92,6 +92,11 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...required, PORT: port })).toThrow(/PORT/);
   });
 
+  // Number() reads each of these as a port in range. Only plain digits pass.
+  it.each(["0x10", "5e3", "+80"])("throws when PORT is %s, which is not plain digits", (port) => {
+    expect(() => validateEnv({ ...required, PORT: port })).toThrow(/PORT/);
+  });
+
   it("throws when NODE_ENV is not a known environment", () => {
     expect(() => validateEnv({ ...required, NODE_ENV: "EXAMPLE" })).toThrow(/NODE_ENV/);
   });
