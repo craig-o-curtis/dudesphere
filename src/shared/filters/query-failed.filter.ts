@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
-import { BaseExceptionFilter } from "@nestjs/core";
 import { QueryFailedError } from "typeorm";
+
+import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 
 /** Postgres unique_violation. */
 export const UNIQUE_VIOLATION = "23505";
@@ -12,9 +13,12 @@ export const UNIQUE_VIOLATION = "23505";
  * Either way it is a conflict, not a server fault, so it becomes a 409.
  * Every other database error keeps falling through to a 500 — those are real
  * faults and hiding them would only delay the fix.
+ *
+ * Extends AllExceptionsFilter so the 500 path gets the same log line as
+ * every other fault.
  */
 @Catch(QueryFailedError)
-export class QueryFailedFilter extends BaseExceptionFilter {
+export class QueryFailedFilter extends AllExceptionsFilter {
   private readonly logger = new Logger(QueryFailedFilter.name);
 
   override catch(exception: QueryFailedError, host: ArgumentsHost): void {

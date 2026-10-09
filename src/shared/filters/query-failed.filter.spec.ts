@@ -1,7 +1,7 @@
 import { ArgumentsHost, ConflictException, Logger } from "@nestjs/common";
-import { BaseExceptionFilter } from "@nestjs/core";
 import { QueryFailedError } from "typeorm";
 
+import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { QueryFailedFilter, UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
 describe("QueryFailedFilter", () => {
@@ -12,9 +12,9 @@ describe("QueryFailedFilter", () => {
   const queryFailed = (code: string) =>
     new QueryFailedError("INSERT INTO ...", [], Object.assign(new Error("driver error"), { code }));
 
-  // The filter hands every outcome to BaseExceptionFilter.catch, so what it
+  // The filter hands every outcome to AllExceptionsFilter.catch, so what it
   // passes there is the whole of its behaviour.
-  const baseCatch = vi.spyOn(BaseExceptionFilter.prototype, "catch");
+  const baseCatch = vi.spyOn(AllExceptionsFilter.prototype, "catch");
 
   beforeEach(() => {
     baseCatch.mockReset().mockImplementation(() => {});
