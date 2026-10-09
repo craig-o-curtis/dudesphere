@@ -205,6 +205,88 @@ describe("Model constraints (e2e)", () => {
     });
   });
 
+  it("PATCH /profiles/me rejects a profileImageUrl that is not a url", async () => {
+    const { body } = await patch("/profiles/me", { profileImageUrl: "my avatar" }).expect(400);
+
+    expectRejectedField(body, "profileImageUrl");
+  });
+
+  // Mongo has no foreign keys and no column types, so nothing below the
+  // service checks these. Each case here used to be accepted.
+  describe("an abiding's image and the abiding it replies to", () => {
+    type Abiding = {
+      id: string;
+      imageUrl: string | null;
+      replyToId: string | null;
+      updatedAt: string;
+    };
+    // Shaped like an abiding id, but no abiding has it.
+    const MISSING_ID = "000000000000000000000000";
+    let parent: Abiding;
+    let reply: Abiding;
+
+    // The DTO accepted imageUrl and the service dropped it.
+    it("POST /abidings stores an image url and returns it", async () => {
+      const { body } = await post("/abidings", {
+        message: "with a picture",
+        imageUrl: "https://example.com/rug.png",
+      }).expect(201);
+
+      parent = body as Abiding;
+      expect(parent.imageUrl).toBe("https://example.com/rug.png");
+      expect(parent.updatedAt).toEqual(expect.any(String));
+    });
+
+    it("GET /abidings/:id returns the image url too", async () => {
+      const { body } = await request(app.getHttpServer()).get(`/abidings/${parent.id}`).expect(200);
+
+      expect((body as Abiding).imageUrl).toBe("https://example.com/rug.png");
+    });
+
+    it("POST /abidings rejects a replyToId that is not an abiding id", async () => {
+      const { body } = await post("/abidings", {
+        message: "a reply to nothing",
+        replyToId: "not-an-id",
+      }).expect(400);
+
+      expectRejectedField(body, "replyToId");
+    });
+
+    it("POST /abidings answers 404 for a reply to an abiding that is not there", async () => {
+      const { body } = await post("/abidings", {
+        message: "a reply to nothing",
+        replyToId: MISSING_ID,
+      }).expect(404);
+
+      expect((body as { message: string }).message).toBe(
+        "The abiding being replied to was not found",
+      );
+    });
+
+    it("POST /abidings accepts a reply to a real abiding", async () => {
+      const { body } = await post("/abidings", {
+        message: "yeah, well",
+        replyToId: parent.id,
+      }).expect(201);
+
+      reply = body as Abiding;
+      expect(reply.replyToId).toBe(parent.id);
+    });
+
+    it("PATCH /abidings/:id rejects an abiding that replies to itself", async () => {
+      await patch(`/abidings/${reply.id}`, { replyToId: reply.id }).expect(400);
+    });
+
+    // Null used to be dropped, so a reply could never become a plain abiding.
+    it("PATCH /abidings/:id clears replyToId and imageUrl when sent null", async () => {
+      const cleared = await patch(`/abidings/${reply.id}`, { replyToId: null }).expect(200);
+      const noImage = await patch(`/abidings/${parent.id}`, { imageUrl: null }).expect(200);
+
+      expect((cleared.body as Abiding).replyToId).toBeNull();
+      expect((noImage.body as Abiding).imageUrl).toBeNull();
+    });
+  });
+
   // The DTO and the Mongoose schema each limit the message. They used to
   // count differently, so the schema refused what the DTO had accepted, and
   // an edit skipped the schema altogether.
