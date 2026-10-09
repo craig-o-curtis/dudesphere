@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { mongo } from "mongoose";
 
+import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 
 /** MongoDB duplicate key. */
@@ -32,7 +33,13 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       // The driver message names the index and the value, so it is logged
       // rather than returned to the caller.
       this.logger.warn(`Duplicate key reached Mongo: ${exception.message}`);
-      super.catch(new ConflictException("That value is already taken", { cause: exception }), host);
+      super.catch(
+        new ConflictException("That value is already taken", {
+          cause: exception,
+          errorCode: ErrorCode.VALUE_TAKEN,
+        }),
+        host,
+      );
       return;
     }
 
@@ -41,7 +48,10 @@ export class MongoErrorFilter extends AllExceptionsFilter {
       exception instanceof mongo.MongoServerSelectionError
     ) {
       super.catch(
-        new ServiceUnavailableException("Database unavailable", { cause: exception }),
+        new ServiceUnavailableException("Database unavailable", {
+          cause: exception,
+          errorCode: ErrorCode.DATABASE_UNAVAILABLE,
+        }),
         host,
       );
       return;

@@ -73,6 +73,17 @@ describe("Exception filters (over HTTP)", () => {
     expect(body.message).toBe("That value is already taken");
   });
 
+  it("puts the errorCode in the 409 body", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/unique").expect(409);
+
+    expect(body).toEqual({
+      statusCode: 409,
+      message: "That value is already taken",
+      error: "Conflict",
+      errorCode: "VALUE_TAKEN",
+    });
+  });
+
   it("turns a Mongo duplicate key into a 409", async () => {
     await request(app.getHttpServer()).get("/boom/mongo-dup").expect(409);
   });

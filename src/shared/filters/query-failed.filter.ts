@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
+import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 
 /** Postgres unique_violation. */
@@ -28,7 +29,13 @@ export class QueryFailedFilter extends AllExceptionsFilter {
       // The driver message names the constraint and the conflicting value,
       // so it is logged rather than returned to the caller.
       this.logger.warn(`Unique violation reached the database: ${exception.message}`);
-      super.catch(new ConflictException("That value is already taken"), host);
+      super.catch(
+        new ConflictException("That value is already taken", {
+          cause: exception,
+          errorCode: ErrorCode.VALUE_TAKEN,
+        }),
+        host,
+      );
       return;
     }
 
