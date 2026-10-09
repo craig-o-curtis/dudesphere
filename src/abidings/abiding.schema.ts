@@ -44,7 +44,9 @@ export class Abiding extends Document {
   username: string | null;
 
   // Normalized slugs derived from `message` by extractHashtags. Never set
-  // directly by a client — see context/hashtag-plan.md.
+  // directly by a client: neither abiding DTO has a `hashtags` field, and the
+  // service writes this array itself. This array is the link between an
+  // abiding and its tags; context/overview.md says why there is no join table.
   @Prop({ type: [String], default: [] })
   hashtags: string[];
 

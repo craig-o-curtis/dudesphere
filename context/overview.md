@@ -44,8 +44,13 @@ A social network where Dudeist priests and members share **abidings** — short 
 ### MongoDB — `hashtags` collection
 
 The canonical list of every tag ever used, so a tag can be listed or looked up
-without scanning abidings. The relationship itself lives in `abidings.hashtags`
-— see [hashtag-plan.md](hashtag-plan.md).
+without scanning abidings.
+
+The link between an abiding and its tags is the `hashtags` array on the
+abiding. There is no third join collection. A document database stores a
+small, bounded list inside its parent, and an abiding holds at most 10 tags.
+The cost is accepted: renaming a tag means rewriting every abiding that uses
+it, so tags are never renamed.
 
 | Field         | Type       | Description                             |
 | ------------- | ---------- | --------------------------------------- |
@@ -108,3 +113,26 @@ without scanning abidings. The relationship itself lives in `abidings.hashtags`
 - [x] ISO string timestamps on all entities
 - [ ] Priests-only endpoints (future)
 - [ ] Abide University integration (future)
+
+## Deferred work
+
+Decided on, not built. Each note says how to build it when its time comes.
+
+**Trending tags.** Aggregate with `$unwind: "$hashtags"` over a recent
+`createdAt` window, then cache the result. Do not add a stored counter. A
+count in one database that describes rows in another will drift, and no
+transaction spans Postgres and Mongo to keep it honest.
+
+**Following a tag.** This belongs in Postgres, because the relation has
+`user.id` on one end. Here the textbook join table does fit, since both ends
+would live in one database: a `hashtag` table plus a `user_hashtag_follow`
+join table with `ON DELETE CASCADE`. That gives cleanup on user delete inside
+the existing Postgres transaction and keeps Mongo out of it.
+
+A tag would then exist in both stores, keyed by slug: the Mongo registry for
+"what tags exist and what do abidings use", the Postgres table for "who
+follows what". That duplication is acceptable only because the slug is stable
+and neither side needs the other's rows to answer its own questions. The
+normalized slug is the only value that crosses between the two stores. No ids
+cross. `src/abidings/user-abidings.service.ts` explains why nothing more
+should be added to the list of things that can leave the stores disagreeing.
