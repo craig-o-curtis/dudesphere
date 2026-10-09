@@ -39,9 +39,9 @@ export class Abiding extends Document {
   @Prop({ type: String, default: null })
   replyToId: string | null;
 
-  // Optional username snapshot (so replies still show original author)
-  @Prop({ type: String, default: null })
-  username: string | null;
+  // There is no username here, on purpose. A copy of the author's name would
+  // go stale the first time they renamed, so every response reads the current
+  // one from Postgres by userId. See AbidingsController.toResponse.
 
   // Normalized slugs derived from `message` by extractHashtags. Never set
   // directly by a client: neither abiding DTO has a `hashtags` field, and the

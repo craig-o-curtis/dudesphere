@@ -248,7 +248,6 @@ export class AbidingsService {
       userId: abiding.userId,
       message: abiding.message,
       imageUrl: abiding.imageUrl ?? null,
-      username: abiding.username || undefined,
       createdAt: abiding.createdAt ?? "",
       updatedAt: abiding.updatedAt ?? "",
       replyToId: abiding.replyToId ?? undefined,
