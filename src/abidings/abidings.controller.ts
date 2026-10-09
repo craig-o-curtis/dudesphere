@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ParseObjectIdPipe } from "@nestjs/mongoose";
 import type { Types as MongooseTypes } from "mongoose";
 
@@ -171,6 +171,7 @@ export class AbidingsController {
 
   // Author or admin, same rule as PATCH above.
   @Delete(":id")
+  @HttpCode(204) // needs 204 No Content instead of default 200 OK
   async deleteAbiding(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @CurrentUser() user: AuthUser,
