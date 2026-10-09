@@ -2,7 +2,7 @@ import { ClassSerializerInterceptor, INestApplication, ValidationPipe } from "@n
 import { Reflector } from "@nestjs/core";
 
 import { QueryFailedFilter } from "./shared/filters/query-failed.filter.js";
-
+import { requestId } from "./shared/middleware/request-id.middleware.js";
 /**
  * Everything the running app has beyond its modules: the serializer, the
  * validation rules and the error filters.
@@ -16,6 +16,9 @@ import { QueryFailedFilter } from "./shared/filters/query-failed.filter.js";
  * production.
  */
 export function configureApp(app: INestApplication): void {
+  // First, so guards, pipes, and filters all see the id.
+  app.use(requestId);
+
   // Enable serialization to exclude sensitive fields (e.g. password)
   // So using @Exclude() will work
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
