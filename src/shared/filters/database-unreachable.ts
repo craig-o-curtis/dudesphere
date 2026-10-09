@@ -1,7 +1,3 @@
-import { ServiceUnavailableException } from "@nestjs/common";
-
-import { ErrorCode } from "../error-codes.js";
-
 // Socket errors Node raises when a server cannot be reached. pg passes them
 // on untouched, so they arrive as a plain Error carrying one of these codes.
 // The Mongo driver usually wraps them in its own classes, but not always: the
@@ -44,16 +40,4 @@ export function isDatabaseUnreachable(error: unknown): boolean {
     return SOCKET_CODES.has(code) || REFUSING_STATES.has(code) || code.startsWith(CONNECTION_CLASS);
   }
   return TERMINATED.test(error.message);
-}
-
-/**
- * The one 503 every database filter answers with, so a client sees the same
- * body whichever database is down. The driver error rides along as `cause`
- * and is logged by AllExceptionsFilter, never returned.
- */
-export function databaseUnavailable(cause: unknown): ServiceUnavailableException {
-  return new ServiceUnavailableException("Database unavailable", {
-    cause,
-    errorCode: ErrorCode.DATABASE_UNAVAILABLE,
-  });
 }

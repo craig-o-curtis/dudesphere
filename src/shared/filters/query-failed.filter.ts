@@ -1,15 +1,20 @@
 import { ArgumentsHost, Catch, Logger } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
+import { DatabaseFaultException } from "../exceptions/database-fault.exception.js";
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
+import { InvalidValueException } from "../exceptions/invalid-value.exception.js";
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
 import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
-import { databaseFault } from "./database-fault.js";
-import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
-import { invalidValue, isBadValueState } from "./invalid-value.js";
-import { QUERY_CANCELED, queryTimedOut } from "./query-timed-out.js";
+import { isBadValueState } from "./bad-value-states.js";
+import { isDatabaseUnreachable } from "./database-unreachable.js";
 
 /** Postgres unique_violation. */
 export const UNIQUE_VIOLATION = "23505";
+
+/** Postgres query_canceled: what a statement gets when it passes statement_timeout. */
+export const QUERY_CANCELED = "57014";
 
 /**
  * Safety net for constraints the service layer did not check.
@@ -17,7 +22,7 @@ export const UNIQUE_VIOLATION = "23505";
  * A unique violation means two callers raced, or a service forgot a lookup.
  * Either way it is a conflict, not a server fault, so it becomes a 409.
  * A lost connection becomes a 503, the same answer MongoErrorFilter gives.
- * A value that does not fit its column becomes a 400: see invalid-value.ts
+ * A value that does not fit its column becomes a 400: see bad-value-states.ts
  * for which codes count and which do not.
  * A statement Postgres cancelled for running too long becomes a 408.
  * Every other database error keeps falling through to a 500 — those are real
@@ -47,7 +52,7 @@ export class QueryFailedFilter extends AllExceptionsFilter {
     // down. The query was not wrong, and the same request may work when sent
     // again, so it is a 503 and not a 500.
     if (isDatabaseUnreachable(exception.driverError)) {
-      super.catch(databaseUnavailable(exception), host);
+      super.catch(new DatabaseUnavailableException(exception), host);
       return;
     }
 
@@ -59,7 +64,7 @@ export class QueryFailedFilter extends AllExceptionsFilter {
       this.logger.warn(
         `${this.requestLine(host)}: Postgres cancelled a query that ran past its time limit`,
       );
-      super.catch(queryTimedOut(exception), host);
+      super.catch(new TimeLimitExceededException(exception), host);
       return;
     }
 
@@ -72,12 +77,12 @@ export class QueryFailedFilter extends AllExceptionsFilter {
         `${this.requestLine(host)}: Postgres refused a value a DTO should have stopped ` +
           `(${code}): ${exception.message}`,
       );
-      super.catch(invalidValue(exception), host);
+      super.catch(new InvalidValueException(exception), host);
       return;
     }
 
-    // Not passed on as it is: see database-fault.ts for what the raw error
+    // Not passed on as it is: see DatabaseFaultException for what the raw error
     // would put in the log.
-    super.catch(databaseFault(exception), host);
+    super.catch(new DatabaseFaultException(exception), host);
   }
 }
