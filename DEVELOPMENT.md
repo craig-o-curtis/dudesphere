@@ -187,6 +187,16 @@ pnpm test:e2e test/hashtags.e2e-spec.ts    # one suite
 The suites live in `test/*.e2e-spec.ts`. They run against the databases named
 in `.env`, which are your dev databases. There is no separate test database.
 
+Two things are set for you:
+
+- **The suites refuse to start unless both databases are on this machine.**
+  They write rows and then hard-delete them, so `test/global-setup.ts` checks
+  `PG_HOST` and `MONGO_URI` first and stops the run if either names another
+  host. The check is in `test/local-databases.ts`.
+- **The suites run in the `Asia/Tokyo` time zone.** `vitest.config.e2e.ts`
+  sets it. CI machines run in UTC, where a timestamp read in "the machine's
+  zone" happens to be right, so a time zone bug cannot show there.
+
 Before the first run:
 
 ```bash
