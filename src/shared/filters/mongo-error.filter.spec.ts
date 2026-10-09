@@ -36,6 +36,7 @@ describe("MongoErrorFilter", () => {
     const [passed] = baseCatch.mock.calls[0];
     expect(passed).toBeInstanceOf(ConflictException);
     expect((passed as ConflictException).message).toBe("That value is already taken");
+    expect((passed as ConflictException).errorCode).toBe("VALUE_TAKEN");
     expect((passed as ConflictException).cause).toBe(exception);
   });
 
@@ -46,6 +47,20 @@ describe("MongoErrorFilter", () => {
 
     const [passed] = baseCatch.mock.calls[0];
     expect(passed).toBeInstanceOf(ServiceUnavailableException);
+    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as ServiceUnavailableException).cause).toBe(exception);
+  });
+
+  // What the driver throws when no server answers in time, for example when
+  // Mongo was never reachable. The topology argument is not read here.
+  it("turns a server-selection error into a 503", () => {
+    const exception = new mongo.MongoServerSelectionError("timed out", {} as never);
+
+    new MongoErrorFilter().catch(exception, host);
+
+    const [passed] = baseCatch.mock.calls[0];
+    expect(passed).toBeInstanceOf(ServiceUnavailableException);
+    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
     expect((passed as ServiceUnavailableException).cause).toBe(exception);
   });
 

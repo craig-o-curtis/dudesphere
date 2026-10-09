@@ -49,9 +49,10 @@ describe("AuthService", () => {
     it("throws 401 and signs nothing when the email or password is wrong", async () => {
       usersService.getUserByCredentials.mockResolvedValue(null);
 
-      await expect(
-        service.login({ email: "w@x.com", password: "wrong-one" }),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      const attempt = service.login({ email: "w@x.com", password: "wrong-one" });
+
+      await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "BAD_CREDENTIALS" });
 
       expect(jwtService.signAsync).not.toHaveBeenCalled();
     });

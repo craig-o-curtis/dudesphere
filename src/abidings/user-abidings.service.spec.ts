@@ -44,6 +44,7 @@ describe("UserAbidingsService", () => {
       const failure = await service.softDeleteForUser(3).catch((e: unknown) => e);
 
       expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      expect((failure as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
       expect((failure as ServiceUnavailableException).cause).toBe(driverError);
     });
   });
@@ -65,6 +66,7 @@ describe("UserAbidingsService", () => {
       const failure = await service.restoreForUser(3).catch((e: unknown) => e);
 
       expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      expect((failure as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
       expect((failure as ServiceUnavailableException).cause).toBe(driverError);
     });
   });

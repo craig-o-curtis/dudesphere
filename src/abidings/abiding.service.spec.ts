@@ -316,9 +316,10 @@ describe("AbidingsService", () => {
       abidingModel.findOneAndUpdate.mockReturnValue(queryOf(null));
       abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
 
-      await expect(service.patchAbiding("x", { message: "m" }, other)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      const attempt = service.patchAbiding("x", { message: "m" }, other);
+
+      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });
 
@@ -367,7 +368,10 @@ describe("AbidingsService", () => {
       abidingModel.findOneAndDelete.mockReturnValue(queryOf(null));
       abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
 
-      await expect(service.deleteAbiding("x", other)).rejects.toBeInstanceOf(ForbiddenException);
+      const attempt = service.deleteAbiding("x", other);
+
+      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });
 });

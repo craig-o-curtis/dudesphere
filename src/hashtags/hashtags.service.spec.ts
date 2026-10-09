@@ -227,9 +227,10 @@ describe("HashtagsService", () => {
     it("throws ServiceUnavailableException when the clock can't be read, and writes nothing", async () => {
       vi.mocked(getUtcNow).mockReturnValueOnce("");
 
-      await expect(service.deleteBySlug("sunday")).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
-      );
+      const attempt = service.deleteBySlug("sunday");
+
+      await expect(attempt).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "CLOCK_UNAVAILABLE" });
       expect(hashtagModel.updateOne).not.toHaveBeenCalled();
     });
 
