@@ -3,8 +3,9 @@ import { inspect } from "node:util";
 import { ArgumentsHost, Catch, HttpException, Logger } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
 
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
 import { REQUEST_ID_HEADER } from "../middleware/request-id.middleware.js";
-import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
+import { isDatabaseUnreachable } from "./database-unreachable.js";
 
 // The fields of the request the log line reads. Typed here, not imported
 // from express, so the filter does not depend on one adapter.
@@ -49,7 +50,9 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
     // pg throws a plain Error (ECONNREFUSED and the like), and now and then
     // the Mongo driver does too. No @Catch(SomeClass) filter can claim a
     // plain Error, so this is the only filter it reaches.
-    const fault = isDatabaseUnreachable(exception) ? databaseUnavailable(exception) : exception;
+    const fault = isDatabaseUnreachable(exception)
+      ? new DatabaseUnavailableException(exception)
+      : exception;
 
     if (host.getType() === "http" && this.isServerFault(fault)) {
       this.logFault(fault, host);

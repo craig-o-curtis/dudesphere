@@ -1,6 +1,7 @@
-import { CallHandler, ExecutionContext, Logger, RequestTimeoutException } from "@nestjs/common";
+import { CallHandler, ExecutionContext, Logger } from "@nestjs/common";
 import { firstValueFrom, NEVER, of, throwError, TimeoutError } from "rxjs";
 
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
 import { TimeoutInterceptor } from "./timeout.interceptor.js";
 
 describe("TimeoutInterceptor", () => {
@@ -37,7 +38,7 @@ describe("TimeoutInterceptor", () => {
   it("turns a handler that never answers into a 408 and logs which request it was", async () => {
     const attempt = run({ handle: () => NEVER });
 
-    await expect(attempt).rejects.toBeInstanceOf(RequestTimeoutException);
+    await expect(attempt).rejects.toBeInstanceOf(TimeLimitExceededException);
     await expect(attempt).rejects.toMatchObject({ cause: expect.any(TimeoutError) });
     expect(warn).toHaveBeenCalledWith("DELETE /users/me timed out after 20 ms (request req-1)");
   });

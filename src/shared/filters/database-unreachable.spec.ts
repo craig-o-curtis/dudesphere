@@ -1,6 +1,4 @@
-import { ServiceUnavailableException } from "@nestjs/common";
-
-import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
+import { isDatabaseUnreachable } from "./database-unreachable.js";
 
 describe("isDatabaseUnreachable", () => {
   const withCode = (message: string, code: string) => Object.assign(new Error(message), { code });
@@ -29,22 +27,5 @@ describe("isDatabaseUnreachable", () => {
     ["nothing", undefined],
   ])("is false for %s", (_what, error) => {
     expect(isDatabaseUnreachable(error)).toBe(false);
-  });
-});
-
-describe("databaseUnavailable", () => {
-  it("builds the 503 with its error code and keeps the driver error as cause", () => {
-    const cause = new Error("connect ECONNREFUSED");
-
-    const exception = databaseUnavailable(cause);
-
-    expect(exception).toBeInstanceOf(ServiceUnavailableException);
-    expect(exception.getResponse()).toEqual({
-      statusCode: 503,
-      message: "Database unavailable",
-      error: "Service Unavailable",
-      errorCode: "DATABASE_UNAVAILABLE",
-    });
-    expect(exception.cause).toBe(cause);
   });
 });

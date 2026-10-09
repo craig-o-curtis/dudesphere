@@ -1,14 +1,11 @@
-import {
-  ArgumentsHost,
-  BadRequestException,
-  ConflictException,
-  InternalServerErrorException,
-  Logger,
-  RequestTimeoutException,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { ArgumentsHost, Logger } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
+import { DatabaseFaultException } from "../exceptions/database-fault.exception.js";
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
+import { InvalidValueException } from "../exceptions/invalid-value.exception.js";
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
+import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { QueryFailedFilter, UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
@@ -50,9 +47,9 @@ describe("QueryFailedFilter", () => {
 
     expect(baseCatch).toHaveBeenCalledTimes(1);
     const [passed, passedHost] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ConflictException);
-    expect((passed as ConflictException).message).toBe("That value is already taken");
-    expect((passed as ConflictException).errorCode).toBe("VALUE_TAKEN");
+    expect(passed).toBeInstanceOf(ValueTakenException);
+    expect((passed as ValueTakenException).message).toBe("That value is already taken");
+    expect((passed as ValueTakenException).errorCode).toBe("VALUE_TAKEN");
     expect(passedHost).toBe(host);
   });
 
@@ -68,9 +65,9 @@ describe("QueryFailedFilter", () => {
     new QueryFailedFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ServiceUnavailableException);
-    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-    expect((passed as ServiceUnavailableException).cause).toBe(exception);
+    expect(passed).toBeInstanceOf(DatabaseUnavailableException);
+    expect((passed as DatabaseUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as DatabaseUnavailableException).cause).toBe(exception);
   });
 
   it("turns a Postgres shutdown into a 503", () => {
@@ -78,8 +75,8 @@ describe("QueryFailedFilter", () => {
     new QueryFailedFilter().catch(queryFailed("57P01"), host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ServiceUnavailableException);
-    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect(passed).toBeInstanceOf(DatabaseUnavailableException);
+    expect((passed as DatabaseUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
   });
 
   // 57014 is query_canceled: what a statement gets when it runs past the
@@ -91,12 +88,12 @@ describe("QueryFailedFilter", () => {
       new QueryFailedFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
-      expect(passed).toBeInstanceOf(RequestTimeoutException);
-      expect((passed as RequestTimeoutException).getResponse()).toEqual({
+      expect(passed).toBeInstanceOf(TimeLimitExceededException);
+      expect((passed as TimeLimitExceededException).getResponse()).toEqual({
         statusCode: 408,
         message: "Request Timeout",
       });
-      expect((passed as RequestTimeoutException).cause).toBe(exception);
+      expect((passed as TimeLimitExceededException).cause).toBe(exception);
     });
 
     it("logs a warning that names the route, so the slow query can be found", () => {
@@ -126,13 +123,13 @@ describe("QueryFailedFilter", () => {
       new QueryFailedFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
-      expect(passed).toBeInstanceOf(BadRequestException);
-      expect((passed as BadRequestException).getResponse()).toEqual({
+      expect(passed).toBeInstanceOf(InvalidValueException);
+      expect((passed as InvalidValueException).getResponse()).toEqual({
         statusCode: 400,
         message: "A value in the request is not valid",
         error: "Bad Request",
       });
-      expect((passed as BadRequestException).cause).toBe(exception);
+      expect((passed as InvalidValueException).cause).toBe(exception);
     });
 
     // Every hit on this net is a DTO rule that is missing. The warning has to
@@ -167,12 +164,12 @@ describe("QueryFailedFilter", () => {
 
     expect(baseCatch).toHaveBeenCalledTimes(1);
     const [passed, passedHost] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(InternalServerErrorException);
-    expect((passed as InternalServerErrorException).getResponse()).toEqual({
+    expect(passed).toBeInstanceOf(DatabaseFaultException);
+    expect((passed as DatabaseFaultException).getResponse()).toEqual({
       statusCode: 500,
       message: "Internal server error",
     });
-    expect((passed as InternalServerErrorException).cause).toBe(exception);
+    expect((passed as DatabaseFaultException).cause).toBe(exception);
     expect(passedHost).toBe(host);
     expect(warn).not.toHaveBeenCalled();
   });

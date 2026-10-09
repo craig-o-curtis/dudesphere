@@ -4,6 +4,7 @@ import { JwtService } from "@nestjs/jwt";
 
 import { IS_PUBLIC_KEY } from "../../shared/auth-metadata.js";
 import { ErrorCode } from "../../shared/error-codes.js";
+import { TokenMissingException } from "../../shared/exceptions/token-missing.exception.js";
 import type { AuthUser, JwtPayload } from "../auth-user.js";
 
 interface RequestWithUser {
@@ -47,9 +48,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     if (!token) {
-      throw new UnauthorizedException("Missing or invalid authorization header", {
-        errorCode: ErrorCode.TOKEN_MISSING,
-      });
+      throw new TokenMissingException("Missing or invalid authorization header");
     }
 
     try {
