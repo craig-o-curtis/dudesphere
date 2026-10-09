@@ -65,8 +65,14 @@ field is missing the first two.
 Each one wraps a TypeORM column and returns the value as an ISO 8601 UTC string.
 
 - `@CreateUtcColumn()` is set once, when the row is created.
-- `@UpdateUtcColumn()` is set on creation and again on every update.
+- `@UpdateUtcColumn()` is set on creation and again on every update. It wraps
+  TypeORM's `@UpdateDateColumn`, which is what makes `update()` stamp it.
 - `@SoftDeleteUtcColumn()` marks the soft-delete column. It enables
   `repository.softDelete()`.
 - `@UtcColumn({ nullable })` covers any other timestamp column.
-- `@IsoTimestamp()` is an older general form. No entity uses it today.
+
+All four use the Postgres type `timestamptz`, never `timestamp`. A `timestamp`
+column holds a wall time with no zone, and the driver reads it in the zone of
+the machine the app runs on, so the same row gave a different instant on a
+different machine. A `timestamptz` column stores the instant itself.
+`utc-column.decorator.ts` has the full story.
