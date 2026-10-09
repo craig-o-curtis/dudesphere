@@ -8,6 +8,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import type { PaginatedResponse } from "./../src/shared/dto/paginated-response.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
@@ -182,9 +183,12 @@ describe("Hashtag delete and restore (e2e)", () => {
         .get(`/abidings?hashtag=${slug}`)
         .expect(200);
 
-      const abidings = filtered.body as { hashtags: string[] }[];
-      expect(abidings).toHaveLength(1);
-      expect(abidings[0].hashtags).toContain(slug);
+      // The slug is unique to this run, so the total is exact even on a
+      // database other suites are writing to.
+      const body = filtered.body as PaginatedResponse<{ hashtags: string[] }>;
+      expect(body.data).toHaveLength(1);
+      expect(body.meta.totalItems).toBe(1);
+      expect(body.data[0].hashtags).toContain(slug);
     });
 
     // A delete has to hold. The row is kept with deletedAt set, registerTags
@@ -209,7 +213,9 @@ describe("Hashtag delete and restore (e2e)", () => {
         .get(`/abidings?hashtag=${slug}`)
         .expect(200);
 
-      expect(filtered.body as unknown[]).toHaveLength(2);
+      const body = filtered.body as PaginatedResponse<unknown>;
+      expect(body.data).toHaveLength(2);
+      expect(body.meta.totalItems).toBe(2);
     });
 
     it("cannot be restored by a user who is not an admin", async () => {

@@ -5,6 +5,12 @@ import type { Types as MongooseTypes } from "mongoose";
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
+import {
+  type PageRequest,
+  type PaginatedResponse,
+  toPaginatedResponse,
+} from "../shared/dto/paginated-response.js";
+import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -21,10 +27,14 @@ export class AbidingsController {
 
   @Public()
   @Get()
-  public async getAbidings(@Query() query: ListAbidingsQueryDto): Promise<AbidingResponseDto[]> {
+  public async getAbidings(
+    @Query() query: ListAbidingsQueryDto,
+  ): Promise<PaginatedResponse<AbidingResponseDto>> {
     // Already a number: ListAbidingsQueryDto coerces and validates it, so an
     // unusable value is a 400 before it reaches here.
     const userId = query.userId;
+    // Only limit and page go to the service. The filters are passed by name.
+    const request: PageRequest = { limit: query.limit, page: query.page };
     // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
     // tag still goes through the dedicated single-tag call rather than the
     // multi-tag one, since that's the call the rest of the service (and any
@@ -38,15 +48,27 @@ export class AbidingsController {
 
     const abidings =
       tags.length === 0
-        ? await this.AbidingsService.getAbidings(userId)
+        ? await this.AbidingsService.getAbidings(request, userId)
         : tags.length === 1
-          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], userId)
-          : await this.AbidingsService.getAbidingsByHashtags(tags, userId);
-    const authorIds = [...new Set(abidings.map((a) => a.userId))];
+          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], request, userId)
+          : await this.AbidingsService.getAbidingsByHashtags(tags, request, userId);
+    // The authors of this page only, so at most one id per abiding on it.
+    const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
     const users = await this.usersService.getUsersByIds(authorIds);
     const usernames = new Map(users.map((u) => [u.id, u.username]));
 
-    return abidings.map((a) => this.toResponse(a, usernames.get(a.userId) || "Unknown"));
+    // Mapped to response instances first, wrapped second. toPaginatedResponse
+    // passes its items through, and the serializer needs each one to be a
+    // real AbidingResponseDto — see toResponse below.
+    const items = abidings.items.map((a) =>
+      this.toResponse(a, usernames.get(a.userId) || "Unknown"),
+    );
+    // The links carry the tags as they were parsed, not as they were sent. A
+    // param of only commas was treated as no filter, so its links have none.
+    return toPaginatedResponse({ items, total: abidings.total }, request, "/abidings", {
+      userId,
+      hashtag: tags.length > 0 ? tags.join(",") : undefined,
+    });
   }
 
   // The caller's own abidings. The user id comes from the JWT token in the
@@ -63,9 +85,13 @@ export class AbidingsController {
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
   @Get("me")
-  public async getMyAbidings(@CurrentUser() user: AuthUser): Promise<AbidingResponseDto[]> {
-    const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId);
-    return myAbidings.map((a) => this.toResponse(a, user.username));
+  public async getMyAbidings(
+    @CurrentUser() user: AuthUser,
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<AbidingResponseDto>> {
+    const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId, query);
+    const items = myAbidings.items.map((a) => this.toResponse(a, user.username));
+    return toPaginatedResponse({ items, total: myAbidings.total }, query, "/abidings/me");
   }
 
   @Public()

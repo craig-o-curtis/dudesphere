@@ -16,6 +16,7 @@ import request from "supertest";
 import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../test/listen-on-loopback.js";
+import { configureApp } from "../app-setup.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
@@ -33,6 +34,7 @@ describe("AbidingsController id params (over HTTP)", () => {
   let app: INestApplication<App>;
 
   const abidingService = {
+    getAbidings: vi.fn(),
     getAbidingById: vi.fn(),
     getAbidingsByUserId: vi.fn(),
     patchAbiding: vi.fn(),
@@ -49,7 +51,8 @@ describe("AbidingsController id params (over HTTP)", () => {
     abidingService.getAbidingById.mockResolvedValue({ id: VALID_ID, userId: 1, message: "hi" });
     abidingService.patchAbiding.mockResolvedValue({ id: VALID_ID, userId: 1, message: "edited" });
     abidingService.deleteAbiding.mockResolvedValue(undefined);
-    abidingService.getAbidingsByUserId.mockResolvedValue([]);
+    abidingService.getAbidingsByUserId.mockResolvedValue({ items: [], total: 0 });
+    abidingService.getAbidings.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
@@ -60,6 +63,9 @@ describe("AbidingsController id params (over HTTP)", () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // The same pipeline as main.ts. GET /abidings/me takes a PaginationQueryDto,
+    // and its limit and page only get their defaults from the ValidationPipe.
+    configureApp(app);
     // No APP_GUARD here, so nothing populates request.user and @CurrentUser()
     // would hand the handlers undefined. This stands in for JwtAuthGuard, which
     // has its own tests — the ids are what this file is about.
@@ -147,7 +153,45 @@ describe("AbidingsController id params (over HTTP)", () => {
   it("does not send GET /abidings/me through the id route", async () => {
     await request(app.getHttpServer()).get("/abidings/me").expect(200);
 
-    expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(1);
+    expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(1, { limit: 10, page: 1 });
     expect(abidingService.getAbidingById).not.toHaveBeenCalled();
+  });
+
+  it("passes ?limit and ?page on GET /abidings/me through as numbers", async () => {
+    await request(app.getHttpServer()).get("/abidings/me?limit=5&page=2").expect(200);
+
+    expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(1, { limit: 5, page: 2 });
+  });
+
+  // ListAbidingsQueryDto extends PaginationQueryDto. This checks the
+  // inherited fields keep their defaults, their conversion and their bounds
+  // next to the route's own filter.
+  describe("GET /abidings takes limit and page alongside its filters", () => {
+    it("defaults to limit 10 and page 1", async () => {
+      await request(app.getHttpServer()).get("/abidings?userId=3").expect(200);
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 10, page: 1 }, 3);
+    });
+
+    it("passes a limit and page through as numbers", async () => {
+      await request(app.getHttpServer()).get("/abidings?userId=3&limit=5&page=2").expect(200);
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, 3);
+    });
+
+    it.each(["limit=101", "limit=0", "page=0", "limit=abc"])(
+      "rejects ?%s with 400",
+      async (query) => {
+        await request(app.getHttpServer()).get(`/abidings?${query}`).expect(400);
+
+        expect(abidingService.getAbidings).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it("rejects a bad page on GET /abidings/me with 400", async () => {
+    await request(app.getHttpServer()).get("/abidings/me?page=0").expect(400);
+
+    expect(abidingService.getAbidingsByUserId).not.toHaveBeenCalled();
   });
 });

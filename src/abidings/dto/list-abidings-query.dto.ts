@@ -1,7 +1,11 @@
 import { Type } from "class-transformer";
 import { IsInt, IsOptional, IsString, Min } from "class-validator";
 
-export class ListAbidingsQueryDto {
+import { PaginationQueryDto } from "../../shared/dto/pagination-query.dto.js";
+
+// limit and page come from PaginationQueryDto. They are not redeclared here:
+// a redeclared field would lose its default and its decorators.
+export class ListAbidingsQueryDto extends PaginationQueryDto {
   // A number, not a string. ValidationPipe runs with transform: true but not
   // enableImplicitConversion, so @Type is what actually coerces the query
   // string. Without it an unparseable userId became NaN in the controller,
