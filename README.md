@@ -152,7 +152,7 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 ```
 
 - **Versions** are pinned in two places: `.node-version` sets the Node version, and `packageManager` in `package.json` sets the pnpm version. Both CI and fnm read `.node-version`, so one file covers local and CI. To upgrade either, change it there.
-- **E2E tests (`test:e2e`) run in CI against real databases.** Both are service containers that start empty and are thrown away when the job ends. To run them locally you need `docker compose up -d` and `pnpm seed:run` first.
+- **E2E tests (`test:e2e`) run in CI against real databases.** Both are service containers that start empty and are thrown away when the job ends. To run them locally you need `docker compose up -d` and `pnpm seed:run` first. Locally they write to your dev databases and delete what they wrote: see "End-to-End Tests" in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **No secrets are needed.** The databases exist only for the length of the run, and every value the e2e job sets, including the Nest Observe keys, is a placeholder written in the workflow file.
 
 ## API Endpoints
