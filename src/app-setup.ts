@@ -2,8 +2,10 @@ import { ClassSerializerInterceptor, INestApplication, ValidationPipe } from "@n
 import { Reflector } from "@nestjs/core";
 
 import { AllExceptionsFilter } from "./shared/filters/all-exceptions.filter.js";
+import { MongoErrorFilter } from "./shared/filters/mongo-error.filter.js";
 import { QueryFailedFilter } from "./shared/filters/query-failed.filter.js";
 import { requestId } from "./shared/middleware/request-id.middleware.js";
+
 /**
  * Everything the running app has beyond its modules: the serializer, the
  * validation rules and the error filters.
@@ -37,5 +39,10 @@ export function configureApp(app: INestApplication): void {
   // goes first and the specific ones after it. See "Catch everything" on
   // https://docs.nestjs.com/exception-filters
   const adapter = app.getHttpAdapter();
-  app.useGlobalFilters(new AllExceptionsFilter(adapter), new QueryFailedFilter(adapter));
+  // Here, the order is important. The catch-all goes first and the specific ones after it.
+  app.useGlobalFilters(
+    new AllExceptionsFilter(adapter),
+    new QueryFailedFilter(adapter),
+    new MongoErrorFilter(adapter),
+  );
 }

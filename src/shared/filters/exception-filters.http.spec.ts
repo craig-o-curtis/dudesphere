@@ -1,11 +1,13 @@
 import { Controller, Get, INestApplication, Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { mongo } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { QueryFailedError } from "typeorm";
 
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
+import { DUPLICATE_KEY } from "./mongo-error.filter.js";
 import { UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
 // A controller that exists only to throw. Each route stands for one kind of
@@ -25,6 +27,16 @@ class BoomController {
       [],
       Object.assign(new Error("dup"), { code: UNIQUE_VIOLATION }),
     );
+  }
+
+  @Get("mongo-dup")
+  mongoDup(): never {
+    throw new mongo.MongoServerError({ message: "E11000", code: DUPLICATE_KEY });
+  }
+
+  @Get("mongo-down")
+  mongoDown(): never {
+    throw new mongo.MongoNetworkError("socket closed");
   }
 }
 
@@ -59,6 +71,16 @@ describe("Exception filters (over HTTP)", () => {
     const { body } = await request(app.getHttpServer()).get("/boom/unique").expect(409);
 
     expect(body.message).toBe("That value is already taken");
+  });
+
+  it("turns a Mongo duplicate key into a 409", async () => {
+    await request(app.getHttpServer()).get("/boom/mongo-dup").expect(409);
+  });
+
+  it("turns a lost Mongo connection into a 503", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/mongo-down").expect(503);
+
+    expect(body.message).toBe("Database unavailable");
   });
 
   it("returns the request id header on an error response", async () => {
