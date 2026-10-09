@@ -131,32 +131,36 @@ export class AbidingsService {
     return this.toResponseDto(newAbiding);
   }
 
-  // TODO refactor to be more elegant
   async patchAbiding(
     id: string,
     updateAbidingDto: UpdateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // Built explicitly, not spread from the DTO, so a client can never set
-    // `hashtags` directly and an edit that doesn't touch `message` can't
-    // accidentally wipe it to [].
+    const { message, imageUrl, replyToId } = updateAbidingDto;
+
+    if (replyToId) {
+      if (replyToId === id) {
+        throw new BadRequestException("An abiding cannot reply to itself");
+      }
+      await this.assertReplyTargetExists(replyToId);
+    }
+
+    // Built field by field, not spread from the DTO, so a client can never
+    // set `hashtags` directly, and an edit that doesn't touch `message` can't
+    // wipe them to [].
     //
     // For imageUrl and replyToId a missing field and a null mean different
     // things. Missing is undefined, which Mongoose drops, so the stored value
     // stays. Null is written, which clears it.
-    const update: Record<string, any> = {
-      imageUrl: updateAbidingDto.imageUrl,
-      replyToId: updateAbidingDto.replyToId,
-    };
-    if (updateAbidingDto.replyToId) {
-      if (updateAbidingDto.replyToId === id) {
-        throw new BadRequestException("An abiding cannot reply to itself");
-      }
-      await this.assertReplyTargetExists(updateAbidingDto.replyToId);
-    }
-    if (typeof updateAbidingDto.message === "string" && updateAbidingDto.message.length > 0) {
-      update.message = updateAbidingDto.message;
-      update.hashtags = extractHashtags(updateAbidingDto.message);
+    const update: {
+      imageUrl?: string | null;
+      replyToId?: string | null;
+      message?: string;
+      hashtags?: string[];
+    } = { imageUrl, replyToId };
+    if (message !== undefined) {
+      update.message = message;
+      update.hashtags = extractHashtags(message);
     }
 
     // returnDocument: "after" returns the updated document, not the original.
@@ -184,11 +188,11 @@ export class AbidingsService {
     // An edit can introduce tags the registry has never seen. Tags the edit
     // removed stay registered on purpose: a tag outlives the abidings that
     // used it, so the dropdown keeps offering it.
-    const hashtags = updateAbidingDto.message
-      ? extractHashtagDisplays(updateAbidingDto.message)
-      : new Map();
-    if (updateAbidingDto.message !== undefined && hashtags.size > 0) {
-      await this.hashtagsService.registerTags(hashtags);
+    if (message !== undefined) {
+      const displays = extractHashtagDisplays(message);
+      if (displays.size > 0) {
+        await this.hashtagsService.registerTags(displays);
+      }
     }
 
     return this.toResponseDto(updatedAbiding);
