@@ -59,13 +59,20 @@ describe("PaginationQueryDto (over HTTP)", () => {
   });
 
   // The bug: page 0 became OFFSET -10, which Postgres rejects, so the caller
-  // got a 500 for a bad query string.
-  it.each(["page=0", "page=-1", "limit=0", "limit=101", "limit=abc", "page=1.5"])(
-    "rejects ?%s with 400, not 500",
-    async (query) => {
-      await request(app.getHttpServer()).get(`/profiles?${query}`).expect(400);
+  // got a 500 for a bad query string. A page of twenty 9s did the same from
+  // the other end: its OFFSET does not fit a Postgres bigint.
+  it.each([
+    "page=0",
+    "page=-1",
+    "page=1000001",
+    "page=99999999999999999999",
+    "limit=0",
+    "limit=101",
+    "limit=abc",
+    "page=1.5",
+  ])("rejects ?%s with 400, not 500", async (query) => {
+    await request(app.getHttpServer()).get(`/profiles?${query}`).expect(400);
 
-      expect(profilesService.getProfiles).not.toHaveBeenCalled();
-    },
-  );
+    expect(profilesService.getProfiles).not.toHaveBeenCalled();
+  });
 });
