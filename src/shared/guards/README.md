@@ -33,7 +33,7 @@ getUsers() {}
 4. `RolesGuard` compares the list with `user.role`:
    - no list, so no `@Roles` on the route: the request passes;
    - the role is in the list: the request passes;
-   - the role is not in the list: 403.
+   - the role is not in the list: 403, with the `ROLE_REQUIRED` error code.
 
 Both files import `ROLES_KEY` from `../auth-metadata.ts`. A typo in one of them
 would mean the guard never finds the list, so the key lives in one place.

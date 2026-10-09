@@ -51,8 +51,9 @@ export class JwtAuthGuard implements CanActivate {
     try {
       // Checks the signature and the expiry.
       payload = await this.jwtService.verifyAsync<JwtPayload>(token);
-    } catch {
+    } catch (error) {
       throw new UnauthorizedException("Invalid or expired token", {
+        cause: error,
         errorCode: ErrorCode.TOKEN_INVALID,
       });
     }

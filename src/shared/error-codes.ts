@@ -13,6 +13,7 @@ export enum ErrorCode {
   TOKEN_INVALID = "TOKEN_INVALID", // 401 Unauthorized, bad signature or expired
   WRONG_PASSWORD = "WRONG_PASSWORD", // 403 Forbidden, current password check on a password change
   NOT_OWNER = "NOT_OWNER", // 403 Forbidden, editing or deleting someone else's row
+  ROLE_REQUIRED = "ROLE_REQUIRED", // 403 Forbidden, the route needs a role the caller does not have
   CLOCK_UNAVAILABLE = "CLOCK_UNAVAILABLE", // 503 Service Unavailable, getUtcNow() returned ""
   DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE", // 503 Service Unavailable, Mongo write failed or unreachable
 }
