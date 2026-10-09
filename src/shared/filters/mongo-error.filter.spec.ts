@@ -1,13 +1,10 @@
-import {
-  ArgumentsHost,
-  BadRequestException,
-  InternalServerErrorException,
-  Logger,
-  RequestTimeoutException,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { ArgumentsHost, Logger } from "@nestjs/common";
 import { Error as MongooseError, mongo } from "mongoose";
 
+import { DatabaseFaultException } from "../exceptions/database-fault.exception.js";
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
+import { InvalidValueException } from "../exceptions/invalid-value.exception.js";
+import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
 import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { DUPLICATE_KEY, MongoErrorFilter } from "./mongo-error.filter.js";
@@ -61,9 +58,9 @@ describe("MongoErrorFilter", () => {
     new MongoErrorFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ServiceUnavailableException);
-    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-    expect((passed as ServiceUnavailableException).cause).toBe(exception);
+    expect(passed).toBeInstanceOf(DatabaseUnavailableException);
+    expect((passed as DatabaseUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as DatabaseUnavailableException).cause).toBe(exception);
   });
 
   // What the driver throws when no server answers in time, for example when
@@ -74,9 +71,9 @@ describe("MongoErrorFilter", () => {
     new MongoErrorFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ServiceUnavailableException);
-    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-    expect((passed as ServiceUnavailableException).cause).toBe(exception);
+    expect(passed).toBeInstanceOf(DatabaseUnavailableException);
+    expect((passed as DatabaseUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as DatabaseUnavailableException).cause).toBe(exception);
   });
 
   describe("an operation that ran past its time limit", () => {
@@ -94,12 +91,12 @@ describe("MongoErrorFilter", () => {
       new MongoErrorFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
-      expect(passed).toBeInstanceOf(RequestTimeoutException);
-      expect((passed as RequestTimeoutException).getResponse()).toEqual({
+      expect(passed).toBeInstanceOf(TimeLimitExceededException);
+      expect((passed as TimeLimitExceededException).getResponse()).toEqual({
         statusCode: 408,
         message: "Request Timeout",
       });
-      expect((passed as RequestTimeoutException).cause).toBe(exception);
+      expect((passed as TimeLimitExceededException).cause).toBe(exception);
       expect(warn).toHaveBeenCalledWith(
         "POST /abidings for user 7 (request req-1): Mongo gave up on an operation that ran " +
           "past its time limit",
@@ -133,13 +130,13 @@ describe("MongoErrorFilter", () => {
       new MongoErrorFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
-      expect(passed).toBeInstanceOf(BadRequestException);
-      expect((passed as BadRequestException).getResponse()).toEqual({
+      expect(passed).toBeInstanceOf(InvalidValueException);
+      expect((passed as InvalidValueException).getResponse()).toEqual({
         statusCode: 400,
         message: "A value in the request is not valid",
         error: "Bad Request",
       });
-      expect((passed as BadRequestException).cause).toBe(exception);
+      expect((passed as InvalidValueException).cause).toBe(exception);
     });
 
     // Every hit on this net is a rule that is missing from a DTO. The warning
@@ -163,11 +160,11 @@ describe("MongoErrorFilter", () => {
     new MongoErrorFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(InternalServerErrorException);
-    expect((passed as InternalServerErrorException).getResponse()).toEqual({
+    expect(passed).toBeInstanceOf(DatabaseFaultException);
+    expect((passed as DatabaseFaultException).getResponse()).toEqual({
       statusCode: 500,
       message: "Internal server error",
     });
-    expect((passed as InternalServerErrorException).cause).toBe(exception);
+    expect((passed as DatabaseFaultException).cause).toBe(exception);
   });
 });

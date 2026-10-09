@@ -1,12 +1,20 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   type HttpException,
+  InternalServerErrorException,
+  RequestTimeoutException,
+  ServiceUnavailableException,
   type Type,
   UnauthorizedException,
 } from "@nestjs/common";
 
+import { DatabaseFaultException } from "./database-fault.exception.js";
+import { DatabaseUnavailableException } from "./database-unavailable.exception.js";
+import { InvalidValueException } from "./invalid-value.exception.js";
 import { NotOwnerException } from "./not-owner.exception.js";
+import { TimeLimitExceededException } from "./time-limit-exceeded.exception.js";
 import { TokenMissingException } from "./token-missing.exception.js";
 import { ValueTakenException } from "./value-taken.exception.js";
 
@@ -104,6 +112,57 @@ describe("the app's own exception classes", () => {
           errorCode: "TOKEN_MISSING",
         },
         errorCode: "TOKEN_MISSING",
+      },
+    ],
+    [
+      "DatabaseUnavailableException",
+      () => new DatabaseUnavailableException(cause),
+      {
+        parent: ServiceUnavailableException,
+        status: 503,
+        body: {
+          statusCode: 503,
+          message: "Database unavailable",
+          error: "Service Unavailable",
+          errorCode: "DATABASE_UNAVAILABLE",
+        },
+        errorCode: "DATABASE_UNAVAILABLE",
+        cause,
+      },
+    ],
+    [
+      "InvalidValueException",
+      () => new InvalidValueException(cause),
+      {
+        parent: BadRequestException,
+        status: 400,
+        body: {
+          statusCode: 400,
+          message: "A value in the request is not valid",
+          error: "Bad Request",
+        },
+        cause,
+      },
+    ],
+    [
+      "TimeLimitExceededException",
+      () => new TimeLimitExceededException(cause),
+      {
+        parent: RequestTimeoutException,
+        status: 408,
+        body: { statusCode: 408, message: "Request Timeout" },
+        cause,
+      },
+    ],
+    [
+      // The body Nest's base filter writes for any unknown error.
+      "DatabaseFaultException",
+      () => new DatabaseFaultException(cause),
+      {
+        parent: InternalServerErrorException,
+        status: 500,
+        body: { statusCode: 500, message: "Internal server error" },
+        cause,
       },
     ],
   ];

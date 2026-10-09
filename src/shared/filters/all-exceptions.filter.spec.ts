@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
 
+import { DatabaseUnavailableException } from "../exceptions/database-unavailable.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 
 describe("AllExceptionsFilter", () => {
@@ -78,9 +79,9 @@ describe("AllExceptionsFilter", () => {
     new AllExceptionsFilter().catch(refused, host);
 
     const [passed, passedHost] = baseCatch.mock.calls[0];
-    expect(passed).toBeInstanceOf(ServiceUnavailableException);
-    expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
-    expect((passed as ServiceUnavailableException).cause).toBe(refused);
+    expect(passed).toBeInstanceOf(DatabaseUnavailableException);
+    expect((passed as DatabaseUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+    expect((passed as DatabaseUnavailableException).cause).toBe(refused);
     expect(passedHost).toBe(host);
     expect(error).toHaveBeenCalledWith(
       "DELETE /users/me failed for user 7 (request req-1): Database unavailable",
