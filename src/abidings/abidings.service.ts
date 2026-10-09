@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
@@ -26,7 +26,7 @@ export class AbidingsService {
 
   async getAbidings(request: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
     // deletedAt: null hides abidings of soft-deleted users
-    const query: Record<string, any> = { deletedAt: null };
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null };
     if (userId) {
       query.userId = userId;
     }
@@ -65,7 +65,7 @@ export class AbidingsService {
       return { items: [], total: 0 };
     }
 
-    const query: Record<string, any> = { deletedAt: null, hashtags: normalized };
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: normalized };
     if (userId) {
       query.userId = userId;
     }
@@ -98,7 +98,7 @@ export class AbidingsService {
     // That holds for up to 200 tags. Past that Mongo gives up on merging and
     // sorts every match in memory. ListAbidingsQueryDto refuses more than
     // MAX_TAGS, so a request never gets near it.
-    const query: Record<string, any> = { deletedAt: null, hashtags: { $in: normalized } };
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: { $in: normalized } };
     if (userId) {
       query.userId = userId;
     }
@@ -263,7 +263,7 @@ export class AbidingsService {
   // between them can leave the total one ahead of the page, which a list of
   // posts can live with.
   private async findPage(
-    filter: Record<string, any>,
+    filter: QueryFilter<AbidingDocument>,
     request: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
     const [abidings, total] = await Promise.all([
