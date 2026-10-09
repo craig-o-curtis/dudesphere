@@ -36,6 +36,10 @@ function sharedColumns(dto: new () => object, entity: Class) {
   );
 }
 
+// The column stores a hash of this field, never the field itself, so the
+// column's length and character rules do not apply to what the caller sends.
+const HASHED_FIELDS = new Set(["password"]);
+
 async function invalidFields(dto: new () => object, body: object): Promise<string[]> {
   return (await validate(plainToInstance(dto, body))).map((error) => error.property);
 }
@@ -55,6 +59,41 @@ describe.each(pairs)("%s follows its entity", (_name, dto, entity) => {
       // A column is NOT NULL unless it says nullable: true.
       const columnAllowsNull = column.options.nullable === true;
       expect({ field, rejectsNull: rejected }).toEqual({ field, rejectsNull: !columnAllowsNull });
+    }
+  });
+
+  it("rejects a value longer than its varchar column, however the length is counted", async () => {
+    const sized = sharedColumns(dto, entity).filter(
+      (column) => column.options.type === "varchar" && column.options.length !== undefined,
+    );
+
+    for (const column of sized) {
+      const field = column.propertyName;
+      const limit = Number(column.options.length);
+      const tooLong = {
+        plain: "a".repeat(limit + 1),
+        // Short to @MaxLength, too long to Postgres. See max-code-points.decorator.ts.
+        withSelectors: "a\uFE0F".repeat(Math.ceil((limit + 1) / 2)),
+      };
+
+      for (const [form, value] of Object.entries(tooLong)) {
+        const rejected = (await invalidFields(dto, { [field]: value })).includes(field);
+        expect({ field, form, rejected }).toEqual({ field, form, rejected: true });
+      }
+    }
+  });
+
+  it("rejects a NUL character in every string column", async () => {
+    const strings = sharedColumns(dto, entity).filter(
+      (column) =>
+        (column.options.type === "varchar" || column.options.type === "text") &&
+        !HASHED_FIELDS.has(column.propertyName),
+    );
+
+    for (const column of strings) {
+      const field = column.propertyName;
+      const rejected = (await invalidFields(dto, { [field]: "ab\u0000cd" })).includes(field);
+      expect({ field, rejectsNul: rejected }).toEqual({ field, rejectsNul: true });
     }
   });
 });
