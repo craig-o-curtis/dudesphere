@@ -21,16 +21,16 @@ the HTTP response. `@Catch(SomeError)` names the errors a filter handles.
   becomes a 409. Mongo being unreachable becomes a 503. A value Mongoose
   itself refuses (a `ValidationError` or a `CastError`) becomes a 400. The
   rest stay a 500.
-- `database-unavailable.ts` holds what the three share: the test for "the
-  database cannot be reached" and the one 503 body, with `DATABASE_UNAVAILABLE`.
-- `invalid-value.ts` holds the one 400 body for a value the database refused,
-  and the list of Postgres codes that count as one.
-- `query-timed-out.ts` holds the 408 for a query the database gave up on
-  because it ran past its time limit. It is the same 408 `TimeoutInterceptor`
-  gives.
-- `database-fault.ts` holds the plain 500 for every other database error. It
-  keeps the driver error out of the log, where it would print the query's
-  values or a document.
+- `database-unreachable.ts` holds the test for "the database cannot be
+  reached", which all three filters use.
+- `bad-value-states.ts` holds the list of Postgres codes that mean "this value
+  does not fit its column".
+
+The filters do not build their answers by hand. Each one is a class in
+`../exceptions/`: `ValueTakenException` (409), `DatabaseUnavailableException`
+(503), `InvalidValueException` (400), `TimeLimitExceededException` (408) and
+`DatabaseFaultException` (500). So both databases give one body for one kind
+of failure.
 
 ## The 400 is a safety net, and every hit is a bug
 
@@ -40,8 +40,8 @@ the database refuses it, and the filter answers 400 so the caller is not told
 route and the request id. Treat that warning as a bug report: find the field
 and add the missing rule to its DTO.
 
-Some database errors stay a 500 on purpose, and `invalid-value.ts` says which
-and why. The main one is a not-null violation: if the code ever forgets to
+Some database errors stay a 500 on purpose, and `bad-value-states.ts` says
+which and why. The main one is a not-null violation: if the code ever forgets to
 set a required column, a 400 would hide it.
 
 ## The built-in exceptions need no filter

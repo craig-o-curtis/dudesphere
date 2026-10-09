@@ -4,6 +4,12 @@
 //
 // Each code is thrown with one HTTP status, noted beside it. Keep that true:
 // a client that sees EMAIL_TAKEN should never have to check the status too.
+// For a code thrown from more than one place, a class in ./exceptions pairs
+// the code with its status, so the two cannot drift apart: the three *_TAKEN
+// codes, NOT_OWNER, TOKEN_MISSING and DATABASE_UNAVAILABLE. Throw the class,
+// not the code. The rest are each thrown from one place, beside a built-in
+// exception.
+//
 // CLOCK_UNAVAILABLE is temporary. gmt's getUtcNow() documents "" as its
 // result when the clock cannot be read, so every caller checks for it and
 // throws this. The clock cannot in fact fail, and gmt 1.19.0 takes "" out of
