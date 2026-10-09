@@ -4,6 +4,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  RequestTimeoutException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Error as MongooseError, mongo } from "mongoose";
@@ -76,6 +77,34 @@ describe("MongoErrorFilter", () => {
     expect(passed).toBeInstanceOf(ServiceUnavailableException);
     expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
     expect((passed as ServiceUnavailableException).cause).toBe(exception);
+  });
+
+  describe("an operation that ran past its time limit", () => {
+    it.each([
+      // The driver's own limit, timeoutMS in app.module.ts.
+      ["the driver's timeout", () => new mongo.MongoOperationTimeoutError("Timed out")],
+      // Mongo's limit, when the server gets there first. 50 is MaxTimeMSExpired.
+      [
+        "the server's MaxTimeMSExpired",
+        () => new mongo.MongoServerError({ message: "operation exceeded time limit", code: 50 }),
+      ],
+    ])("turns %s into the same 408 the request time limit gives", (_what, build) => {
+      const exception = build();
+
+      new MongoErrorFilter().catch(exception, host);
+
+      const [passed] = baseCatch.mock.calls[0];
+      expect(passed).toBeInstanceOf(RequestTimeoutException);
+      expect((passed as RequestTimeoutException).getResponse()).toEqual({
+        statusCode: 408,
+        message: "Request Timeout",
+      });
+      expect((passed as RequestTimeoutException).cause).toBe(exception);
+      expect(warn).toHaveBeenCalledWith(
+        "POST /abidings for user 7 (request req-1): Mongo gave up on an operation that ran " +
+          "past its time limit",
+      );
+    });
   });
 
   // The safety net for a value a DTO or a pipe let through. Mongoose raises

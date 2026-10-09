@@ -4,6 +4,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  RequestTimeoutException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
@@ -79,6 +80,33 @@ describe("QueryFailedFilter", () => {
     const [passed] = baseCatch.mock.calls[0];
     expect(passed).toBeInstanceOf(ServiceUnavailableException);
     expect((passed as ServiceUnavailableException).errorCode).toBe("DATABASE_UNAVAILABLE");
+  });
+
+  // 57014 is query_canceled: what a statement gets when it runs past the
+  // statement_timeout set in app.module.ts.
+  describe("a statement Postgres cancelled for running too long", () => {
+    it("becomes the same 408 the request time limit gives", () => {
+      const exception = queryFailed("57014", "canceling statement due to statement timeout");
+
+      new QueryFailedFilter().catch(exception, host);
+
+      const [passed] = baseCatch.mock.calls[0];
+      expect(passed).toBeInstanceOf(RequestTimeoutException);
+      expect((passed as RequestTimeoutException).getResponse()).toEqual({
+        statusCode: 408,
+        message: "Request Timeout",
+      });
+      expect((passed as RequestTimeoutException).cause).toBe(exception);
+    });
+
+    it("logs a warning that names the route, so the slow query can be found", () => {
+      new QueryFailedFilter().catch(queryFailed("57014"), host);
+
+      expect(warn).toHaveBeenCalledWith(
+        "PATCH /profiles/me for user 7 (request req-1): Postgres cancelled a query that ran " +
+          "past its time limit",
+      );
+    });
   });
 
   // The safety net for a value a DTO let through. The caller sent something

@@ -19,9 +19,12 @@ export const REQUEST_TIMEOUT_MS = 10_000;
  * https://docs.nestjs.com/interceptors, with the limit passed in and a log
  * line added.
  *
- * It ends the wait, not the work: the handler keeps running after the 408
- * goes out, and whatever it writes is still written. So a caller who gets a
- * 408 cannot assume nothing happened.
+ * On its own it ends the wait, not the work: the handler keeps running after
+ * the 408 goes out. Two database limits in src/app.module.ts do the stopping.
+ * Postgres cancels a statement after the same number of milliseconds
+ * (`statement_timeout`) and the Mongo driver stops an operation after the
+ * same number (`timeoutMS`). A statement that had already finished is still
+ * written, so a caller who gets a 408 cannot assume nothing happened.
  *
  * Not @Injectable(). configureApp creates it with `new`, and Nest would have
  * no way to inject the number.

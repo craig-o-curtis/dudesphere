@@ -114,6 +114,21 @@ class BoomController {
     });
   }
 
+  // What each database throws when it gives up on a query that ran too long.
+  @Get("pg-slow")
+  pgSlow(): never {
+    throw new QueryFailedError(
+      "SELECT ...",
+      [],
+      Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" }),
+    );
+  }
+
+  @Get("mongo-slow")
+  mongoSlow(): never {
+    throw new mongo.MongoOperationTimeoutError("Timed out during socket read (10000ms)");
+  }
+
   @Get("mongo-dup")
   mongoDup(): never {
     throw new mongo.MongoServerError({ message: "E11000", code: DUPLICATE_KEY });
@@ -265,6 +280,18 @@ describe("Exception filters (over HTTP)", () => {
     expect(body.message).toBe("Database unavailable");
     expect(body.errorCode).toBe("DATABASE_UNAVAILABLE");
   });
+
+  // The same body TimeoutInterceptor writes, so "took too long" is one answer
+  // whichever of the three limits trips first.
+  it.each(["/boom/pg-slow", "/boom/mongo-slow"])(
+    "answers %s with the 408 for a query that ran too long",
+    async (route) => {
+      const { body } = await request(app.getHttpServer()).get(route).expect(408);
+
+      expect(body).toEqual({ statusCode: 408, message: "Request Timeout" });
+      expect(logWarn).toHaveBeenCalledWith(expect.stringContaining(`GET ${route} for user`));
+    },
+  );
 
   // The same body whichever database is down, so a client needs one branch.
   it.each(["/boom/pg-down", "/boom/pg-dropped", "/boom/mongo-down"])(

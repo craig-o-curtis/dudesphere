@@ -6,6 +6,7 @@ import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
 import { invalidValue, isBadValueState } from "./invalid-value.js";
+import { QUERY_CANCELED, queryTimedOut } from "./query-timed-out.js";
 
 /** Postgres unique_violation. */
 export const UNIQUE_VIOLATION = "23505";
@@ -18,6 +19,7 @@ export const UNIQUE_VIOLATION = "23505";
  * A lost connection becomes a 503, the same answer MongoErrorFilter gives.
  * A value that does not fit its column becomes a 400: see invalid-value.ts
  * for which codes count and which do not.
+ * A statement Postgres cancelled for running too long becomes a 408.
  * Every other database error keeps falling through to a 500 — those are real
  * faults and hiding them would only delay the fix.
  *
@@ -52,6 +54,18 @@ export class QueryFailedFilter extends AllExceptionsFilter {
     // again, so it is a 503 and not a 500.
     if (isDatabaseUnreachable(exception.driverError)) {
       super.catch(databaseUnavailable(exception), host);
+      return;
+    }
+
+    // Postgres cancelled the statement because it passed statement_timeout.
+    // The caller waited as long as a request is allowed to, so it is the same
+    // 408 TimeoutInterceptor gives. Logged, because a query this slow needs
+    // an index or a rewrite.
+    if (code === QUERY_CANCELED) {
+      this.logger.warn(
+        `${this.requestLine(host)}: Postgres cancelled a query that ran past its time limit`,
+      );
+      super.catch(queryTimedOut(exception), host);
       return;
     }
 
