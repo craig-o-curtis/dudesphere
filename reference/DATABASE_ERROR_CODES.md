@@ -26,8 +26,8 @@ The `pg` driver puts the code on `error.code`. TypeORM wraps that error in a
 
 ## Postgres codes this app gives a better status
 
-Each code from `23505` to `22P05` was raised against Postgres 18.6 to confirm
-it. The outage codes in the last three rows were not raised. Their names are
+Each code from `23505` to `22P05`, and `57014`, was raised against Postgres
+18.6 to confirm it. The outage codes in the last three rows were not raised. Their names are
 the ones `database-unavailable.ts` gives.
 
 | Code                      | Postgres name                                            | How to cause it                                | Status here                 |
@@ -39,6 +39,7 @@ the ones `database-unavailable.ts` gives.
 | `22021`                   | `character_not_in_repertoire`                            | Put the NUL character in text                  | 400                         |
 | `22P02`                   | `invalid_text_representation`                            | Send `abc` where a number or enum goes         | 400                         |
 | `22P05`                   | `untranslatable_character`                               | Put `\u0000` in `jsonb`                        | 400                         |
+| `57014`                   | `query_canceled`                                         | Run a statement past `statement_timeout`       | 408                         |
 | `57P01`, `57P02`, `57P03` | `admin_shutdown`, `crash_shutdown`, `cannot_connect_now` | Query while Postgres stops or starts           | 503, `DATABASE_UNAVAILABLE` |
 | `53300`                   | `too_many_connections`                                   | Open more connections than Postgres allows     | 503, `DATABASE_UNAVAILABLE` |
 | `08xxx`                   | Class `connection_exception`                             | Lose the connection                            | 503, `DATABASE_UNAVAILABLE` |
@@ -82,13 +83,15 @@ the same for an error whose message starts with `Connection terminated`.
 `MongoErrorFilter` matches by error class. It reads a numeric code for one
 case only.
 
-| Error                                            | Meaning                                       | Status here                 |
-| ------------------------------------------------ | --------------------------------------------- | --------------------------- |
-| `MongoServerError`, code `11000`                 | A duplicate key on a unique index             | 409, `VALUE_TAKEN`          |
-| `MongoNetworkError`, `MongoServerSelectionError` | Mongo cannot be reached                       | 503, `DATABASE_UNAVAILABLE` |
-| Mongoose `ValidationError`                       | A value broke a rule in a schema              | 400                         |
-| Mongoose `CastError`                             | A value cannot become the type its path needs | 400                         |
-| Any other `MongoServerError`                     | A fault                                       | 500                         |
+| Error                                            | Meaning                                        | Status here                 |
+| ------------------------------------------------ | ---------------------------------------------- | --------------------------- |
+| `MongoServerError`, code `11000`                 | A duplicate key on a unique index              | 409, `VALUE_TAKEN`          |
+| `MongoNetworkError`, `MongoServerSelectionError` | Mongo cannot be reached                        | 503, `DATABASE_UNAVAILABLE` |
+| Mongoose `ValidationError`                       | A value broke a rule in a schema               | 400                         |
+| Mongoose `CastError`                             | A value cannot become the type its path needs  | 400                         |
+| `MongoOperationTimeoutError`                     | An operation ran past the driver's `timeoutMS` | 408                         |
+| `MongoServerError`, code `50`                    | Mongo's own time limit got there first         | 408                         |
+| Any other `MongoServerError`                     | A fault                                        | 500                         |
 
 The two Mongoose errors are raised by Mongoose itself, before the query
 reaches Mongo.
@@ -103,5 +106,10 @@ reaches Mongo.
   holds the test for "cannot be reached" and the one 503 body.
 - [src/shared/filters/mongo-error.filter.ts](../src/shared/filters/mongo-error.filter.ts)
   maps the Mongo errors.
+- [src/shared/filters/query-timed-out.ts](../src/shared/filters/query-timed-out.ts)
+  holds the 408 for a query that ran past its time limit.
+- [src/shared/filters/database-fault.ts](../src/shared/filters/database-fault.ts)
+  holds the plain 500 for everything else. It keeps the driver error out of
+  the log, where it would print the query's values or a document.
 
 Docs: <https://www.postgresql.org/docs/current/errcodes-appendix.html>
