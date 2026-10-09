@@ -27,6 +27,7 @@ import { DUPLICATE_KEY } from "./mongo-error.filter.js";
 import { UNIQUE_VIOLATION } from "./query-failed.filter.js";
 
 const PASSWORD_HASH = "$2b$10$hash-that-must-never-be-logged";
+const STORED_TEXT = "the text of a document that must never be logged";
 const FOREIGN_KEY_MESSAGE =
   'insert or update on table "profile" violates foreign key constraint "FK_profile_userId"';
 
@@ -100,6 +101,17 @@ class BoomController {
       }),
     );
     throw error;
+  }
+
+  // A Mongo fault that is not a conflict or an outage. 121 is "document
+  // failed validation", and the server sends back the value it refused.
+  @Get("mongo-fault")
+  mongoFault(): never {
+    throw new mongo.MongoServerError({
+      message: "Document failed validation",
+      code: 121,
+      errInfo: { details: { consideredValue: STORED_TEXT } },
+    });
   }
 
   @Get("mongo-dup")
@@ -212,6 +224,16 @@ describe("Exception filters (over HTTP)", () => {
     expect(logWarn).toHaveBeenCalledWith(
       expect.stringContaining("GET /boom/mongoose-invalid for user anonymous"),
     );
+  });
+
+  it("logs a Mongo fault without the document the error carries", async () => {
+    const { body } = await request(app.getHttpServer()).get("/boom/mongo-fault").expect(500);
+
+    expect(body).toEqual({ statusCode: 500, message: "Internal server error" });
+    const logged = inspect(logError.mock.calls, { depth: null });
+    expect(logged).toContain("GET /boom/mongo-fault failed for user anonymous");
+    expect(logged).toContain("Document failed validation");
+    expect(logged).not.toContain(STORED_TEXT);
   });
 
   it("still lets QueryFailedFilter turn a unique violation into a 409", async () => {

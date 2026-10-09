@@ -1,15 +1,9 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ConflictException,
-  HttpStatus,
-  InternalServerErrorException,
-  Logger,
-} from "@nestjs/common";
+import { ArgumentsHost, Catch, ConflictException, Logger } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 
 import { ErrorCode } from "../error-codes.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
+import { databaseFault } from "./database-fault.js";
 import { databaseUnavailable, isDatabaseUnreachable } from "./database-unavailable.js";
 import { invalidValue, isBadValueState } from "./invalid-value.js";
 
@@ -74,17 +68,8 @@ export class QueryFailedFilter extends AllExceptionsFilter {
       return;
     }
 
-    // Not passed on as it is. Base would print the whole QueryFailedError,
-    // and that object carries the values the query ran with: for a user
-    // insert, the email and the password hash. Wrapped, the fault is logged
-    // as the context line plus the stack, which names the driver message and
-    // nothing else. The body is the one Base writes for any unknown error.
-    super.catch(
-      new InternalServerErrorException(
-        { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: "Internal server error" },
-        { cause: exception },
-      ),
-      host,
-    );
+    // Not passed on as it is: see database-fault.ts for what the raw error
+    // would put in the log.
+    super.catch(databaseFault(exception), host);
   }
 }
