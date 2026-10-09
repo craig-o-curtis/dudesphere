@@ -183,6 +183,21 @@ db.abidings
   .explain("executionStats");
 ```
 
+A filter on several tags reads one sorted run of the index for each tag and
+merges them. That shows as `SORT_MERGE`, which is fine: it is not a sort in
+memory.
+
+```js
+db.abidings
+  .find({ deletedAt: null, hashtags: { $in: ["dude", "sunday"] } })
+  .sort({ createdAt: -1, _id: -1 })
+  .limit(10)
+  .explain("executionStats");
+```
+
+Mongo 8 merges up to 200 tags this way. At 201 the plan changes to a plain
+`SORT`. `GET /abidings` takes at most 10 tags, so no request gets there.
+
 ## Seeds and Backfills
 
 ### Seed data

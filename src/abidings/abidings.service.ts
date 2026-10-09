@@ -94,6 +94,10 @@ export class AbidingsService {
     // $in over the multikey index ({ hashtags: 1, createdAt: -1, _id: -1 }) is
     // OR across tags, not a query per tag. Mongo reads one sorted run per tag
     // and merges them, so the page still comes off the index in order.
+    //
+    // That holds for up to 200 tags. Past that Mongo gives up on merging and
+    // sorts every match in memory. ListAbidingsQueryDto refuses more than
+    // MAX_TAGS, so a request never gets near it.
     const query: Record<string, any> = { deletedAt: null, hashtags: { $in: normalized } };
     if (userId) {
       query.userId = userId;
