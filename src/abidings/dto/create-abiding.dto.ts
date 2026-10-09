@@ -1,10 +1,14 @@
 import { IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, MinLength } from "class-validator";
 
+import { ABIDING_MESSAGE_MAX } from "../abiding.schema.js";
+
 export class CreateAbidingDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
-  @MaxLength(280)
+  // The schema applies the same limit with the same function. See the
+  // comment on `message` in abiding.schema.ts.
+  @MaxLength(ABIDING_MESSAGE_MAX)
   message: string;
 
   @IsUrl()
