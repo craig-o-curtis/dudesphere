@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
 import { IS_PUBLIC_KEY } from "../../shared/auth-metadata.js";
+import { ErrorCode } from "../../shared/error-codes.js";
 import type { AuthUser, JwtPayload } from "../auth-user.js";
 
 interface RequestWithUser {
@@ -39,7 +40,9 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader = request.headers.authorization;
 
     if (!authHeader?.startsWith("Bearer ")) {
-      throw new UnauthorizedException("Missing or invalid authorization header");
+      throw new UnauthorizedException("Missing or invalid authorization header", {
+        errorCode: ErrorCode.TOKEN_MISSING,
+      });
     }
 
     const token = authHeader.slice("Bearer ".length);
@@ -49,7 +52,9 @@ export class JwtAuthGuard implements CanActivate {
       // Checks the signature and the expiry.
       payload = await this.jwtService.verifyAsync<JwtPayload>(token);
     } catch {
-      throw new UnauthorizedException("Invalid or expired token");
+      throw new UnauthorizedException("Invalid or expired token", {
+        errorCode: ErrorCode.TOKEN_INVALID,
+      });
     }
 
     request.user = { userId: payload.sub, username: payload.username, role: payload.role };

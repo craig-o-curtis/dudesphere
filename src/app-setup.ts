@@ -39,7 +39,6 @@ export function configureApp(app: INestApplication): void {
   // goes first and the specific ones after it. See "Catch everything" on
   // https://docs.nestjs.com/exception-filters
   const adapter = app.getHttpAdapter();
-  // Here, the order is important. The catch-all goes first and the specific ones after it.
   app.useGlobalFilters(
     new AllExceptionsFilter(adapter),
     new QueryFailedFilter(adapter),

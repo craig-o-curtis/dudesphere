@@ -3,6 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
+import { ErrorCode } from "../shared/error-codes.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 
 // Soft-deletes and restores all of one user's abidings. UsersService calls
@@ -21,7 +22,9 @@ export class UserAbidingsService {
     // instead of hiding the abidings with a blank timestamp.
     const deletedAt = getUtcNow();
     if (!deletedAt) {
-      throw new ServiceUnavailableException("Could not read the current UTC time");
+      throw new ServiceUnavailableException("Could not read the current UTC time", {
+        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
+      });
     }
     try {
       // deletedAt: null so abidings already deleted keep their first timestamp.
@@ -31,7 +34,10 @@ export class UserAbidingsService {
     } catch (error) {
       // The driver error rides along as `cause`. AllExceptionsFilter logs it
       // with the request that failed, so nothing is logged here.
-      throw new ServiceUnavailableException("Could not update abidings", { cause: error });
+      throw new ServiceUnavailableException("Could not update abidings", {
+        cause: error,
+        errorCode: ErrorCode.DATABASE_UNAVAILABLE,
+      });
     }
   }
 
@@ -47,7 +53,10 @@ export class UserAbidingsService {
         .exec();
     } catch (error) {
       // Same as softDeleteForUser: the cause is logged by the filter.
-      throw new ServiceUnavailableException("Could not update abidings", { cause: error });
+      throw new ServiceUnavailableException("Could not update abidings", {
+        cause: error,
+        errorCode: ErrorCode.DATABASE_UNAVAILABLE,
+      });
     }
   }
 }
