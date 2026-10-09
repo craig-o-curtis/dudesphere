@@ -4,9 +4,8 @@
 // does for the seed services.
 //
 // Run with: pnpm backfill:hashtags
-import "reflect-metadata";
+import "reflect-metadata"; // TODO say what this is package is for
 import * as path from "path";
-import * as process from "process";
 
 import { NestFactory } from "@nestjs/core";
 import * as dotenv from "dotenv";
@@ -25,7 +24,9 @@ async function runBackfill() {
     console.log(`Backfilled hashtags on ${abidings} abidings, registered ${tags} tags`);
   } catch (error) {
     console.error("Error backfilling hashtags:", error);
-    process.exit(1);
+    // exitCode rather than exit(): exit() skips the finally below and leaves
+    // the connections open until the process is killed.
+    process.exitCode = 1;
   } finally {
     await app.close();
   }
