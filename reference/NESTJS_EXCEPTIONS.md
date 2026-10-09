@@ -110,34 +110,10 @@ throw new HttpException("Slow down", HttpStatus.TOO_MANY_REQUESTS);
 
 ## This app's own exception classes
 
-You can extend a built-in class to give one kind of failure a name. The class
-fixes its status, its wording and its error code in one place.
-
-**EXISTING FILE:** the failure for "this is someone else's".
-
-```ts
-// src/shared/exceptions/not-owner.exception.ts
-export class NotOwnerException extends ForbiddenException {
-  constructor(message: string) {
-    super(message, { errorCode: ErrorCode.NOT_OWNER });
-  }
-}
-```
-
-**EXISTING FILE:** a service that throws it.
-
-```ts
-// src/abidings/abidings.service.ts
-throw new NotOwnerException("Not authorized to edit this abiding");
-```
-
-Nest answers it exactly as it would a `ForbiddenException` built by hand. The
-class needs no filter and is registered nowhere.
-
-This app has seven. A failure gets a class only when it is thrown from more
-than one place, or when which failure to throw is worked out from data. The
-rest use a built-in class. The list and the rule are in
-[src/shared/exceptions/README.md](../src/shared/exceptions/README.md).
+You can extend a built-in class to give one kind of failure a name, such as
+`NotOwnerException`. Nest answers it exactly as it answers its parent. This
+app has seven. [NESTJS_CUSTOM_EXCEPTIONS.md](NESTJS_CUSTOM_EXCEPTIONS.md)
+explains how to write one and when a failure gets one.
 
 ## Where filters come in
 

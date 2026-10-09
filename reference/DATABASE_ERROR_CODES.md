@@ -110,5 +110,7 @@ reaches Mongo.
   answers themselves, one class each: the 409, the 503, the 400, the 408 and
   the plain 500. The 500 keeps the driver error out of the log, where it
   would print the query's values or a document.
+  [NESTJS_CUSTOM_EXCEPTIONS.md](NESTJS_CUSTOM_EXCEPTIONS.md) explains these
+  classes.
 
 Docs: <https://www.postgresql.org/docs/current/errcodes-appendix.html>
