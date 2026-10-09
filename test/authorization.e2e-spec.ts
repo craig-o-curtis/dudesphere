@@ -92,6 +92,19 @@ describe("Authorization (e2e)", () => {
       await request(app.getHttpServer()).get(path).expect(status);
     });
 
+    // On a public route the token is optional. A good one identifies the
+    // caller; a bad one is ignored and must never turn the route into a 401.
+    it.each([
+      ["a token this app did not sign", "Bearer not.a.token"],
+      ["a header that is not a bearer token", "Basic abc123"],
+    ])("GET /abidings is still 200 with %s", async (_what, authorization) => {
+      await request(app.getHttpServer()).get("/abidings").set({ authorization }).expect(200);
+    });
+
+    it("GET /abidings is 200 with a good token too", async () => {
+      await request(app.getHttpServer()).get("/abidings").set(bearer(owner.token)).expect(200);
+    });
+
     // Both have to stay open or there is no way to get a first token.
     it("POST /auth and POST /users are reachable anonymously", async () => {
       await request(app.getHttpServer())

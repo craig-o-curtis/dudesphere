@@ -80,6 +80,7 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 - **"Mine" comes from the token.** A route for the caller's own data (for example `GET /profiles/me`) takes the user id from `@CurrentUser()`, never from the URL or the body.
 - **Don't import `AuthModule` into a feature.** `AuthModule → UsersModule → ProfilesModule`, so that import closes a cycle. The guard needs only `JwtService`, which is registered globally. Use `@UseGuards(JwtAuthGuard)` directly.
 - **Guards are tested in e2e.** A controller spec overrides the guard. The 401 cases live in `test/`.
+- **A token is optional on a `@Public()` route.** `JwtAuthGuard` still reads a good token there and puts the user on the request, so the fault log names a signed-in caller and `@CurrentUser()` works. A missing or bad token is ignored. Flag a public route that treats `@CurrentUser()` as always present: it is `undefined` for an anonymous caller.
 - **Routes are guarded by default.** `JwtAuthGuard` and `RolesGuard` are global. A route is open only with `@Public()`, and admin-only with `@Roles(UserRole.ADMIN)`. Flag a new destructive or admin route (delete, restore, role changes) that has neither a role nor an ownership check.
 - **Passwords are hashed.** Every write of `user.password` goes through `HashingProvider` (`src/hashing`), and login compares through it. Flag a plain write, or a compare with `===`. The hasher lives outside `AuthModule` so `UsersModule` can import it without a cycle.
 
