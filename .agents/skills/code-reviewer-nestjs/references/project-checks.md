@@ -81,8 +81,12 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 
 ## Errors
 
-- **Use Nest HTTP exceptions.** Throw `NotFoundException`, `ConflictException` and so on. A plain `throw new Error()` becomes a 500. `AbidingsService` still does this; flag new cases, not the existing ones.
-- **The filter is a safety net.** `QueryFailedFilter` (`src/shared/filters/`) turns Postgres unique violations (`23505`) into a 409, for races. It doesn't replace a conflict check in the service.
+- **Use Nest HTTP exceptions.** Throw `NotFoundException`, `ConflictException` and so on. A plain `throw new Error()` becomes a 500 with no detail. Nothing on a request path throws a plain `Error` any more; flag a new one.
+- **Wrap with `cause`.** A `catch` that throws a fresh exception passes the original as `{ cause: error }`. It does not log the original itself: `AllExceptionsFilter` (`src/shared/filters/`) logs the cause of every 5xx with the route, user and request id. Flag a `logger.error` next to a rethrow.
+- **Add `errorCode` where a client would branch.** Codes live in `src/shared/error-codes.ts`. A 409 for a taken field, a 401 for a missing or bad token, a 403 for not owning the row, and every 503 carry one. Not every throw needs one; a plain 404 does not.
+- **The filters are a safety net.** `QueryFailedFilter` turns Postgres `23505` into a 409 and `MongoErrorFilter` does the same for Mongo `11000`, for races. Neither replaces a conflict check in the service. `MongoErrorFilter` also turns a lost Mongo connection into a 503. Everything else from either database stays a 500 on purpose.
+- **Filter order.** In `configureApp`, `AllExceptionsFilter` is registered first. Nest tries global filters last to first, so a catch-all registered later would swallow the specific ones. Flag a reorder.
+- **No timestamps in error bodies.** The body is Nest's `{ statusCode, message, error }` plus `errorCode`. A timestamp would need `Date`, which app code does not use.
 
 ## Migrations
 
@@ -92,7 +96,7 @@ Login (`POST /auth`) checks the email and password and returns a signed JWT. `Jw
 
 ## Tests
 
-- **Logic tests go in service specs.** Controller specs only check delegation: the right arguments reach the service, and the result comes back unchanged (`toBe`). Pipes, guards, status codes and serialization only run on real HTTP requests, so they belong in e2e tests (`test/`, `pnpm test:e2e`).
+- **Logic tests go in service specs.** Controller specs only check delegation: the right arguments reach the service, and the result comes back unchanged (`toBe`). Pipes, guards, filters, status codes, error bodies and serialization only run on real HTTP requests. Those that need no database go in a `*.http.spec.ts` next to the code, with mocked services (see `src/shared/dto/id-param.http.spec.ts`). Those that need real data go in e2e tests (`test/`, `pnpm test:e2e`).
 - **Bug fixes need a test.** It should fail without the fix.
 - **Use distinct values.** Pass arguments that differ from the defaults and from each other, like `getUsers(5, 2)` rather than `(10, 1)`, so swapped arguments fail.
 - **Keep mocks in their own variable.** Store `vi.fn()` mocks for `EntityManager` methods in a variable. Reading them off an object cast `as EntityManager` triggers the `unbound-method` lint warning.
