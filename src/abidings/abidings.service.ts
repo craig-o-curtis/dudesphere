@@ -4,6 +4,7 @@ import { Model } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   extractHashtagDisplays,
@@ -23,15 +24,14 @@ export class AbidingsService {
     private readonly hashtagsService: HashtagsService,
   ) {}
 
-  async getAbidings(userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidings(request: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
     // deletedAt: null hides abidings of soft-deleted users
     const query: Record<string, any> = { deletedAt: null };
     if (userId) {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, request);
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
@@ -42,13 +42,19 @@ export class AbidingsService {
     return this.toResponseDto(abiding);
   }
 
-  async getAbidingsByUserId(userId: number): Promise<AbidingResponseDto[]> {
-    const abidings = await this.abidingModel.find({ userId, deletedAt: null }).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+  async getAbidingsByUserId(
+    userId: number,
+    request: PageRequest,
+  ): Promise<Page<AbidingResponseDto>> {
+    return this.findPage({ userId, deletedAt: null }, request);
   }
 
   // One tag. userId narrows to that author's abidings, same as getAbidings.
-  async getAbidingsByHashtag(hashtag: string, userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidingsByHashtag(
+    hashtag: string,
+    request: PageRequest,
+    userId?: number,
+  ): Promise<Page<AbidingResponseDto>> {
     // Normalized here, not in the controller, so any other caller gets the
     // same rule applied — see src/shared/utils/hashtag.ts.
     const normalized = normalizeHashtag(hashtag);
@@ -56,7 +62,7 @@ export class AbidingsService {
     // empty result instead of sending a query that always matches nothing
     // (or, if built wrong, everything).
     if (!normalized) {
-      return [];
+      return { items: [], total: 0 };
     }
 
     const query: Record<string, any> = { deletedAt: null, hashtags: normalized };
@@ -64,13 +70,16 @@ export class AbidingsService {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, request);
   }
 
   // Several tags, matched with OR: an abiding needs only one of them.
   // userId narrows to that author's abidings, same as getAbidings.
-  async getAbidingsByHashtags(hashtags: string[], userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidingsByHashtags(
+    hashtags: string[],
+    request: PageRequest,
+    userId?: number,
+  ): Promise<Page<AbidingResponseDto>> {
     const normalized = [
       ...new Set(
         hashtags.map((tag) => normalizeHashtag(tag)).filter((tag): tag is string => !!tag),
@@ -79,18 +88,18 @@ export class AbidingsService {
     // Same reasoning as getAbidingsByHashtag: nothing usable left means the
     // query can never match, so skip it rather than send $in: [].
     if (normalized.length === 0) {
-      return [];
+      return { items: [], total: 0 };
     }
 
-    // $in over a multikey index ({ hashtags: 1, createdAt: -1 }) is still a
-    // single index scan — OR across tags, not a query per tag.
+    // $in over the multikey index ({ hashtags: 1, createdAt: -1, _id: -1 }) is
+    // OR across tags, not a query per tag. Mongo reads one sorted run per tag
+    // and merges them, so the page still comes off the index in order.
     const query: Record<string, any> = { deletedAt: null, hashtags: { $in: normalized } };
     if (userId) {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, request);
   }
 
   // The author is the caller, taken from the verified token. It was previously
@@ -236,6 +245,33 @@ export class AbidingsService {
   }
 
   // --- Private helpers ---
+
+  // One page of the abidings a filter matches, newest first, and the count of
+  // all of them. Every list method ends here, so they cannot drift apart on
+  // the sort or the limit.
+  //
+  // _id breaks ties on createdAt. Without it, abidings written in the same
+  // millisecond have no fixed order and one could appear on two pages. The
+  // indexes in abiding.schema.ts end with the same two keys.
+  //
+  // The two queries run side by side, not in a transaction. An abiding posted
+  // between them can leave the total one ahead of the page, which a list of
+  // posts can live with.
+  private async findPage(
+    filter: Record<string, any>,
+    request: PageRequest,
+  ): Promise<Page<AbidingResponseDto>> {
+    const [abidings, total] = await Promise.all([
+      this.abidingModel
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(toSkip(request))
+        .limit(request.limit)
+        .exec(),
+      this.abidingModel.countDocuments(filter).exec(),
+    ]);
+    return { items: abidings.map((abiding) => this.toResponseDto(abiding)), total };
+  }
 
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
     return {
