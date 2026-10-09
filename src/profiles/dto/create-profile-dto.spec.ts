@@ -31,6 +31,25 @@ describe("CreateProfileDto", () => {
     });
   });
 
+  describe("profileImageUrl", () => {
+    it("accepts a url", async () => {
+      expect(await invalidFields({ profileImageUrl: "https://example.com/avatar.jpg" })).toEqual(
+        [],
+      );
+    });
+
+    it("rejects text that is not a url", async () => {
+      expect(await invalidFields({ profileImageUrl: "my avatar" })).toEqual(["profileImageUrl"]);
+    });
+
+    // @IsUrl alone lets this through, which is why @NoNulCharacter stays.
+    it("rejects a url with a NUL character in it", async () => {
+      expect(await invalidFields({ profileImageUrl: "https://example.com/a\u0000b.jpg" })).toEqual([
+        "profileImageUrl",
+      ]);
+    });
+  });
+
   it.each(["firstName", "lastName", "bio", "profileImageUrl"])(
     "rejects a NUL character in %s",
     async (field) => {
