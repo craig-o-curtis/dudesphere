@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
@@ -420,13 +421,13 @@ describe("AbidingsService", () => {
       );
     });
 
-    it("throws ForbiddenException when the abiding exists but belongs to someone else", async () => {
+    it("throws NotOwnerException when the abiding exists but belongs to someone else", async () => {
       abidingModel.findOneAndUpdate.mockReturnValue(queryOf(null));
       abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
 
       const attempt = service.patchAbiding("x", { message: "m" }, other);
 
-      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toBeInstanceOf(NotOwnerException);
       await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });
@@ -472,13 +473,13 @@ describe("AbidingsService", () => {
       });
     });
 
-    it("throws ForbiddenException when the abiding exists but belongs to someone else", async () => {
+    it("throws NotOwnerException when the abiding exists but belongs to someone else", async () => {
       abidingModel.findOneAndDelete.mockReturnValue(queryOf(null));
       abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
 
       const attempt = service.deleteAbiding("x", other);
 
-      await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(attempt).rejects.toBeInstanceOf(NotOwnerException);
       await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
   });

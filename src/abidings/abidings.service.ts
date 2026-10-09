@@ -1,15 +1,10 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
-import { ErrorCode } from "../shared/error-codes.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   extractHashtagDisplays,
   extractHashtags,
@@ -180,9 +175,7 @@ export class AbidingsService {
 
     if (!updatedAbiding) {
       await this.assertExists(id);
-      throw new ForbiddenException("Not authorized to edit this abiding", {
-        errorCode: ErrorCode.NOT_OWNER,
-      });
+      throw new NotOwnerException("Not authorized to edit this abiding");
     }
 
     // An edit can introduce tags the registry has never seen. Tags the edit
@@ -207,9 +200,7 @@ export class AbidingsService {
       .exec();
     if (!result) {
       await this.assertExists(abidingId);
-      throw new ForbiddenException("Not authorized to delete this abiding", {
-        errorCode: ErrorCode.NOT_OWNER,
-      });
+      throw new NotOwnerException("Not authorized to delete this abiding");
     }
   }
 

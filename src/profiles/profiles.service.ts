@@ -1,14 +1,9 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
-import { ErrorCode } from "../shared/error-codes.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -111,9 +106,7 @@ export class ProfilesService {
       // getProfileById throws 404 when it is gone, so reaching the line below
       // means it exists and the caller does not own it.
       await this.getProfileById(id);
-      throw new ForbiddenException("Not authorized to edit this profile", {
-        errorCode: ErrorCode.NOT_OWNER,
-      });
+      throw new NotOwnerException("Not authorized to edit this profile");
     }
     return this.getProfileById(id);
   }
