@@ -9,6 +9,11 @@ import { defineConfig } from "vitest/config";
 // took effect.
 process.env.TZ = "Asia/Tokyo";
 
+// Rate limiting off for the e2e suites. Every file signs up and logs in from
+// 127.0.0.1 many times a minute, which the limiter would rightly refuse.
+// test/rate-limit.e2e-spec.ts turns it back on for itself, to prove it works.
+process.env.THROTTLE_ENABLED = "false";
+
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
