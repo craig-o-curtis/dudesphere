@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 
+import { PaginationModule } from "../shared/pagination/pagination.module.js";
 import { Hashtag, HashtagSchema } from "./hashtag.schema.js";
 import { HashtagsController } from "./hashtags.controller.js";
 import { HashtagsService } from "./hashtags.service.js";
@@ -13,7 +14,10 @@ import { HashtagsService } from "./hashtags.service.js";
 // AbidingsModule, so there is no cycle: abidings depend on hashtags, not the
 // other way round.
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Hashtag.name, schema: HashtagSchema }])],
+  imports: [
+    MongooseModule.forFeature([{ name: Hashtag.name, schema: HashtagSchema }]),
+    PaginationModule,
+  ],
   controllers: [HashtagsController],
   providers: [HashtagsService],
   exports: [HashtagsService],

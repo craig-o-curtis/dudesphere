@@ -3,10 +3,10 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
-import type { Page, PageRequest } from "../shared/dto/paginated-response.js";
 import { ErrorCode } from "../shared/error-codes.js";
+import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { normalizeHashtag } from "../shared/utils/hashtag.js";
-import { findMongoPage } from "../shared/utils/mongo-page.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
 import { Hashtag, HashtagDocument } from "./hashtag.schema.js";
 
@@ -14,7 +14,10 @@ import { Hashtag, HashtagDocument } from "./hashtag.schema.js";
 export class HashtagsService {
   private readonly logger = new Logger(HashtagsService.name);
 
-  constructor(@InjectModel(Hashtag.name) private readonly hashtagModel: Model<HashtagDocument>) {}
+  constructor(
+    @InjectModel(Hashtag.name) private readonly hashtagModel: Model<HashtagDocument>,
+    private readonly paginationProvider: PaginationProvider,
+  ) {}
 
   // One page of the live hashtags, alphabetically, and the count of all of
   // them — the list a tag dropdown or an autocomplete reads. Served by the
@@ -26,17 +29,17 @@ export class HashtagsService {
   // slug is unique, so the sort has no ties and the pages cannot overlap.
   //
   // The count reads every tag, because no index holds deletedAt. That is
-  // accepted: see findMongoPage in src/shared/utils/mongo-page.ts.
+  // accepted: see paginateModel in src/shared/pagination/pagination.provider.ts.
   //
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
   async list(pageRequest: PageRequest): Promise<Page<HashtagResponseDto>> {
-    const { items, total } = await findMongoPage(
+    const { items, total } = await this.paginationProvider.paginateModel(
+      pageRequest,
       this.hashtagModel,
       { deletedAt: null },
       { slug: 1 },
-      pageRequest,
     );
     return { items: items.map((hashtag) => this.toResponseDto(hashtag)), total };
   }
