@@ -1,7 +1,9 @@
 import { isDatabaseUnreachable } from "./database-unreachable.js";
 
 describe("isDatabaseUnreachable", () => {
-  const withCode = (message: string, code: string) => Object.assign(new Error(message), { code });
+  function withCode(message: string, code: string) {
+    return Object.assign(new Error(message), { code });
+  }
 
   // Each of the first two was captured from the pg driver with the server
   // cut off: the first on a new query, the second on a query in flight.

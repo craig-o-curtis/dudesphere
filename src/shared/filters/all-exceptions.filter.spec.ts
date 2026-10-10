@@ -118,12 +118,13 @@ describe("AllExceptionsFilter", () => {
   // body-parser throws errors shaped like this one, built by the http-errors
   // package: not an HttpException, but carrying the status Nest answers with.
   describe("an error that carries its own statusCode", () => {
-    const withStatus = (statusCode: number) =>
-      Object.assign(new Error("request entity too large"), {
+    function withStatus(statusCode: number) {
+      return Object.assign(new Error("request entity too large"), {
         statusCode,
         status: statusCode,
         expose: statusCode < 500,
       });
+    }
 
     it("stays silent when the status is a 4xx", () => {
       const exception = withStatus(413);

@@ -7,6 +7,7 @@ import { UserRole } from "../users/user.entity.js";
 import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
+import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 
 describe("AbidingsController", () => {
   let controller: AbidingsController;
@@ -29,6 +30,15 @@ describe("AbidingsController", () => {
   // The user JwtAuthGuard puts on the request. The write routes pass it
   // straight through to the service, which owns the authorization rule.
   const caller = { userId: 25, username: "walter", role: UserRole.USER };
+
+  // What ListAbidingsQueryDto holds when the caller sends no limit or page.
+  // The defaults come from the ValidationPipe, which does not run here.
+  const firstPage = { limit: 10, page: 1 };
+
+  // A service result: one page of abidings and the count of all of them.
+  function pageOf<T>(items: T[], total = items.length) {
+    return { items, total };
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -55,70 +65,126 @@ describe("AbidingsController", () => {
     // The old code loaded the first 20 users without checking who wrote what.
     // This checks that it now asks for exactly the authors it needs.
     it("asks for exactly the authors of the abidings, once each", async () => {
-      abidingService.getAbidings.mockResolvedValue([
-        { id: "a1", userId: 1, message: "first" },
-        { id: "a2", userId: 1, message: "second" },
-        { id: "a3", userId: 25, message: "third" },
-      ]);
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([
+          { id: "a1", userId: 1, message: "first" },
+          { id: "a2", userId: 1, message: "second" },
+          { id: "a3", userId: 25, message: "third" },
+        ]),
+      );
       usersService.getUsersByIds.mockResolvedValue([]);
 
-      await controller.getAbidings({});
+      await controller.getAbidings({ ...firstPage });
 
       expect(usersService.getUsersByIds).toHaveBeenCalledWith([1, 25]);
     });
 
     it("fills in each abiding's username from its author", async () => {
-      abidingService.getAbidings.mockResolvedValue([
-        { id: "a1", userId: 1, message: "first" },
-        { id: "a2", userId: 25, message: "second" },
-      ]);
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([
+          { id: "a1", userId: 1, message: "first" },
+          { id: "a2", userId: 25, message: "second" },
+        ]),
+      );
       usersService.getUsersByIds.mockResolvedValue([
         { id: 1, username: "Admin" },
         { id: 25, username: "walter" },
       ]);
 
-      const result = await controller.getAbidings({});
+      const result = await controller.getAbidings({ ...firstPage });
 
-      expect(result.map((a) => a.username)).toEqual(["Admin", "walter"]);
+      expect(result.data.map((a) => a.username)).toEqual(["Admin", "walter"]);
     });
 
     it("falls back to Unknown when the author is not found", async () => {
-      abidingService.getAbidings.mockResolvedValue([{ id: "a1", userId: 99, message: "orphan" }]);
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 99, message: "orphan" }]),
+      );
       usersService.getUsersByIds.mockResolvedValue([]);
 
-      const result = await controller.getAbidings({});
+      const result = await controller.getAbidings({ ...firstPage });
 
-      expect(result[0].username).toBe("Unknown");
+      expect(result.data[0].username).toBe("Unknown");
     });
 
     // The response DTO is what a client actually receives, so the derived
     // tags have to survive the mapping out of the service.
     it("returns each abiding's hashtags in the response", async () => {
-      abidingService.getAbidings.mockResolvedValue([
-        { id: "a1", userId: 1, message: "easy #Sunday", hashtags: ["sunday"] },
-      ]);
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 1, message: "easy #Sunday", hashtags: ["sunday"] }]),
+      );
       usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
 
-      const result = await controller.getAbidings({});
+      const result = await controller.getAbidings({ ...firstPage });
 
-      expect(result[0].hashtags).toEqual(["sunday"]);
+      expect(result.data[0].hashtags).toEqual(["sunday"]);
     });
 
     it("returns an empty hashtags array for an abiding written before the field existed", async () => {
-      abidingService.getAbidings.mockResolvedValue([{ id: "a1", userId: 1, message: "old" }]);
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 1, message: "old" }]),
+      );
       usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
 
-      const result = await controller.getAbidings({});
+      const result = await controller.getAbidings({ ...firstPage });
 
-      expect(result[0].hashtags).toEqual([]);
+      expect(result.data[0].hashtags).toEqual([]);
+    });
+
+    // ClassSerializerInterceptor reads each item's class to apply the DTO's
+    // rules. A plain object in `data` would skip them.
+    it("returns real AbidingResponseDto instances inside data", async () => {
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 1, message: "first" }]),
+      );
+      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
+
+      const result = await controller.getAbidings({ ...firstPage });
+
+      expect(result.data[0]).toBeInstanceOf(AbidingResponseDto);
+    });
+
+    // 5 and 2 differ from the defaults and from each other, so a swapped or
+    // dropped value shows up as a failure.
+    it("passes limit and page to the service and describes the page", async () => {
+      abidingService.getAbidings.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 1, message: "first" }], 12),
+      );
+      usersService.getUsersByIds.mockResolvedValue([]);
+
+      const result = await controller.getAbidings({ limit: 5, page: 2 });
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, undefined);
+      expect(result.meta).toEqual({
+        itemsPerPage: 5,
+        totalItems: 12,
+        currentPage: 2,
+        totalPages: 3,
+      });
+      expect(result.links.next).toBe("/abidings?limit=5&page=3");
+      expect(result.links.previous).toBe("/abidings?limit=5&page=1");
+    });
+
+    // Following `next` has to stay inside the filtered list.
+    it("keeps userId and the tags in the links", async () => {
+      abidingService.getAbidingsByHashtags.mockResolvedValue(pageOf([], 30));
+      usersService.getUsersByIds.mockResolvedValue([]);
+
+      const result = await controller.getAbidings({
+        ...firstPage,
+        userId: 3,
+        hashtag: "#sunday, dude",
+      });
+
+      expect(result.links.next).toBe("/abidings?userId=3&hashtag=%23sunday%2Cdude&limit=10&page=2");
     });
 
     it("calls getAbidings, not a hashtag method, when no tag is given", async () => {
-      abidingService.getAbidings.mockResolvedValue([]);
+      abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
-      await controller.getAbidings({});
+      await controller.getAbidings({ ...firstPage });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(undefined);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, undefined);
       expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
     });
@@ -126,32 +192,39 @@ describe("AbidingsController", () => {
     // A param of only separators leaves nothing usable, so it must fall
     // through to the unfiltered list rather than query for an empty tag.
     it("ignores a hashtag param that is only commas and spaces", async () => {
-      abidingService.getAbidings.mockResolvedValue([]);
+      abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
-      await controller.getAbidings({ hashtag: " , , " });
+      const result = await controller.getAbidings({ ...firstPage, hashtag: " , , " });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(undefined);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, undefined);
       expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      // The list was not filtered, so its links say so too.
+      expect(result.links.current).toBe("/abidings?limit=10&page=1");
     });
 
     it("dispatches a single hashtag to getAbidingsByHashtag", async () => {
-      abidingService.getAbidingsByHashtag.mockResolvedValue([]);
+      abidingService.getAbidingsByHashtag.mockResolvedValue(pageOf([]));
 
-      await controller.getAbidings({ hashtag: "sunday" });
+      await controller.getAbidings({ ...firstPage, hashtag: "sunday" });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", undefined);
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith(
+        "sunday",
+        firstPage,
+        undefined,
+      );
       expect(abidingService.getAbidings).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
     });
 
     it("dispatches comma-separated hashtags to getAbidingsByHashtags", async () => {
-      abidingService.getAbidingsByHashtags.mockResolvedValue([]);
+      abidingService.getAbidingsByHashtags.mockResolvedValue(pageOf([]));
 
-      await controller.getAbidings({ hashtag: "sunday, dude" });
+      await controller.getAbidings({ ...firstPage, hashtag: "sunday, dude" });
 
       expect(abidingService.getAbidingsByHashtags).toHaveBeenCalledWith(
         ["sunday", "dude"],
+        firstPage,
         undefined,
       );
       expect(abidingService.getAbidings).not.toHaveBeenCalled();
@@ -159,28 +232,39 @@ describe("AbidingsController", () => {
     });
 
     it("passes userId through to getAbidingsByHashtag", async () => {
-      abidingService.getAbidingsByHashtag.mockResolvedValue([]);
+      abidingService.getAbidingsByHashtag.mockResolvedValue(pageOf([]));
 
       // A number now: ListAbidingsQueryDto coerces and validates it, so the
       // controller no longer converts it by hand.
-      await controller.getAbidings({ hashtag: "sunday", userId: 3 });
+      await controller.getAbidings({ ...firstPage, hashtag: "sunday", userId: 3 });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", 3);
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, 3);
     });
   });
 
   describe("getMyAbidings", () => {
     it("passes the id from the token, not a request param, and fills in usernames", async () => {
-      abidingService.getAbidingsByUserId.mockResolvedValue([
-        { id: "a1", userId: 25, message: "mine" },
-      ]);
+      abidingService.getAbidingsByUserId.mockResolvedValue(
+        pageOf([{ id: "a1", userId: 25, message: "mine" }]),
+      );
       usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
       const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
 
-      const result = await controller.getMyAbidings(mockUser);
+      const result = await controller.getMyAbidings(mockUser, { ...firstPage });
 
-      expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25);
-      expect(result[0].username).toBe("walter");
+      expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25, firstPage);
+      expect(result.data[0].username).toBe("walter");
+    });
+
+    it("passes limit and page to the service and links back to /abidings/me", async () => {
+      abidingService.getAbidingsByUserId.mockResolvedValue(pageOf([], 12));
+      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
+
+      const result = await controller.getMyAbidings(mockUser, { limit: 5, page: 2 });
+
+      expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25, { limit: 5, page: 2 });
+      expect(result.meta.totalItems).toBe(12);
+      expect(result.links.next).toBe("/abidings/me?limit=5&page=3");
     });
   });
 

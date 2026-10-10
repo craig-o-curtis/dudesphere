@@ -4,6 +4,7 @@ import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
+import { type PaginatedResponse, toPaginatedResponse } from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
@@ -15,8 +16,11 @@ export class ProfilesController {
 
   @Public()
   @Get()
-  getProfiles(@Query() query: PaginationQueryDto): Promise<ProfileResponseDto[]> {
-    return this.profilesService.getProfiles(query.limit, query.page);
+  async getProfiles(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ProfileResponseDto>> {
+    const profiles = await this.profilesService.getProfiles(query);
+    return toPaginatedResponse(profiles, query, "/profiles");
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token

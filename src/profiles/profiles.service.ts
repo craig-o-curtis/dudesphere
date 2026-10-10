@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
+import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
@@ -17,14 +18,15 @@ export class ProfilesService {
     private readonly profileRepository: Repository<Profile>,
   ) {}
 
-  async getProfiles(limit: number = 10, page: number = 1): Promise<ProfileResponseDto[]> {
-    const pageSize = limit;
-    const pageNum = page;
-    const profiles = await this.profileRepository.find({
-      skip: (pageNum - 1) * pageSize,
-      take: pageSize,
+  async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
+    const [profiles, total] = await this.profileRepository.findAndCount({
+      // A fixed order. Without one Postgres may return rows in any order, so
+      // two pages of the same list could repeat a profile or skip one.
+      order: { id: "ASC" },
+      skip: toSkip(pageRequest),
+      take: pageRequest.limit,
     });
-    return profiles.map((profile) => ProfileResponseDto.fromEntity(profile));
+    return { items: profiles.map((profile) => ProfileResponseDto.fromEntity(profile)), total };
   }
 
   async getProfileById(id: number): Promise<ProfileResponseDto> {

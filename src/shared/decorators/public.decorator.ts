@@ -10,4 +10,6 @@ import { IS_PUBLIC_KEY } from "../auth-metadata.js";
  * need one to create the user who would get it. Mark a route public only when
  * an anonymous caller is meant to reach it.
  */
-export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+export function Public() {
+  return SetMetadata(IS_PUBLIC_KEY, true);
+}

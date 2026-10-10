@@ -98,8 +98,9 @@ describe("CreateUserDto", () => {
   // The password is not in sizedFields: its column holds a 60-character hash,
   // so the limit that matters is bcrypt's 72 bytes of input, not the column.
   describe("password", () => {
-    const passwordErrors = (password: string) =>
-      validateSync(buildDto({ password })).filter((error) => error.property === "password");
+    function passwordErrors(password: string) {
+      return validateSync(buildDto({ password })).filter((error) => error.property === "password");
+    }
 
     it("accepts 72 bytes and rejects 73", () => {
       expect(passwordErrors("a".repeat(72))).toEqual([]);

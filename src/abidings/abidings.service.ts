@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   extractHashtagDisplays,
@@ -23,15 +24,14 @@ export class AbidingsService {
     private readonly hashtagsService: HashtagsService,
   ) {}
 
-  async getAbidings(userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidings(pageRequest: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
     // deletedAt: null hides abidings of soft-deleted users
-    const query: Record<string, any> = { deletedAt: null };
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null };
     if (userId) {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, pageRequest);
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
@@ -42,13 +42,19 @@ export class AbidingsService {
     return this.toResponseDto(abiding);
   }
 
-  async getAbidingsByUserId(userId: number): Promise<AbidingResponseDto[]> {
-    const abidings = await this.abidingModel.find({ userId, deletedAt: null }).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+  async getAbidingsByUserId(
+    userId: number,
+    pageRequest: PageRequest,
+  ): Promise<Page<AbidingResponseDto>> {
+    return this.findPage({ userId, deletedAt: null }, pageRequest);
   }
 
   // One tag. userId narrows to that author's abidings, same as getAbidings.
-  async getAbidingsByHashtag(hashtag: string, userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidingsByHashtag(
+    hashtag: string,
+    pageRequest: PageRequest,
+    userId?: number,
+  ): Promise<Page<AbidingResponseDto>> {
     // Normalized here, not in the controller, so any other caller gets the
     // same rule applied — see src/shared/utils/hashtag.ts.
     const normalized = normalizeHashtag(hashtag);
@@ -56,21 +62,24 @@ export class AbidingsService {
     // empty result instead of sending a query that always matches nothing
     // (or, if built wrong, everything).
     if (!normalized) {
-      return [];
+      return { items: [], total: 0 };
     }
 
-    const query: Record<string, any> = { deletedAt: null, hashtags: normalized };
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: normalized };
     if (userId) {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, pageRequest);
   }
 
   // Several tags, matched with OR: an abiding needs only one of them.
   // userId narrows to that author's abidings, same as getAbidings.
-  async getAbidingsByHashtags(hashtags: string[], userId?: number): Promise<AbidingResponseDto[]> {
+  async getAbidingsByHashtags(
+    hashtags: string[],
+    pageRequest: PageRequest,
+    userId?: number,
+  ): Promise<Page<AbidingResponseDto>> {
     const normalized = [
       ...new Set(
         hashtags.map((tag) => normalizeHashtag(tag)).filter((tag): tag is string => !!tag),
@@ -79,18 +88,22 @@ export class AbidingsService {
     // Same reasoning as getAbidingsByHashtag: nothing usable left means the
     // query can never match, so skip it rather than send $in: [].
     if (normalized.length === 0) {
-      return [];
+      return { items: [], total: 0 };
     }
 
-    // $in over a multikey index ({ hashtags: 1, createdAt: -1 }) is still a
-    // single index scan — OR across tags, not a query per tag.
-    const query: Record<string, any> = { deletedAt: null, hashtags: { $in: normalized } };
+    // $in over the multikey index ({ hashtags: 1, createdAt: -1, _id: -1 }) is
+    // OR across tags, not a query per tag. Mongo reads one sorted run per tag
+    // and merges them, so the page still comes off the index in order.
+    //
+    // That holds for up to 200 tags. Past that Mongo gives up on merging and
+    // sorts every match in memory. ListAbidingsQueryDto refuses more than
+    // MAX_TAGS, so a request never gets near it.
+    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: { $in: normalized } };
     if (userId) {
       query.userId = userId;
     }
 
-    const abidings = await this.abidingModel.find(query).exec();
-    return abidings.map((abiding) => this.toResponseDto(abiding));
+    return this.findPage(query, pageRequest);
   }
 
   // The author is the caller, taken from the verified token. It was previously
@@ -195,6 +208,7 @@ export class AbidingsService {
     // deletedAt: null so an abiding hidden with its deleted user is a 404 here
     // too, and comes back intact if the user is restored. ownedBy adds the
     // authorization rule to the same filter.
+    // so owners get the passed userId, but admins get no user id there for can delete all
     const result = await this.abidingModel
       .findOneAndDelete({ _id: abidingId, deletedAt: null, ...this.ownedBy(caller) })
       .exec();
@@ -237,8 +251,46 @@ export class AbidingsService {
 
   // --- Private helpers ---
 
+  // One page of the abidings a filter matches, newest first, and the count of
+  // all of them. Every list method ends here, so they cannot drift apart on
+  // the sort or the limit.
+  //
+  // _id breaks ties on createdAt. Without it, abidings written in the same
+  // millisecond have no fixed order and one could appear on two pages. The
+  // indexes in abiding.schema.ts end with the same two keys.
+  //
+  // The two queries run side by side, not in a transaction. An abiding posted
+  // between them can leave the total one ahead of the page, which a list of
+  // posts can live with.
+  //
+  // The count is the costly half, and that is accepted, not solved. The page
+  // comes off an index, but no index holds deletedAt, so the count reads
+  // every abiding the filter matches: the whole collection when there is no
+  // filter. The response shape needs a total, so it is paid on every request.
+  // The query time limit in src/app.module.ts bounds it. If the collection
+  // grows large, the fix is a stored count or a cursor with no total, not
+  // another index: Mongo cannot count { deletedAt: null } from an index alone.
+  private async findPage(
+    filter: QueryFilter<AbidingDocument>,
+    pageRequest: PageRequest,
+  ): Promise<Page<AbidingResponseDto>> {
+    const [abidings, total] = await Promise.all([
+      this.abidingModel
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(toSkip(pageRequest))
+        .limit(pageRequest.limit)
+        .exec(),
+      this.abidingModel.countDocuments(filter).exec(),
+    ]);
+    return { items: abidings.map((abiding) => this.toResponseDto(abiding)), total };
+  }
+
+  // A real instance, not an object literal. ClassSerializerInterceptor only
+  // applies the DTO's @Expose and @Transform rules to an instance of the
+  // class, and a list hands these straight to toPaginatedResponse.
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
-    return {
+    return new AbidingResponseDto({
       id: abiding._id.toString(),
       userId: abiding.userId,
       message: abiding.message,
@@ -247,6 +299,6 @@ export class AbidingsService {
       updatedAt: abiding.updatedAt ?? "",
       replyToId: abiding.replyToId ?? undefined,
       hashtags: abiding.hashtags ?? [],
-    };
+    });
   }
 }

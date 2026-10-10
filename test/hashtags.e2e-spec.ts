@@ -8,6 +8,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import type { PaginatedResponse } from "./../src/shared/dto/paginated-response.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
@@ -31,6 +32,25 @@ describe("Hashtag delete and restore (e2e)", () => {
   // it cannot collide with a tag someone really used.
   function unusedSlug() {
     return `e2e${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  }
+
+  // Every live slug, read the way a client fills a dropdown: the largest page
+  // first, then links.next until there is none.
+  //
+  // One page is not enough here. The list is sorted by slug and the dev
+  // database has tags of its own, so the tag under test may not be on page 1.
+  // A "not on the list" check against page 1 alone would pass even if the
+  // delete had done nothing.
+  async function listEverySlug(): Promise<string[]> {
+    const slugs: string[] = [];
+    let next: string | null = "/hashtags?limit=100";
+    while (next) {
+      const page = await request(app.getHttpServer()).get(next).expect(200);
+      const body = page.body as PaginatedResponse<{ slug: string }>;
+      slugs.push(...body.data.map((hashtag) => hashtag.slug));
+      next = body.links.next;
+    }
+    return slugs;
   }
 
   beforeAll(async () => {
@@ -112,12 +132,13 @@ describe("Hashtag delete and restore (e2e)", () => {
     let authorToken: string;
     let firstUsedAt: string;
 
-    const postWithTag = (tag: string) =>
-      request(app.getHttpServer())
+    function postWithTag(tag: string) {
+      return request(app.getHttpServer())
         .post("/abidings")
         .set(bearer(authorToken))
         .send({ message: `the dude abides #${tag}` })
         .expect(201);
+    }
 
     beforeAll(async () => {
       // A real user, because POST /abidings records the caller as the author.
@@ -161,9 +182,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("then reads as not found, and is gone from the list", async () => {
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).not.toContain(slug);
+      expect(await listEverySlug()).not.toContain(slug);
     });
 
     // The first delete matched a live tag. This one finds none, because the
@@ -182,9 +201,12 @@ describe("Hashtag delete and restore (e2e)", () => {
         .get(`/abidings?hashtag=${slug}`)
         .expect(200);
 
-      const abidings = filtered.body as { hashtags: string[] }[];
-      expect(abidings).toHaveLength(1);
-      expect(abidings[0].hashtags).toContain(slug);
+      // The slug is unique to this run, so the total is exact even on a
+      // database other suites are writing to.
+      const body = filtered.body as PaginatedResponse<{ hashtags: string[] }>;
+      expect(body.data).toHaveLength(1);
+      expect(body.meta.totalItems).toBe(1);
+      expect(body.data[0].hashtags).toContain(slug);
     });
 
     // A delete has to hold. The row is kept with deletedAt set, registerTags
@@ -199,9 +221,7 @@ describe("Hashtag delete and restore (e2e)", () => {
 
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).not.toContain(slug);
+      expect(await listEverySlug()).not.toContain(slug);
     });
 
     it("is now carried by both abidings, and still off the list", async () => {
@@ -209,7 +229,9 @@ describe("Hashtag delete and restore (e2e)", () => {
         .get(`/abidings?hashtag=${slug}`)
         .expect(200);
 
-      expect(filtered.body as unknown[]).toHaveLength(2);
+      const body = filtered.body as PaginatedResponse<unknown>;
+      expect(body.data).toHaveLength(2);
+      expect(body.meta.totalItems).toBe(2);
     });
 
     it("cannot be restored by a user who is not an admin", async () => {
@@ -239,9 +261,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("is then back in the registry and on the list", async () => {
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(200);
 
-      const list = await request(app.getHttpServer()).get("/hashtags").expect(200);
-      const slugs = (list.body as { slug: string }[]).map((hashtag) => hashtag.slug);
-      expect(slugs).toContain(slug);
+      expect(await listEverySlug()).toContain(slug);
     });
 
     // Only a deleted tag can be restored, the same as restoring a user.

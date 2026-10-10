@@ -20,12 +20,13 @@ describe("JwtAuthGuard", () => {
 
   // A fake ExecutionContext that hands the guard our request object. The two
   // getters are what Reflector is handed to read metadata from.
-  const contextFor = (request: object) =>
-    ({
+  function contextFor(request: object) {
+    return {
       switchToHttp: () => ({ getRequest: () => request }),
       getHandler: () => () => undefined,
       getClass: () => class {},
-    }) as unknown as ExecutionContext;
+    } as unknown as ExecutionContext;
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
