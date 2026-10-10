@@ -61,7 +61,7 @@ decorators. The first version is hand-written from the response DTOs:
 
 | Type                | Source in `apps/api`                                |
 | ------------------- | --------------------------------------------------- |
-| `PaginatedResponse` | `src/shared/dto/paginated-response.ts`              |
+| `Paginated`         | `src/shared/pagination/paginated.interface.ts`      |
 | `UserResponse`      | `src/users/dto/user-response.dto.ts`                |
 | `ProfileResponse`   | `src/profiles/dto/profile-response.dto.ts`          |
 | `AbidingResponse`   | `src/abidings/dto/abiding-response.dto.ts`          |

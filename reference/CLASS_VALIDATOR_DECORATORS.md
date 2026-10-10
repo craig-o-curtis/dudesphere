@@ -84,7 +84,7 @@ field converts it, with `@Type(() => Number)`, a `@Transform`, or this app's
 left out.
 
 ```ts
-// src/shared/dto/pagination-query.dto.ts
+// src/shared/pagination/dto/pagination-query.dto.ts
 @IsOptional()
 @IntFromDigits(DEFAULT_LIMIT)
 @Min(1)
