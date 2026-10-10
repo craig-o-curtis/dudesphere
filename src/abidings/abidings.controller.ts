@@ -5,7 +5,7 @@ import type { Types as MongooseTypes } from "mongoose";
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
-import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";

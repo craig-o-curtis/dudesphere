@@ -1,6 +1,6 @@
 import { IsOptional, Max, Min } from "class-validator";
 
-import { IntFromDigits } from "../decorators/int-from-digits.decorator.js";
+import { IntFromDigits } from "../../decorators/int-from-digits.decorator.js";
 
 export const DEFAULT_LIMIT = 10;
 // Caps how much of a table or collection one request can read.

@@ -5,7 +5,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
-import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
