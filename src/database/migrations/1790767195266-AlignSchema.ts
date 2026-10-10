@@ -20,6 +20,30 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 export class AlignSchema1790767195266 implements MigrationInterface {
   name = "AlignSchema1790767195266";
 
+  // Here we are dropping the foreign key and the two indexes, then creating
+  // them again at the end under new names. They were not incorrect. They
+  // cover the same columns and do the same job before and after. Only the
+  // names change:
+  //   FK_profile_userId  ->  FK_a24972ebd73b106250713dcddd9
+  //   IDX_user_username  ->  IDX_78a916df40e02a9deb1c4b75ed
+  //   IDX_user_email     ->  IDX_e12875dfb3b1d92d7d7c5377e2
+  //
+  // The first migration was written by hand and gave them readable names.
+  // TypeORM works out its own name for each one, a hash of the table and
+  // column names, and `pnpm migration:check` compares names. So it reported
+  // three differences on a schema that worked.
+  //
+  // What the first migration did get wrong was "role": plain text, where the
+  // entity declares an enum. The middle of this function fixes that.
+  //
+  // Neither is fixed by editing the first migration. A database that has run
+  // a migration never runs it again, so a change there would reach new
+  // databases and miss every existing one. A fix goes in a new migration,
+  // which every database runs once.
+  //
+  // It is drop and create, not a rename, because that is what TypeORM
+  // generates. The drops come first and the creates last for the same
+  // reason. Nothing in between depends on them.
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE "profile" DROP CONSTRAINT "FK_profile_userId"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_user_username"`);
