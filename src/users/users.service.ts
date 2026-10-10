@@ -37,7 +37,7 @@ export class UsersService {
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
-    const { items, total } = await this.paginationProvider.paginateQuery(
+    const { items, total } = await this.paginationProvider.paginatePgQuery(
       pageRequest,
       this.usersRepository,
       {

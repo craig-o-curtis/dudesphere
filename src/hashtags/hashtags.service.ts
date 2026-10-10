@@ -29,13 +29,13 @@ export class HashtagsService {
   // slug is unique, so the sort has no ties and the pages cannot overlap.
   //
   // The count reads every tag, because no index holds deletedAt. That is
-  // accepted: see paginateModel in src/shared/pagination/pagination.provider.ts.
+  // accepted: see paginateMongoModel in src/shared/pagination/pagination.provider.ts.
   //
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
   async list(pageRequest: PageRequest): Promise<Page<HashtagResponseDto>> {
-    const { items, total } = await this.paginationProvider.paginateModel(
+    const { items, total } = await this.paginationProvider.paginateMongoModel(
       pageRequest,
       this.hashtagModel,
       { deletedAt: null },

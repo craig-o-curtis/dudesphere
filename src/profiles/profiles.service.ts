@@ -21,7 +21,7 @@ export class ProfilesService {
   ) {}
 
   async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
-    const { items, total } = await this.paginationProvider.paginateQuery(
+    const { items, total } = await this.paginationProvider.paginatePgQuery(
       pageRequest,
       this.profileRepository,
       {

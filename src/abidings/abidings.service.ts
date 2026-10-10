@@ -260,14 +260,14 @@ export class AbidingsService {
   // millisecond have no fixed order and one could appear on two pages. The
   // indexes in abiding.schema.ts end with the same two keys.
   //
-  // paginateModel runs the page and the count. Its comment says what the
+  // paginateMongoModel runs the page and the count. Its comment says what the
   // count costs. This method adds the three things only abidings know: the
   // sort, the response class, and each author's username.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     pageRequest: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
-    const { items, total } = await this.paginationProvider.paginateModel(
+    const { items, total } = await this.paginationProvider.paginateMongoModel(
       pageRequest,
       this.abidingModel,
       filter,
