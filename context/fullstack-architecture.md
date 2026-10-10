@@ -59,14 +59,14 @@ Each step is one commit. The test suite runs green after each one.
 `packages/api-types` exports TypeScript types only. No runtime code, no
 decorators. The first version is hand-written from the response DTOs:
 
-| Type                | Source in `apps/api`                                |
-| ------------------- | --------------------------------------------------- |
-| `Paginated`         | `src/shared/pagination/paginated.interface.ts`      |
-| `UserResponse`      | `src/users/dto/user-response.dto.ts`                |
-| `ProfileResponse`   | `src/profiles/dto/profile-response.dto.ts`          |
-| `AbidingResponse`   | `src/abidings/dto/abiding-response.dto.ts`          |
-| `HashtagResponse`   | `src/hashtags/dto/hashtag-response.dto.ts`          |
-| `JwtPayload`        | `src/auth/auth-user.ts` (`sub`, `username`, `role`) |
+| Type              | Source in `apps/api`                                |
+| ----------------- | --------------------------------------------------- |
+| `Paginated`       | `src/shared/pagination/paginated.interface.ts`      |
+| `UserResponse`    | `src/users/dto/user-response.dto.ts`                |
+| `ProfileResponse` | `src/profiles/dto/profile-response.dto.ts`          |
+| `AbidingResponse` | `src/abidings/dto/abiding-response.dto.ts`          |
+| `HashtagResponse` | `src/hashtags/dto/hashtag-response.dto.ts`          |
+| `JwtPayload`      | `src/auth/auth-user.ts` (`sub`, `username`, `role`) |
 
 The DTO classes stay in `apps/api`. They carry `class-validator` and
 `class-transformer` decorators, and those do not belong in a browser bundle.
