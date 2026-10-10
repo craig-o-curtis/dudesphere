@@ -1,4 +1,3 @@
-import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Types } from "mongoose";
 
@@ -15,8 +14,6 @@ describe("AbidingsController", () => {
   const abidingService = {
     getAbidings: vi.fn(),
     getAbidingsByUserId: vi.fn(),
-    getAbidingsByHashtag: vi.fn(),
-    getAbidingsByHashtags: vi.fn(),
     createAbiding: vi.fn(),
     patchAbiding: vi.fn(),
     deleteAbiding: vi.fn(),
@@ -24,7 +21,6 @@ describe("AbidingsController", () => {
 
   const usersService = {
     getUsersByIds: vi.fn(),
-    getMyUser: vi.fn(),
   };
 
   // The user JwtAuthGuard puts on the request. The write routes pass it
@@ -154,7 +150,10 @@ describe("AbidingsController", () => {
 
       const result = await controller.getAbidings({ limit: 5, page: 2 });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, {});
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 5, page: 2 },
+        { hashtags: [] },
+      );
       expect(result.meta).toEqual({
         itemsPerPage: 5,
         totalItems: 12,
@@ -167,7 +166,7 @@ describe("AbidingsController", () => {
 
     // Following `next` has to stay inside the filtered list.
     it("keeps userId and the tags in the links", async () => {
-      abidingService.getAbidingsByHashtags.mockResolvedValue(pageOf([], 30));
+      abidingService.getAbidings.mockResolvedValue(pageOf([], 30));
       usersService.getUsersByIds.mockResolvedValue([]);
 
       const result = await controller.getAbidings({
@@ -187,69 +186,66 @@ describe("AbidingsController", () => {
 
       const result = await controller.getAbidings({ ...firstPage, startDate, endDate });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, { startDate, endDate });
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {
+        startDate,
+        endDate,
+        hashtags: [],
+      });
       expect(result.links.next).toBe(
         "/abidings?startDate=2026-10-01T00%3A00%3A00Z&endDate=2026-10-08T00%3A00%3A00Z&limit=10&page=2",
       );
     });
 
-    it("calls getAbidings, not a hashtag method, when no tag is given", async () => {
+    // The controller only reads the param. Which query the tags need is the
+    // service's decision, so every case below ends in the same one call.
+    it("passes an empty tag list when no tag is given", async () => {
       abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       await controller.getAbidings({ ...firstPage });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {});
-      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
-      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, { hashtags: [] });
     });
 
-    // A param of only separators leaves nothing usable, so it must fall
-    // through to the unfiltered list rather than query for an empty tag.
+    // A param of only separators leaves nothing usable, so it is the
+    // unfiltered list rather than a search for an empty tag.
     it("ignores a hashtag param that is only commas and spaces", async () => {
       abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       const result = await controller.getAbidings({ ...firstPage, hashtag: " , , " });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {});
-      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
-      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, { hashtags: [] });
       // The list was not filtered, so its links say so too.
       expect(result.links.current).toBe("/abidings?limit=10&page=1");
     });
 
-    it("dispatches a single hashtag to getAbidingsByHashtag", async () => {
-      abidingService.getAbidingsByHashtag.mockResolvedValue(pageOf([]));
+    it("passes one tag as a list of one", async () => {
+      abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       await controller.getAbidings({ ...firstPage, hashtag: "sunday" });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, {});
-      expect(abidingService.getAbidings).not.toHaveBeenCalled();
-      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, { hashtags: ["sunday"] });
     });
 
-    it("dispatches comma-separated hashtags to getAbidingsByHashtags", async () => {
-      abidingService.getAbidingsByHashtags.mockResolvedValue(pageOf([]));
+    it("splits comma-separated tags into a list", async () => {
+      abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       await controller.getAbidings({ ...firstPage, hashtag: "sunday, dude" });
 
-      expect(abidingService.getAbidingsByHashtags).toHaveBeenCalledWith(
-        ["sunday", "dude"],
-        firstPage,
-        {},
-      );
-      expect(abidingService.getAbidings).not.toHaveBeenCalled();
-      expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {
+        hashtags: ["sunday", "dude"],
+      });
     });
 
-    it("passes userId through to getAbidingsByHashtag", async () => {
-      abidingService.getAbidingsByHashtag.mockResolvedValue(pageOf([]));
+    it("passes userId alongside the tags", async () => {
+      abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       // A number now: GetAbidingsDto coerces and validates it, so the
       // controller no longer converts it by hand.
       await controller.getAbidings({ ...firstPage, hashtag: "sunday", userId: 3 });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, {
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {
         userId: 3,
+        hashtags: ["sunday"],
       });
     });
   });
@@ -283,25 +279,16 @@ describe("AbidingsController", () => {
   // These used to load the first page of users and search it, so an author
   // past that page came back as "Unknown".
   describe("postAbiding", () => {
-    it("looks up the caller by the id in the token and returns their username", async () => {
-      abidingService.createAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "new" });
-      usersService.getMyUser.mockResolvedValue({ id: 25, username: "walter" });
+    // The service checks that the author still exists and puts their username
+    // on the response. Both are tested in abiding.service.spec.ts.
+    it("passes the body and the caller to the service and returns its response", async () => {
+      const created = { id: "a1", userId: 25, message: "new", username: "walter" };
+      abidingService.createAbiding.mockResolvedValue(created);
 
       const result = await controller.postAbiding({ message: "new" }, caller);
 
-      expect(usersService.getMyUser).toHaveBeenCalledWith(25);
-      expect(result.username).toBe("walter");
-    });
-
-    // A token outlives its user: it stays valid until it expires. Without
-    // this, a deleted user could keep posting, and the abidings would be live.
-    it("writes nothing when the caller's user is deleted or missing", async () => {
-      usersService.getMyUser.mockRejectedValue(new NotFoundException("My User #25 not found"));
-
-      await expect(controller.postAbiding({ message: "new" }, caller)).rejects.toThrow(
-        NotFoundException,
-      );
-      expect(abidingService.createAbiding).not.toHaveBeenCalled();
+      expect(abidingService.createAbiding).toHaveBeenCalledWith({ message: "new" }, caller);
+      expect(result).toBe(created);
     });
   });
 

@@ -13,7 +13,7 @@ import {
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
 import { UsersService } from "../users/users.service.js";
-import { type AbidingFilters, AbidingsService } from "./abidings.service.js";
+import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 import { GetAbidingsDto } from "./dto/get-abidings.dto.js";
@@ -22,7 +22,7 @@ import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 @Controller("abidings")
 export class AbidingsController {
   constructor(
-    private readonly AbidingsService: AbidingsService,
+    private readonly abidingsService: AbidingsService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -34,25 +34,19 @@ export class AbidingsController {
     // Already checked: GetAbidingsDto converts userId to a number and
     // validates the dates, so an unusable value is a 400 before it reaches
     // here.
-    const filters: AbidingFilters = {
-      userId: query.userId,
-      startDate: query.startDate,
-      endDate: query.endDate,
-    };
-    // Only limit and page go to the service. The filters are passed by name.
+    const { userId, startDate, endDate } = query;
+    // Only limit and page go to the service as the page. The rest are filters.
     const pageRequest: PageRequest = { limit: query.limit, page: query.page };
-    // Comma-separated, matched with OR — see GetAbidingsDto. A single
-    // tag still goes through the dedicated single-tag call rather than the
-    // multi-tag one, since that's the call the rest of the service (and any
-    // future caller) should reach for when it only has one tag.
+    // Reading a comma-separated query param is this layer's job. What the
+    // tags mean, and which query they need, is the service's.
     const tags = query.hashtag ? splitCommaSeparated(query.hashtag) : [];
 
-    const abidings =
-      tags.length === 0
-        ? await this.AbidingsService.getAbidings(pageRequest, filters)
-        : tags.length === 1
-          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], pageRequest, filters)
-          : await this.AbidingsService.getAbidingsByHashtags(tags, pageRequest, filters);
+    const abidings = await this.abidingsService.getAbidings(pageRequest, {
+      userId,
+      startDate,
+      endDate,
+      hashtags: tags,
+    });
     // The authors of this page only, so at most one id per abiding on it.
     const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
     const users = await this.usersService.getUsersByIds(authorIds);
@@ -67,7 +61,9 @@ export class AbidingsController {
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
     return toPaginatedResponse({ items, total: abidings.total }, pageRequest, "/abidings", {
-      ...filters,
+      userId,
+      startDate,
+      endDate,
       hashtag: tags.length > 0 ? tags.join(",") : undefined,
     });
   }
@@ -90,7 +86,7 @@ export class AbidingsController {
     @CurrentUser() user: AuthUser,
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<AbidingResponseDto>> {
-    const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId, query);
+    const myAbidings = await this.abidingsService.getAbidingsByUserId(user.userId, query);
     const items = myAbidings.items.map((a) => this.toResponse(a, user.username));
     return toPaginatedResponse({ items, total: myAbidings.total }, query, "/abidings/me");
   }
@@ -104,7 +100,7 @@ export class AbidingsController {
   public async getAbidingById(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
   ): Promise<AbidingResponseDto> {
-    const abiding = await this.AbidingsService.getAbidingById(id.toString());
+    const abiding = await this.abidingsService.getAbidingById(id.toString());
     const [author] = await this.usersService.getUsersByIds([abiding.userId]);
     return this.toResponse(abiding, author?.username || "Unknown");
   }
@@ -114,14 +110,9 @@ export class AbidingsController {
     @Body() createAbidingDto: CreateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // Looked up before the write, not after. A token proves who logged in, not
-    // that the account still exists: it stays valid until it expires, even
-    // after the user is deleted. getMyUser throws a 404 for a user who is
-    // deleted or was never there, so no abiding is written for an author
-    // nobody can find.
-    const author = await this.usersService.getMyUser(user.userId);
-    const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto, user);
-    return this.toResponse(newAbiding, author.username);
+    // The service checks the author still exists and returns the response
+    // with their username on it, so there is nothing to add here.
+    return this.abidingsService.createAbiding(createAbidingDto, user);
   }
 
   // Author or admin. The service enforces it, in the same filter as the write.
@@ -131,7 +122,7 @@ export class AbidingsController {
     @Body() updateAbidingDto: UpdateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const updatedAbiding = await this.AbidingsService.patchAbiding(
+    const updatedAbiding = await this.abidingsService.patchAbiding(
       id.toString(),
       updateAbidingDto,
       user,
@@ -147,7 +138,7 @@ export class AbidingsController {
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
-    await this.AbidingsService.deleteAbiding(id.toString(), user);
+    await this.abidingsService.deleteAbiding(id.toString(), user);
   }
 
   // The one place an abiding becomes a response. Everything the service
