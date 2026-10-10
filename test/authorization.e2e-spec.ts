@@ -42,7 +42,7 @@ describe("Authorization (e2e)", () => {
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send(credentials)
+      .send({ identifier: credentials.email, password: credentials.password })
       .expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
@@ -114,7 +114,7 @@ describe("Authorization (e2e)", () => {
     it("POST /auth/login and POST /auth/signup are reachable anonymously", async () => {
       await request(app.getHttpServer())
         .post("/auth/login")
-        .send({ email: "nobody@example.com", password: "wrong" })
+        .send({ identifier: "nobody@example.com", password: "wrong" })
         .expect(401); // reached the handler, which rejected the credentials
 
       const tag = randomUUID().slice(0, 8);

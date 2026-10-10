@@ -148,12 +148,37 @@ describe("UsersService", () => {
 
       const result = await service.getUserByCredentials("w@x.com", "secret1");
 
+      // An "@" means an email, so the email column is searched and no other.
       // No withDeleted, so a soft-deleted user is not found and can't log in.
       expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
       // The typed password first, the stored hash second.
       expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       expect(result).toMatchObject({ id: 4, username: "walter" });
       expect(result?.password).toBeUndefined();
+    });
+
+    it("searches by username when the identifier has no @", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(true);
+
+      const result = await service.getUserByCredentials("walter", "secret1");
+
+      expect(usersRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { username: "walter" } });
+      expect(result).toMatchObject({ id: 4, username: "walter" });
+    });
+
+    // The casing is passed on as typed. The columns are citext, so Postgres
+    // is what ignores it; test/login.e2e-spec.ts proves that part.
+    it("passes the identifier to the query with its casing as typed", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.compare.mockResolvedValue(true);
+
+      await service.getUserByCredentials("Walter", "secret1");
+      await service.getUserByCredentials("W@X.com", "secret1");
+
+      expect(usersRepository.findOne).toHaveBeenNthCalledWith(1, { where: { username: "Walter" } });
+      expect(usersRepository.findOne).toHaveBeenNthCalledWith(2, { where: { email: "W@X.com" } });
     });
 
     it("returns null when the hasher says the password is wrong", async () => {
@@ -163,15 +188,18 @@ describe("UsersService", () => {
       await expect(service.getUserByCredentials("w@x.com", "wrong-one")).resolves.toBeNull();
     });
 
-    // The compare still runs, against no hash, so an unknown email takes as
-    // long to reject as a wrong password.
-    it("returns null when no user has that email, and still runs the compare", async () => {
-      usersRepository.findOne.mockResolvedValue(null);
-      hashingProvider.compare.mockResolvedValue(false);
+    // The compare still runs, against no hash, so an unknown email or
+    // username takes as long to reject as a wrong password.
+    it.each(["no@x.com", "nobody"])(
+      "returns null when no user matches %s, and still runs the compare",
+      async (identifier) => {
+        usersRepository.findOne.mockResolvedValue(null);
+        hashingProvider.compare.mockResolvedValue(false);
 
-      await expect(service.getUserByCredentials("no@x.com", "secret1")).resolves.toBeNull();
-      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", undefined);
-    });
+        await expect(service.getUserByCredentials(identifier, "secret1")).resolves.toBeNull();
+        expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", undefined);
+      },
+    );
   });
 
   describe("createUser", () => {
@@ -245,6 +273,24 @@ describe("UsersService", () => {
       ).rejects.toMatchObject({ message: "Username already taken", errorCode: "USERNAME_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    // The columns ignore case, so the lookup returns a row whose casing
+    // differs from what was sent. The 409 still has to name the right field.
+    it("names the email when it is taken in a different casing", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
+
+      await expect(
+        service.createUser({ username: "dude", email: "D@X.com", password: "secret1" }),
+      ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
+    });
+
+    it("names the username when it is taken in a different casing", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
+
+      await expect(
+        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1" }),
+      ).rejects.toMatchObject({ errorCode: "USERNAME_TAKEN" });
     });
 
     // The unique indexes on email and username still cover soft-deleted rows,

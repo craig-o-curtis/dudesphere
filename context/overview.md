@@ -25,16 +25,16 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 
 ### PostgreSQL — `user` table
 
-| Column      | Type                   | Description                                 |
-| ----------- | ---------------------- | ------------------------------------------- |
-| `id`        | serial PK              | Auto-increment                              |
-| `username`  | varchar(24) UNIQUE     | Shown on abidings                           |
-| `email`     | varchar(100) UNIQUE    | Login email                                 |
-| `password`  | varchar(255)           | bcrypt hash; never returned                 |
-| `role`      | enum `admin` or `user` | Defaults to `user`                          |
-| `createdAt` | timestamptz            | Set by the database when the row is created |
-| `updatedAt` | timestamptz            | Moved by TypeORM on every update            |
-| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live    |
+| Column      | Type                   | Description                                                                    |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------ |
+| `id`        | serial PK              | Auto-increment                                                                 |
+| `username`  | citext UNIQUE          | Shown on abidings. Up to 24 characters, no `@` and no whitespace. A login name |
+| `email`     | citext UNIQUE          | Up to 100 characters. A login name                                             |
+| `password`  | varchar(255)           | bcrypt hash; never returned                                                    |
+| `role`      | enum `admin` or `user` | Defaults to `user`                                                             |
+| `createdAt` | timestamptz            | Set by the database when the row is created                                    |
+| `updatedAt` | timestamptz            | Moved by TypeORM on every update                                               |
+| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                       |
 
 ### PostgreSQL — `profile` table
 
@@ -122,7 +122,7 @@ Costs accepted with this design:
 ## API Endpoints
 
 Every route needs a token unless it is marked public. A token comes from
-`POST /auth`.
+`POST /auth/login`.
 
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
@@ -132,23 +132,39 @@ full shape.
 
 ### Auth
 
-| Method | Endpoint | Access | Description                |
-| ------ | -------- | ------ | -------------------------- |
-| POST   | `/auth`  | Public | Log in and get a JWT token |
+| Method | Endpoint                | Access | Description                             |
+| ------ | ----------------------- | ------ | --------------------------------------- |
+| POST   | `/auth/signup`          | Public | Sign up. Creates the user and a profile |
+| POST   | `/auth/login`           | Public | Log in and get a JWT token              |
+| POST   | `/auth/forgot-password` | Public | Not built yet. Answers with nothing     |
+| POST   | `/auth/reset-password`  | Public | Not built yet. Answers with nothing     |
+| POST   | `/auth/logout`          | Public | Not built yet. Answers with nothing     |
+
+The login body is `{ "identifier": "...", "password": "..." }`. `identifier` is
+a username or an email. A value with `@` is looked up as an email, and any
+other value as a username. Spaces around it are dropped.
+
+`username` and `email` are `citext` columns, so both ignore letter case:
+`Walter` and `walter` are one username, at sign up and at login. The casing
+typed at sign up is what is stored and shown. A username cannot hold `@`, which
+is what lets login tell the two apart, and cannot hold whitespace.
+
+Every failed login answers 401 `BAD_CREDENTIALS` with one message, so the
+response does not say which usernames and emails have an account.
 
 ### Users (PostgreSQL)
 
-| Method | Endpoint             | Access | Description                             |
-| ------ | -------------------- | ------ | --------------------------------------- |
-| POST   | `/users`             | Public | Sign up. Creates the user and a profile |
-| GET    | `/users`             | Admin  | List users, paginated, in id order      |
-| GET    | `/users/me`          | Token  | The caller's own user                   |
-| GET    | `/users/:id`         | Public | One user                                |
-| PATCH  | `/users/me`          | Token  | Update the caller's own user            |
-| PATCH  | `/users/:id`         | Admin  | Update any user                         |
-| DELETE | `/users/me`          | Token  | Soft-delete the caller's own account    |
-| DELETE | `/users/:id`         | Admin  | Soft-delete any user                    |
-| POST   | `/users/:id/restore` | Admin  | Restore a soft-deleted user             |
+| Method | Endpoint             | Access | Description                          |
+| ------ | -------------------- | ------ | ------------------------------------ |
+| POST   | `/users`             | Admin  | Create a user and a profile          |
+| GET    | `/users`             | Admin  | List users, paginated, in id order   |
+| GET    | `/users/me`          | Token  | The caller's own user                |
+| GET    | `/users/:id`         | Public | One user                             |
+| PATCH  | `/users/me`          | Token  | Update the caller's own user         |
+| PATCH  | `/users/:id`         | Admin  | Update any user                      |
+| DELETE | `/users/me`          | Token  | Soft-delete the caller's own account |
+| DELETE | `/users/:id`         | Admin  | Soft-delete any user                 |
+| POST   | `/users/:id/restore` | Admin  | Restore a soft-deleted user          |
 
 ### Profiles (PostgreSQL)
 
@@ -195,7 +211,8 @@ full shape.
 
 - [x] PostgreSQL + MongoDB via Docker Compose
 - [x] User CRUD with roles (admin seeded)
-- [x] JWT auth: sign up with `POST /users`, log in with `POST /auth`
+- [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
+      by username or email
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)

@@ -151,7 +151,7 @@ describe("Hashtag delete and restore (e2e)", () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send(credentials)
+        .send({ identifier: credentials.email, password: credentials.password })
         .expect(201);
       authorToken = (login.body as { token: string }).token;
 

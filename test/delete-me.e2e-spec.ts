@@ -43,7 +43,7 @@ describe("DELETE /users/me (e2e)", () => {
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send(credentials)
+      .send({ identifier: credentials.email, password: credentials.password })
       .expect(201);
     const { token } = login.body as { token: string };
 
@@ -57,7 +57,10 @@ describe("DELETE /users/me (e2e)", () => {
       .get("/profiles/me")
       .set("Authorization", `Bearer ${token}`)
       .expect(404);
-    await request(app.getHttpServer()).post("/auth/login").send(credentials).expect(401);
+    await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ identifier: credentials.email, password: credentials.password })
+      .expect(401);
 
     // The token is still valid until it expires, but it can no longer post.
     await request(app.getHttpServer())

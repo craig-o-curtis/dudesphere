@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -17,11 +18,16 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
-  // 24 to match varchar(24) on the column. A longer value used to pass
+  // 24 to match the length CHECK on the column. A longer value used to pass
   // validation and then fail in Postgres as a 500. @MaxCodePoints, not
   // @MaxLength, because it counts the way the column does.
   @MaxCodePoints(24)
   @NoNulCharacter()
+  // No "@": login takes a username or an email in one field and tells them
+  // apart by the "@". A username that held one could be someone else's email
+  // address. No whitespace: login trims what the caller typed, so a username
+  // with a space at either end could never be matched.
+  @Matches(/^[^\s@]+$/, { message: "username must not contain spaces or @" })
   username: string;
 
   @IsString()

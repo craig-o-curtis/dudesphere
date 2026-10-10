@@ -126,9 +126,16 @@ Public. What a visitor sees first.
 
 ### Sign up `/signup` and log in `/login`
 
-- Sign up posts to `server/api/signup.post.ts`, which calls `POST /users`,
-  then `POST /auth` with the same credentials, then sets the cookie.
-- Log in posts to `server/api/session.post.ts`, which calls `POST /auth`.
+- Sign up posts to `server/api/signup.post.ts`, which calls
+  `POST /auth/signup`, then `POST /auth/login` with the same credentials, then
+  sets the cookie.
+- Log in posts to `server/api/session.post.ts`, which calls
+  `POST /auth/login`.
+- The login form has one input, labelled "Username or email", and a password.
+  It posts `{ identifier, password }`. The API decides which of the two the
+  identifier is and ignores its letter case, so the form does neither.
+- The sign up form says a username cannot hold `@` or spaces. The API answers
+  400 for one that does.
 - The token goes into a cookie named `session` through Nitro's `setCookie`:
   `httpOnly`, `secure`, `sameSite: 'lax'`, `path: '/'`, lifetime matching
   the JWT's expiry. `server/api/session.delete.ts` clears it for log out.
