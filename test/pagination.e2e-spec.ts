@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as pause } from "node:timers/promises";
 
 import { INestApplication } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
+import { addUtc, isBeforeUtc, subtractUtc } from "@northguild/gmt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
@@ -26,6 +28,7 @@ describe("Pagination (e2e)", () => {
   interface AbidingBody {
     id: string;
     message: string;
+    createdAt: string;
   }
 
   // Signed here rather than logged in, so nothing depends on a seeded user.
@@ -83,6 +86,9 @@ describe("Pagination (e2e)", () => {
     let authorToken: string;
     // In the order they were posted: oldest first.
     const posted: string[] = [];
+    // When each one was created, in the same order. UTC instants, as the API
+    // returns them.
+    const postedAt: string[] = [];
 
     beforeAll(async () => {
       // randomUUID, not Date.now(), which the gmt lint rules ban.
@@ -104,6 +110,10 @@ describe("Pagination (e2e)", () => {
           .send({ message: `${message} #${slug}` })
           .expect(201);
         posted.push((abiding.body as AbidingBody).id);
+        postedAt.push((abiding.body as AbidingBody).createdAt);
+        // createdAt is kept to the millisecond. The pause puts each abiding
+        // in a millisecond of its own, so a date range can tell them apart.
+        await pause(5);
       }
     });
 
@@ -176,6 +186,127 @@ describe("Pagination (e2e)", () => {
 
       const second = await getPage<AbidingBody>(first.links.next ?? "", authorToken);
       expect(second.data.map((abiding) => abiding.id)).toEqual([posted[0]]);
+    });
+
+    // The unit specs prove the service builds { $gte, $lt } on createdAt.
+    // Only Mongo proves the answer: that it compares the strings it is given
+    // as dates, that the start is included and that the end is not.
+    //
+    // Every request carries userId, so the lists hold these three abidings
+    // and nothing else.
+    describe("filtered by a date range", () => {
+      function ids(page: PaginatedResponse<AbidingBody>) {
+        return page.data.map((abiding) => abiding.id);
+      }
+
+      // What the tests below rely on. If this fails, they mean nothing.
+      it("has three abidings created at three different instants", () => {
+        expect(isBeforeUtc(postedAt[0], postedAt[1])).toBe(true);
+        expect(isBeforeUtc(postedAt[1], postedAt[2])).toBe(true);
+      });
+
+      it("includes an abiding created exactly at startDate", async () => {
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&startDate=${postedAt[1]}`,
+        );
+
+        expect(ids(page)).toEqual([posted[2], posted[1]]);
+        expect(page.meta.totalItems).toBe(2);
+      });
+
+      it("leaves out an abiding created one millisecond before startDate", async () => {
+        const justAfterSecond = addUtc(postedAt[1], { milliseconds: 1 });
+
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&startDate=${justAfterSecond}`,
+        );
+
+        expect(ids(page)).toEqual([posted[2]]);
+      });
+
+      it("leaves out an abiding created exactly at endDate", async () => {
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&endDate=${postedAt[1]}`,
+        );
+
+        expect(ids(page)).toEqual([posted[0]]);
+        expect(page.meta.totalItems).toBe(1);
+      });
+
+      it("includes an abiding created one millisecond before endDate", async () => {
+        const justAfterSecond = addUtc(postedAt[1], { milliseconds: 1 });
+
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&endDate=${justAfterSecond}`,
+        );
+
+        expect(ids(page)).toEqual([posted[1], posted[0]]);
+      });
+
+      it("takes both ends at once", async () => {
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&startDate=${postedAt[0]}&endDate=${postedAt[2]}`,
+        );
+
+        expect(ids(page)).toEqual([posted[1], posted[0]]);
+        expect(page.meta.totalItems).toBe(2);
+      });
+
+      it("returns all three for a range that starts before them and ends after", async () => {
+        const before = subtractUtc(postedAt[0], { seconds: 1 });
+        const after = addUtc(postedAt[2], { seconds: 1 });
+
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&startDate=${before}&endDate=${after}`,
+        );
+
+        expect(ids(page)).toEqual([posted[2], posted[1], posted[0]]);
+      });
+
+      it("returns an empty list for a range that ends before the first one", async () => {
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&endDate=${subtractUtc(postedAt[0], { seconds: 1 })}`,
+        );
+
+        expect(page.data).toEqual([]);
+        expect(page.meta.totalItems).toBe(0);
+      });
+
+      it("narrows a list that is also filtered by tag", async () => {
+        const page = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&hashtag=${slug}&startDate=${postedAt[1]}`,
+        );
+
+        expect(ids(page)).toEqual([posted[2], posted[1]]);
+        expect(page.meta.totalItems).toBe(2);
+      });
+
+      // Following `next` has to stay inside the range.
+      it("keeps the dates in the links", async () => {
+        const before = subtractUtc(postedAt[0], { seconds: 1 });
+
+        const first = await getPage<AbidingBody>(
+          `/abidings?userId=${authorId}&startDate=${before}&limit=2`,
+        );
+
+        expect(first.links.next).toBe(
+          `/abidings?userId=${authorId}&startDate=${encodeURIComponent(before)}&limit=2&page=2`,
+        );
+        const second = await getPage<AbidingBody>(first.links.next ?? "");
+        expect(ids(second)).toEqual([posted[0]]);
+      });
+
+      it("answers a startDate after the endDate with 400", async () => {
+        await request(app.getHttpServer())
+          .get(`/abidings?userId=${authorId}&startDate=${postedAt[2]}&endDate=${postedAt[0]}`)
+          .expect(400);
+      });
+
+      it("answers a date with no time with 400", async () => {
+        await request(app.getHttpServer())
+          .get(`/abidings?userId=${authorId}&startDate=2026-10-01`)
+          .expect(400);
+      });
     });
   });
 
