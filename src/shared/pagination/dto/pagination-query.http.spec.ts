@@ -16,11 +16,11 @@ import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
-import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
-import { configureApp } from "../../app-setup.js";
-import { ProfilesController } from "../../profiles/profiles.controller.js";
-import { ProfilesService } from "../../profiles/profiles.service.js";
-import { PaginationProvider } from "../../shared/pagination/pagination.provider.js";
+import { listenOnLoopback } from "../../../../test/listen-on-loopback.js";
+import { configureApp } from "../../../app-setup.js";
+import { ProfilesController } from "../../../profiles/profiles.controller.js";
+import { ProfilesService } from "../../../profiles/profiles.service.js";
+import { PaginationProvider } from "../pagination.provider.js";
 
 // PaginationQueryDto runs inside the global ValidationPipe, which only exists
 // on a real request. ProfilesController stands in for both list routes.

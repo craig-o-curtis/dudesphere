@@ -4,7 +4,7 @@ import { IsOptional, IsString, Min } from "class-validator";
 import { IntFromDigits } from "../../shared/decorators/int-from-digits.decorator.js";
 import { IsUtcDateTime } from "../../shared/decorators/is-utc-date-time.decorator.js";
 import { MaxCommaSeparated } from "../../shared/decorators/max-comma-separated.decorator.js";
-import { PaginationQueryDto } from "../../shared/dto/pagination-query.dto.js";
+import { PaginationQueryDto } from "../../shared/pagination/dto/pagination-query.dto.js";
 import { MAX_TAGS } from "../../shared/utils/hashtag.js";
 
 // The filters that belong to GET /abidings alone. Not exported: the route

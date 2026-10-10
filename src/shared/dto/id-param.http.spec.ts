@@ -18,9 +18,9 @@ import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
-import { PaginationProvider } from "../../shared/pagination/pagination.provider.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
+import { PaginationProvider } from "../pagination/pagination.provider.js";
 import { PG_INT_MAX } from "./id-param.dto.js";
 
 // IdParamDto is enforced by the global ValidationPipe, which only runs in the
