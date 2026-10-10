@@ -17,6 +17,7 @@ import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../test/listen-on-loopback.js";
 import { configureApp } from "../app-setup.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -52,7 +53,11 @@ describe("AbidingsController id params (over HTTP)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
-      providers: [{ provide: AbidingsService, useValue: abidingService }],
+      providers: [
+        { provide: AbidingsService, useValue: abidingService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();

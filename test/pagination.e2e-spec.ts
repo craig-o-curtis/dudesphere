@@ -10,7 +10,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import type { PaginatedResponse } from "./../src/shared/dto/paginated-response.js";
+import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
@@ -41,10 +41,10 @@ describe("Pagination (e2e)", () => {
     return { authorization: `Bearer ${token}` };
   }
 
-  async function getPage<T>(url: string, token?: string): Promise<PaginatedResponse<T>> {
+  async function getPage<T>(url: string, token?: string): Promise<Paginated<T>> {
     const get = request(app.getHttpServer()).get(url);
     const response = await (token ? get.set(bearer(token)) : get).expect(200);
-    return response.body as PaginatedResponse<T>;
+    return response.body as Paginated<T>;
   }
 
   // A whole list: the largest page first, then links.next until there is none.
@@ -52,7 +52,7 @@ describe("Pagination (e2e)", () => {
     const rows: T[] = [];
     let next: string | null = url;
     while (next) {
-      const page: PaginatedResponse<T> = await getPage<T>(next, token);
+      const page: Paginated<T> = await getPage<T>(next, token);
       rows.push(...page.data);
       next = page.links.next;
     }
@@ -195,7 +195,7 @@ describe("Pagination (e2e)", () => {
     // Every request carries userId, so the lists hold these three abidings
     // and nothing else.
     describe("filtered by a date range", () => {
-      function ids(page: PaginatedResponse<AbidingBody>) {
+      function ids(page: Paginated<AbidingBody>) {
         return page.data.map((abiding) => abiding.id);
       }
 

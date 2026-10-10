@@ -20,6 +20,7 @@ import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
 import { ProfilesController } from "../../profiles/profiles.controller.js";
 import { ProfilesService } from "../../profiles/profiles.service.js";
+import { PaginationProvider } from "../../shared/pagination/pagination.provider.js";
 
 // PaginationQueryDto runs inside the global ValidationPipe, which only exists
 // on a real request. ProfilesController stands in for both list routes.
@@ -34,7 +35,11 @@ describe("PaginationQueryDto (over HTTP)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [ProfilesController],
-      providers: [{ provide: ProfilesService, useValue: profilesService }],
+      providers: [
+        { provide: ProfilesService, useValue: profilesService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();

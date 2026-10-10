@@ -4,23 +4,25 @@ import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
-import { type PaginatedResponse, toPaginatedResponse } from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import type { Paginated } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfilesService } from "./profiles.service.js";
 
 @Controller("profiles")
 export class ProfilesController {
-  constructor(private readonly profilesService: ProfilesService) {}
+  constructor(
+    private readonly profilesService: ProfilesService,
+    private readonly paginationProvider: PaginationProvider,
+  ) {}
 
   @Public()
   @Get()
-  async getProfiles(
-    @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResponse<ProfileResponseDto>> {
+  async getProfiles(@Query() query: PaginationQueryDto): Promise<Paginated<ProfileResponseDto>> {
     const profiles = await this.profilesService.getProfiles(query);
-    return toPaginatedResponse(profiles, query, "/profiles");
+    return this.paginationProvider.toResponse(profiles, query, "/profiles");
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token

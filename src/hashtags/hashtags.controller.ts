@@ -11,15 +11,19 @@ import {
 
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
-import { type PaginatedResponse, toPaginatedResponse } from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import type { Paginated } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
 import { HashtagsService } from "./hashtags.service.js";
 
 @Controller("hashtags")
 export class HashtagsController {
-  constructor(private readonly hashtagsService: HashtagsService) {}
+  constructor(
+    private readonly hashtagsService: HashtagsService,
+    private readonly paginationProvider: PaginationProvider,
+  ) {}
 
   // The live hashtags, alphabetically, one page at a time. This is the
   // dropdown and autocomplete source. A caller that wants every tag asks for
@@ -29,9 +33,9 @@ export class HashtagsController {
   @Get()
   public async getHashtags(
     @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResponse<HashtagResponseDto>> {
+  ): Promise<Paginated<HashtagResponseDto>> {
     const hashtags = await this.hashtagsService.list(query);
-    return toPaginatedResponse(hashtags, query, "/hashtags");
+    return this.paginationProvider.toResponse(hashtags, query, "/hashtags");
   }
 
   @Public()

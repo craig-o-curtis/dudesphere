@@ -181,7 +181,7 @@ describe("AbidingsService", () => {
       expect(result.total).toBe(41);
     });
 
-    // toPaginatedResponse passes items through, and the serializer applies
+    // PaginationProvider.toResponse passes items through, and the serializer applies
     // the DTO's @Transform rules by looking at each item's class. An object
     // literal has none.
     it("returns real AbidingResponseDto instances", async () => {
