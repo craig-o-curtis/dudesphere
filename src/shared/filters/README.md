@@ -13,7 +13,7 @@ the HTTP response. `@Catch(SomeError)` names the errors a filter handles.
   set one. It adds one log line for every 5xx: the route, the user and the
   request id. It changes one response: when a database cannot be reached and
   its driver throws a plain `Error`, this filter answers with a 503.
-- `query-failed.filter.ts` handles Postgres errors. A unique violation (code
+- `pg-error.filter.ts` handles Postgres errors. A unique violation (code
   `23505`) becomes a 409. A connection lost while a query ran becomes a 503.
   A value that does not fit its column becomes a 400. Every other database
   error stays a 500, logged without the values the query ran with.

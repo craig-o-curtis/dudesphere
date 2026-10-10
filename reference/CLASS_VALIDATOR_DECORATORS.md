@@ -39,7 +39,7 @@ the field run:
 - **`@Type(() => Number)` reads more than digits.** `"0x10"` becomes 16,
   `"1e1"` becomes 10 and `"+5"` becomes 5. Where one value should have one
   spelling, use `@IntFromDigits()` from `src/shared/decorators`, as
-  `IdParamDto` and `PaginationQueryDto` do.
+  `PgIdParamDto` and `PaginationQueryDto` do.
 - **`@IsInt()` has no upper limit.** `1e20` passes. Add `@Max`.
 - **`@IsUrl()` rejects a `localhost` URL** and passes one with no `https://`.
 - **`@IsByteLength` counts bytes, not characters.** `"ééé"` is 6 bytes.

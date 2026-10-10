@@ -3,7 +3,7 @@ import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
-import { IdParamDto } from "../shared/dto/id-param.dto.js";
+import { PgIdParamDto } from "../shared/dto/pg-id-param.dto.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -46,13 +46,13 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
   @Public()
   @Get("user/:id")
-  getProfileByUserId(@Param() { id: userId }: IdParamDto): Promise<ProfileResponseDto> {
+  getProfileByUserId(@Param() { id: userId }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(userId);
   }
 
   @Public()
   @Get(":id")
-  getProfileById(@Param() { id }: IdParamDto): Promise<ProfileResponseDto> {
+  getProfileById(@Param() { id }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileById(id);
   }
 
@@ -76,7 +76,7 @@ export class ProfilesController {
   // goes through above.
   @Patch(":id")
   updateProfile(
-    @Param() { id }: IdParamDto,
+    @Param() { id }: PgIdParamDto,
     @Body() updateProfileDto: UpdateProfileDto,
     @CurrentUser() user: AuthUser,
   ): Promise<ProfileResponseDto> {

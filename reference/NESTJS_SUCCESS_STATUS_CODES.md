@@ -53,7 +53,7 @@ deleteMe(@CurrentUser() user: AuthUser): Promise<void> {}
 
 @Post(":id/restore")
 @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
-restoreUser(@Param() { id }: IdParamDto): Promise<UserResponseDto> {}
+restoreUser(@Param() { id }: PgIdParamDto): Promise<UserResponseDto> {}
 ```
 
 Restore is a `POST` that creates nothing, so 201 would be wrong for it.

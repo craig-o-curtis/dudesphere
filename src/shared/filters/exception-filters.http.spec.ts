@@ -24,7 +24,7 @@ import type { MockInstance } from "vitest";
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
 import { DUPLICATE_KEY } from "./mongo-error.filter.js";
-import { UNIQUE_VIOLATION } from "./query-failed.filter.js";
+import { UNIQUE_VIOLATION } from "./pg-error.filter.js";
 
 const PASSWORD_HASH = "$2b$10$hash-that-must-never-be-logged";
 const STORED_TEXT = "the text of a document that must never be logged";
@@ -251,7 +251,7 @@ describe("Exception filters (over HTTP)", () => {
     expect(logged).not.toContain(STORED_TEXT);
   });
 
-  it("still lets QueryFailedFilter turn a unique violation into a 409", async () => {
+  it("still lets PgErrorFilter turn a unique violation into a 409", async () => {
     const { body } = await request(app.getHttpServer()).get("/boom/unique").expect(409);
 
     expect(body.message).toBe("That value is already taken");

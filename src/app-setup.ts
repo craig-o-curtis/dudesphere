@@ -3,7 +3,7 @@ import { Reflector } from "@nestjs/core";
 
 import { AllExceptionsFilter } from "./shared/filters/all-exceptions.filter.js";
 import { MongoErrorFilter } from "./shared/filters/mongo-error.filter.js";
-import { QueryFailedFilter } from "./shared/filters/query-failed.filter.js";
+import { PgErrorFilter } from "./shared/filters/pg-error.filter.js";
 import {
   REQUEST_TIMEOUT_MS,
   TimeoutInterceptor,
@@ -18,7 +18,7 @@ import { requestId } from "./shared/middleware/request-id.middleware.js";
  * This lives apart from bootstrap() so the e2e suite can apply it too.
  * Test.createTestingModule(...).createNestApplication() does not run main.ts,
  * so before this existed those tests ran against an app with no ValidationPipe,
- * no ClassSerializerInterceptor and no QueryFailedFilter — a different app from
+ * no ClassSerializerInterceptor and no PgErrorFilter — a different app from
  * the one in production, which is the opposite of what an end-to-end test is
  * for. A request body with an unknown field was accepted there and rejected in
  * production.
@@ -61,7 +61,7 @@ export function configureApp(
   const adapter = app.getHttpAdapter();
   app.useGlobalFilters(
     new AllExceptionsFilter(adapter),
-    new QueryFailedFilter(adapter),
+    new PgErrorFilter(adapter),
     new MongoErrorFilter(adapter),
   );
 }

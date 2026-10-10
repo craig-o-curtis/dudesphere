@@ -21,16 +21,16 @@ import { configureApp } from "../../app-setup.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
 import { PaginationProvider } from "../pagination/pagination.provider.js";
-import { PG_INT_MAX } from "./id-param.dto.js";
+import { PG_INT_MAX } from "./pg-id-param.dto.js";
 
-// IdParamDto is enforced by the global ValidationPipe, which only runs in the
+// PgIdParamDto is enforced by the global ValidationPipe, which only runs in the
 // real request pipeline — calling controller.getUserById({ id: 1 }) directly
 // skips it entirely. So this boots an HTTP app, configured by the same
 // configureApp() main.ts calls, with mocked services so no database is needed.
 //
-// UsersController stands in for every route using IdParamDto; ProfilesController
+// UsersController stands in for every route using PgIdParamDto; ProfilesController
 // shares the DTO and needs no second copy of these cases.
-describe("IdParamDto (over HTTP)", () => {
+describe("PgIdParamDto (over HTTP)", () => {
   let app: INestApplication<App>;
 
   const usersService = {
@@ -84,7 +84,7 @@ describe("IdParamDto (over HTTP)", () => {
 
   // The bug this DTO exists for. ParseIntPipe accepted 20 digits, parseInt
   // returned 1e20, and Postgres answered numeric_value_out_of_range, which
-  // QueryFailedFilter does not convert — so the caller got a 500.
+  // PgErrorFilter does not convert — so the caller got a 500.
   it("rejects an id past the Postgres integer limit with 400, not 500", async () => {
     await request(app.getHttpServer()).get("/users/99999999999999999999").expect(400);
 
