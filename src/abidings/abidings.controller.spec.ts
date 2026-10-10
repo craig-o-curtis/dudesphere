@@ -31,7 +31,7 @@ describe("AbidingsController", () => {
   // straight through to the service, which owns the authorization rule.
   const caller = { userId: 25, username: "walter", role: UserRole.USER };
 
-  // What ListAbidingsQueryDto holds when the caller sends no limit or page.
+  // What GetAbidingsDto holds when the caller sends no limit or page.
   // The defaults come from the ValidationPipe, which does not run here.
   const firstPage = { limit: 10, page: 1 };
 
@@ -234,7 +234,7 @@ describe("AbidingsController", () => {
     it("passes userId through to getAbidingsByHashtag", async () => {
       abidingService.getAbidingsByHashtag.mockResolvedValue(pageOf([]));
 
-      // A number now: ListAbidingsQueryDto coerces and validates it, so the
+      // A number now: GetAbidingsDto coerces and validates it, so the
       // controller no longer converts it by hand.
       await controller.getAbidings({ ...firstPage, hashtag: "sunday", userId: 3 });
 

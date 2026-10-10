@@ -165,9 +165,9 @@ describe("AbidingsController id params (over HTTP)", () => {
     expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(1, { limit: 5, page: 2 });
   });
 
-  // ListAbidingsQueryDto extends PaginationQueryDto. This checks the
-  // inherited fields keep their defaults, their conversion and their bounds
-  // next to the route's own filter.
+  // GetAbidingsDto joins PaginationQueryDto to the route's own filters. This
+  // checks limit and page keep their defaults, their conversion and their
+  // bounds next to those filters.
   describe("GET /abidings takes limit and page alongside its filters", () => {
     it("defaults to limit 10 and page 1", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3").expect(200);

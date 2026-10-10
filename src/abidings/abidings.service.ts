@@ -97,7 +97,7 @@ export class AbidingsService {
     // and merges them, so the page still comes off the index in order.
     //
     // That holds for up to 200 tags. Past that Mongo gives up on merging and
-    // sorts every match in memory. ListAbidingsQueryDto refuses more than
+    // sorts every match in memory. GetAbidingsDto refuses more than
     // MAX_TAGS, so a request never gets near it.
     const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: { $in: normalized } };
     if (userId) {
