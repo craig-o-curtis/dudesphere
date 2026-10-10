@@ -126,8 +126,9 @@ Every route needs a token unless it is marked public. A token comes from
 
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
-the next page or `null`. [src/shared/dto/README.md](../src/shared/dto/README.md)
-shows the full shape.
+the next page or `null`.
+[src/shared/pagination/README.md](../src/shared/pagination/README.md) shows the
+full shape.
 
 ### Auth
 
@@ -162,16 +163,17 @@ shows the full shape.
 
 ### Abidings (MongoDB)
 
-| Method | Endpoint              | Access          | Description                                         |
-| ------ | --------------------- | --------------- | --------------------------------------------------- |
-| GET    | `/abidings`           | Public          | List abidings, paginated, newest first              |
-| GET    | `/abidings?userId=X`  | Public          | Filter by author                                    |
-| GET    | `/abidings?hashtag=X` | Public          | Filter by tag. Up to 10, comma-separated, match any |
-| GET    | `/abidings/me`        | Token           | The caller's own abidings, paginated, newest first  |
-| GET    | `/abidings/:id`       | Public          | One abiding                                         |
-| POST   | `/abidings`           | Token           | Post an abiding, or a reply with `replyToId`        |
-| PATCH  | `/abidings/:id`       | Author or admin | Edit an abiding                                     |
-| DELETE | `/abidings/:id`       | Author or admin | Delete an abiding                                   |
+| Method | Endpoint                          | Access          | Description                                                                        |
+| ------ | --------------------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/abidings`                       | Public          | List abidings, paginated, newest first                                             |
+| GET    | `/abidings?userId=X`              | Public          | Filter by author                                                                   |
+| GET    | `/abidings?hashtag=X`             | Public          | Filter by tag. Up to 10, comma-separated, match any                                |
+| GET    | `/abidings?startDate=X&endDate=Y` | Public          | Filter by when it was created. UTC instants. The start is included, the end is not |
+| GET    | `/abidings/me`                    | Token           | The caller's own abidings, paginated, newest first                                 |
+| GET    | `/abidings/:id`                   | Public          | One abiding                                                                        |
+| POST   | `/abidings`                       | Token           | Post an abiding, or a reply with `replyToId`                                       |
+| PATCH  | `/abidings/:id`                   | Author or admin | Edit an abiding                                                                    |
+| DELETE | `/abidings/:id`                   | Author or admin | Delete an abiding                                                                  |
 
 ### Hashtags (MongoDB)
 

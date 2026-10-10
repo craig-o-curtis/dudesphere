@@ -157,7 +157,7 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 
 ## API Endpoints
 
-Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, default 1), and answers with `data`, `meta` and `links`. Follow `links.next` until it is `null` to read a whole list. See "How to paginate a list" in [src/shared/dto/README.md](src/shared/dto/README.md).
+Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, default 1), and answers with `data`, `meta` and `links`. Follow `links.next` until it is `null` to read a whole list. See "How to paginate a list" in [src/shared/pagination/README.md](src/shared/pagination/README.md).
 
 ### Users
 
@@ -179,6 +179,12 @@ Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, de
 | POST   | /abidings     | Create an abiding                                  |
 | PATCH  | /abidings/:id | Update an abiding                                  |
 | DELETE | /abidings/:id | Delete an abiding                                  |
+
+`GET /abidings` takes four optional filters, which can be combined:
+
+- `userId` keeps one author's abidings.
+- `hashtag` keeps abidings with a tag. Send up to 10, comma-separated, and an abiding needs only one of them.
+- `startDate` and `endDate` keep abidings created in a range. Each is a UTC instant such as `2026-10-01T00:00:00Z`. The start is included and the end is not. A `startDate` after the `endDate` is a 400.
 
 ### Hashtags
 
