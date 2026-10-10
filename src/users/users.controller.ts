@@ -28,9 +28,9 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Get()
   // @HttpCode(200)
-  async getUsers(@Query() query: PaginationQueryDto): Promise<Paginated<UserResponseDto>> {
-    const users = await this.usersService.getUsers(query);
-    return this.paginationProvider.toResponse(users, query, "/users");
+  async getUsers(@Query() pageRequest: PaginationQueryDto): Promise<Paginated<UserResponseDto>> {
+    const users = await this.usersService.getUsers(pageRequest);
+    return this.paginationProvider.toResponse(users, pageRequest, "/users");
   }
 
   @Get("me")

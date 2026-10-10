@@ -20,9 +20,11 @@ export class ProfilesController {
 
   @Public()
   @Get()
-  async getProfiles(@Query() query: PaginationQueryDto): Promise<Paginated<ProfileResponseDto>> {
-    const profiles = await this.profilesService.getProfiles(query);
-    return this.paginationProvider.toResponse(profiles, query, "/profiles");
+  async getProfiles(
+    @Query() pageRequest: PaginationQueryDto,
+  ): Promise<Paginated<ProfileResponseDto>> {
+    const profiles = await this.profilesService.getProfiles(pageRequest);
+    return this.paginationProvider.toResponse(profiles, pageRequest, "/profiles");
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token
