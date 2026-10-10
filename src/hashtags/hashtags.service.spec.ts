@@ -3,6 +3,7 @@ import { getModelToken } from "@nestjs/mongoose";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
 
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { Hashtag } from "./hashtag.schema.js";
 import { HashtagsService } from "./hashtags.service.js";
 
@@ -56,6 +57,8 @@ describe("HashtagsService", () => {
       providers: [
         HashtagsService,
         { provide: getModelToken(Hashtag.name), useValue: hashtagModel },
+        // The real one. It has no dependencies, and list is tested through it.
+        PaginationProvider,
       ],
     }).compile();
 

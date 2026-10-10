@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { UsersService } from "../users/users.service.js";
 import { Abiding } from "./abiding.schema.js";
@@ -91,6 +92,8 @@ describe("AbidingsService", () => {
         { provide: getModelToken(Abiding.name), useValue: abidingModel },
         { provide: HashtagsService, useValue: hashtagsService },
         { provide: UsersService, useValue: usersService },
+        // The real one. It has no dependencies, and every list is tested through it.
+        PaginationProvider,
       ],
     }).compile();
 

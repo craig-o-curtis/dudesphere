@@ -3,8 +3,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, IsNull, Not, Repository } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
-import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { CreateProfileDto } from "./dto/create-profile-dto.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
@@ -16,17 +17,20 @@ export class ProfilesService {
   constructor(
     @InjectRepository(Profile)
     private readonly profileRepository: Repository<Profile>,
+    private readonly paginationProvider: PaginationProvider,
   ) {}
 
   async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
-    const [profiles, total] = await this.profileRepository.findAndCount({
-      // A fixed order. Without one Postgres may return rows in any order, so
-      // two pages of the same list could repeat a profile or skip one.
-      order: { id: "ASC" },
-      skip: toSkip(pageRequest),
-      take: pageRequest.limit,
-    });
-    return { items: profiles.map((profile) => ProfileResponseDto.fromEntity(profile)), total };
+    const { items, total } = await this.paginationProvider.paginateQuery(
+      pageRequest,
+      this.profileRepository,
+      {
+        // A fixed order. Without one Postgres may return rows in any order, so
+        // two pages of the same list could repeat a profile or skip one.
+        order: { id: "ASC" },
+      },
+    );
+    return { items: items.map((profile) => ProfileResponseDto.fromEntity(profile)), total };
   }
 
   async getProfileById(id: number): Promise<ProfileResponseDto> {

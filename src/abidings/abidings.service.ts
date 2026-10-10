@@ -5,14 +5,14 @@ import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
-import type { Page, PageRequest } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import {
   extractHashtagDisplays,
   extractHashtags,
   normalizeHashtag,
 } from "../shared/utils/hashtag.js";
-import { findMongoPage } from "../shared/utils/mongo-page.js";
 import { UserRole } from "../users/user.entity.js";
 import { UsersService } from "../users/users.service.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
@@ -38,6 +38,7 @@ export class AbidingsService {
     @InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>,
     private readonly hashtagsService: HashtagsService,
     private readonly usersService: UsersService,
+    private readonly paginationProvider: PaginationProvider,
   ) {}
 
   // The one list GET /abidings needs. It decides which query to run, so the
@@ -259,18 +260,18 @@ export class AbidingsService {
   // millisecond have no fixed order and one could appear on two pages. The
   // indexes in abiding.schema.ts end with the same two keys.
   //
-  // findMongoPage runs the page and the count. Its comment says what the
+  // paginateModel runs the page and the count. Its comment says what the
   // count costs. This method adds the three things only abidings know: the
   // sort, the response class, and each author's username.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     pageRequest: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
-    const { items, total } = await findMongoPage(
+    const { items, total } = await this.paginationProvider.paginateModel(
+      pageRequest,
       this.abidingModel,
       filter,
       { createdAt: -1, _id: -1 },
-      pageRequest,
     );
     const abidings = items.map((abiding) => this.toResponseDto(abiding));
     return { items: await this.withUsernames(abidings), total };

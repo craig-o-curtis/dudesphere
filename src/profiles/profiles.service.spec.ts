@@ -5,6 +5,7 @@ import { EntityManager, IsNull, Not } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -47,6 +48,8 @@ describe("ProfilesService", () => {
       providers: [
         ProfilesService,
         { provide: getRepositoryToken(Profile), useValue: profileRepository },
+        // The real one. It has no dependencies, and getProfiles is tested through it.
+        PaginationProvider,
       ],
     }).compile();
 
