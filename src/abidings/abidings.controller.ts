@@ -13,7 +13,7 @@ import {
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
 import { UsersService } from "../users/users.service.js";
-import { AbidingsService } from "./abidings.service.js";
+import { type AbidingFilters, AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 import { GetAbidingsDto } from "./dto/get-abidings.dto.js";
@@ -31,9 +31,14 @@ export class AbidingsController {
   public async getAbidings(
     @Query() query: GetAbidingsDto,
   ): Promise<PaginatedResponse<AbidingResponseDto>> {
-    // Already a number: GetAbidingsDto coerces and validates it, so an
-    // unusable value is a 400 before it reaches here.
-    const userId = query.userId;
+    // Already checked: GetAbidingsDto converts userId to a number and
+    // validates the dates, so an unusable value is a 400 before it reaches
+    // here.
+    const filters: AbidingFilters = {
+      userId: query.userId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    };
     // Only limit and page go to the service. The filters are passed by name.
     const pageRequest: PageRequest = { limit: query.limit, page: query.page };
     // Comma-separated, matched with OR — see GetAbidingsDto. A single
@@ -44,10 +49,10 @@ export class AbidingsController {
 
     const abidings =
       tags.length === 0
-        ? await this.AbidingsService.getAbidings(pageRequest, userId)
+        ? await this.AbidingsService.getAbidings(pageRequest, filters)
         : tags.length === 1
-          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], pageRequest, userId)
-          : await this.AbidingsService.getAbidingsByHashtags(tags, pageRequest, userId);
+          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], pageRequest, filters)
+          : await this.AbidingsService.getAbidingsByHashtags(tags, pageRequest, filters);
     // The authors of this page only, so at most one id per abiding on it.
     const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
     const users = await this.usersService.getUsersByIds(authorIds);
@@ -62,7 +67,7 @@ export class AbidingsController {
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
     return toPaginatedResponse({ items, total: abidings.total }, pageRequest, "/abidings", {
-      userId,
+      ...filters,
       hashtag: tags.length > 0 ? tags.join(",") : undefined,
     });
   }

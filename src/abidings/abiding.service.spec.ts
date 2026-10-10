@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { getModelToken } from "@nestjs/mongoose";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow } from "@northguild/gmt";
@@ -140,7 +140,7 @@ describe("AbidingsService", () => {
     // The count has to use the filter the page used, or the total would
     // describe a different list from the one the caller is paging through.
     it("counts with the same filter it reads with", async () => {
-      await service.getAbidings(firstPage, 3);
+      await service.getAbidings(firstPage, { userId: 3 });
 
       expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, userId: 3 });
       expect(abidingModel.countDocuments).toHaveBeenCalledWith({ deletedAt: null, userId: 3 });
@@ -197,6 +197,80 @@ describe("AbidingsService", () => {
     });
   });
 
+  // Every list method builds its filter through the same private
+  // sharedFilter, so the range is checked through getAbidings, and once
+  // more next to a tag.
+  describe("filtering by date", () => {
+    const startDate = "2026-10-01T00:00:00Z";
+    const endDate = "2026-10-08T00:00:00Z";
+
+    it("includes startDate and leaves out endDate", async () => {
+      await service.getAbidings(firstPage, { startDate, endDate });
+
+      const filter = { deletedAt: null, createdAt: { $gte: startDate, $lt: endDate } };
+      expect(abidingModel.find).toHaveBeenCalledWith(filter);
+      expect(abidingModel.countDocuments).toHaveBeenCalledWith(filter);
+    });
+
+    it("takes startDate alone", async () => {
+      await service.getAbidings(firstPage, { startDate });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        createdAt: { $gte: startDate },
+      });
+    });
+
+    it("takes endDate alone", async () => {
+      await service.getAbidings(firstPage, { endDate });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        createdAt: { $lt: endDate },
+      });
+    });
+
+    it("adds no createdAt filter when neither is given", async () => {
+      await service.getAbidings(firstPage, {});
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null });
+    });
+
+    it("narrows a tag's list as well", async () => {
+      await service.getAbidingsByHashtag("sunday", firstPage, { userId: 3, startDate, endDate });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        userId: 3,
+        createdAt: { $gte: startDate, $lt: endDate },
+        hashtags: "sunday",
+      });
+    });
+
+    it("refuses a startDate after the endDate, and runs no query", async () => {
+      const backwards = { startDate: endDate, endDate: startDate };
+
+      await expect(service.getAbidings(firstPage, backwards)).rejects.toThrow(BadRequestException);
+      await expect(service.getAbidingsByHashtag("###", firstPage, backwards)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.getAbidingsByHashtags(["a", "b"], firstPage, backwards)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(abidingModel.find).not.toHaveBeenCalled();
+    });
+
+    // The range is empty, so the list is too. It is not an error.
+    it("accepts a startDate equal to the endDate", async () => {
+      await service.getAbidings(firstPage, { startDate, endDate: startDate });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({
+        deletedAt: null,
+        createdAt: { $gte: startDate, $lt: startDate },
+      });
+    });
+  });
+
   describe("getAbidingsByHashtag", () => {
     it("normalizes the tag before querying", async () => {
       await service.getAbidingsByHashtag("SUNDAY", firstPage);
@@ -205,7 +279,7 @@ describe("AbidingsService", () => {
     });
 
     it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtag("sunday", firstPage, 3);
+      await service.getAbidingsByHashtag("sunday", firstPage, { userId: 3 });
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -234,7 +308,7 @@ describe("AbidingsService", () => {
     });
 
     it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtags(["sunday"], firstPage, 3);
+      await service.getAbidingsByHashtags(["sunday"], firstPage, { userId: 3 });
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,

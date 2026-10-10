@@ -172,13 +172,39 @@ describe("AbidingsController id params (over HTTP)", () => {
     it("defaults to limit 10 and page 1", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3").expect(200);
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 10, page: 1 }, 3);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 10, page: 1 },
+        { userId: 3 },
+      );
     });
 
     it("passes a limit and page through as numbers", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3&limit=5&page=2").expect(200);
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, 3);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, { userId: 3 });
+    });
+
+    it("passes startDate and endDate through as strings", async () => {
+      await request(app.getHttpServer())
+        .get("/abidings?startDate=2026-10-01T00:00:00Z&endDate=2026-10-08T00:00:00Z")
+        .expect(200);
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 10, page: 1 },
+        { startDate: "2026-10-01T00:00:00Z", endDate: "2026-10-08T00:00:00Z" },
+      );
+    });
+
+    // Only a full UTC instant passes: see @IsUtcDateTime.
+    it.each([
+      "startDate=2026-10-01",
+      "startDate=2026-02-30T00:00:00Z",
+      "endDate=2026-10-01T00:00:00%2B03:00",
+      "endDate=yesterday",
+    ])("rejects ?%s with 400", async (query) => {
+      await request(app.getHttpServer()).get(`/abidings?${query}`).expect(400);
+
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
     });
 
     // Number() reads each of these as a number. %2B is an encoded "+".
