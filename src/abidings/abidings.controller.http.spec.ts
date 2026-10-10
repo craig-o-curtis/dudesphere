@@ -79,7 +79,7 @@ describe("AbidingsController id params (over HTTP)", () => {
   });
 
   // Before the pipe, a junk id reached findOne({ _id: id }), Mongoose threw a
-  // CastError, and QueryFailedFilter did not catch it because it only handles
+  // CastError, and PgErrorFilter did not catch it because it only handles
   // TypeORM errors — so the caller got a 500.
   describe("rejects a malformed id with 400, not 500", () => {
     it.each(["not-an-id", "123", "hello world!", "6ac543e3d91134719299fe4"])(

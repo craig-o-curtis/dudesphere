@@ -22,7 +22,7 @@ are its class:
 | `42`  | The SQL itself is wrong.       |
 
 The `pg` driver puts the code on `error.code`. TypeORM wraps that error in a
-`QueryFailedError`, and `QueryFailedFilter` reads the code from it.
+`QueryFailedError`, and `PgErrorFilter` reads the code from it.
 
 ## Postgres codes this app gives a better status
 
@@ -57,7 +57,7 @@ says why:
 | Code    | Postgres name                | Why it stays 500                                                                                          |
 | ------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `23502` | `not_null_violation`         | If the code forgets to set a new `NOT NULL` column, every insert raises it. A 400 would hide that outage. |
-| `22003` | `numeric_value_out_of_range` | A full id sequence raises it too. `IdParamDto` already stops the caller's case.                           |
+| `22003` | `numeric_value_out_of_range` | A full id sequence raises it too. `PgIdParamDto` already stops the caller's case.                         |
 | `22012` | `division_by_zero`           | It points at our SQL, not at the caller's value.                                                          |
 
 These have no rule, and all were raised against Postgres 18.6 too:
@@ -98,7 +98,7 @@ reaches Mongo.
 
 ## Where the code lives
 
-- [src/shared/filters/query-failed.filter.ts](../src/shared/filters/query-failed.filter.ts)
+- [src/shared/filters/pg-error.filter.ts](../src/shared/filters/pg-error.filter.ts)
   maps the Postgres codes.
 - [src/shared/filters/bad-value-states.ts](../src/shared/filters/bad-value-states.ts)
   holds the list of codes that become a 400.

@@ -21,7 +21,7 @@ describe("PaginationProvider", () => {
     expect(provider).toBeDefined();
   });
 
-  describe("paginateQuery", () => {
+  describe("paginatePgQuery", () => {
     interface Row {
       id: number;
     }
@@ -40,7 +40,9 @@ describe("PaginationProvider", () => {
       const rows = [{ id: 1 }, { id: 2 }];
       repository.findAndCount.mockResolvedValue([rows, 42]);
 
-      const page = await provider.paginateQuery(firstPage, rowRepository, { order: { id: "ASC" } });
+      const page = await provider.paginatePgQuery(firstPage, rowRepository, {
+        order: { id: "ASC" },
+      });
 
       // toBe: the rows as TypeORM returned them. Mapping is the caller's job.
       expect(page.items).toBe(rows);
@@ -48,7 +50,7 @@ describe("PaginationProvider", () => {
     });
 
     it("skips nothing on page 1", async () => {
-      await provider.paginateQuery(firstPage, rowRepository, { order: { id: "ASC" } });
+      await provider.paginatePgQuery(firstPage, rowRepository, { order: { id: "ASC" } });
 
       expect(repository.findAndCount).toHaveBeenCalledWith({
         order: { id: "ASC" },
@@ -60,7 +62,9 @@ describe("PaginationProvider", () => {
     // 5 and 3 differ from the defaults and from each other, so a swapped or
     // dropped value shows up as a failure.
     it("reads one page: skips the earlier pages and stops at the limit", async () => {
-      await provider.paginateQuery({ limit: 5, page: 3 }, rowRepository, { order: { id: "ASC" } });
+      await provider.paginatePgQuery({ limit: 5, page: 3 }, rowRepository, {
+        order: { id: "ASC" },
+      });
 
       expect(repository.findAndCount).toHaveBeenCalledWith({
         order: { id: "ASC" },
@@ -72,7 +76,7 @@ describe("PaginationProvider", () => {
     // One call does the page and the count, so the total describes the list
     // the caller is paging through.
     it("passes the caller's other find options through", async () => {
-      await provider.paginateQuery(firstPage, rowRepository, {
+      await provider.paginatePgQuery(firstPage, rowRepository, {
         where: { id: 7 },
         order: { id: "DESC" },
         withDeleted: true,
@@ -88,7 +92,7 @@ describe("PaginationProvider", () => {
     });
   });
 
-  describe("paginateModel", () => {
+  describe("paginateMongoModel", () => {
     interface Tag {
       slug: string;
     }
@@ -127,7 +131,7 @@ describe("PaginationProvider", () => {
       model.find.mockReturnValue(listQueryOf(documents));
       model.countDocuments.mockReturnValue({ exec: vi.fn().mockResolvedValue(42) });
 
-      const page = await provider.paginateModel(firstPage, tagModel, {}, { slug: 1 });
+      const page = await provider.paginateMongoModel(firstPage, tagModel, {}, { slug: 1 });
 
       // toBe: the documents as Mongoose returned them. Mapping is the caller's job.
       expect(page.items).toBe(documents);
@@ -138,7 +142,7 @@ describe("PaginationProvider", () => {
       const query = listQueryOf([]);
       model.find.mockReturnValue(query);
 
-      await provider.paginateModel(firstPage, tagModel, {}, { createdAt: -1, _id: -1 });
+      await provider.paginateMongoModel(firstPage, tagModel, {}, { createdAt: -1, _id: -1 });
 
       expect(query.sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
     });
@@ -147,7 +151,7 @@ describe("PaginationProvider", () => {
       const query = listQueryOf([]);
       model.find.mockReturnValue(query);
 
-      await provider.paginateModel(firstPage, tagModel, {}, { slug: 1 });
+      await provider.paginateMongoModel(firstPage, tagModel, {}, { slug: 1 });
 
       expect(query.skip).toHaveBeenCalledWith(0);
     });
@@ -158,7 +162,7 @@ describe("PaginationProvider", () => {
       const query = listQueryOf([]);
       model.find.mockReturnValue(query);
 
-      await provider.paginateModel({ limit: 5, page: 3 }, tagModel, {}, { slug: 1 });
+      await provider.paginateMongoModel({ limit: 5, page: 3 }, tagModel, {}, { slug: 1 });
 
       expect(query.skip).toHaveBeenCalledWith(10);
       expect(query.limit).toHaveBeenCalledWith(5);
@@ -169,14 +173,14 @@ describe("PaginationProvider", () => {
     it("counts with the same filter it reads with", async () => {
       const filter = { slug: "dude" };
 
-      await provider.paginateModel(firstPage, tagModel, filter, { slug: 1 });
+      await provider.paginateMongoModel(firstPage, tagModel, filter, { slug: 1 });
 
       expect(model.find.mock.calls[0][0]).toBe(filter);
       expect(model.countDocuments.mock.calls[0][0]).toBe(filter);
     });
 
     it("returns no documents and a total of 0 when nothing matches", async () => {
-      const page = await provider.paginateModel(firstPage, tagModel, {}, { slug: 1 });
+      const page = await provider.paginateMongoModel(firstPage, tagModel, {}, { slug: 1 });
 
       expect(page).toEqual({ items: [], total: 0 });
     });

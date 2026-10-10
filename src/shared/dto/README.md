@@ -11,10 +11,10 @@ This folder holds the ones several features share.
 
 ## In this folder
 
-- `id-param.dto.ts` holds `IdParamDto`, the `:id` in the URL for routes backed
+- `pg-id-param.dto.ts` holds `PgIdParamDto`, the `:id` in the URL for routes backed
   by a Postgres row (`user`, `profile`). It accepts digits only, from 1 to
   2,147,483,647, the largest Postgres `integer`. Anything else is a 400.
-- `id-param.http.spec.ts` tests it over HTTP.
+- `pg-id-param.http.spec.ts` tests it over HTTP.
 
 The DTO for `?limit=&page=`, `PaginationQueryDto`, is not here. It lives with
 the rest of pagination in `src/shared/pagination`.
@@ -23,7 +23,7 @@ the rest of pagination in `src/shared/pagination`.
 
 ```ts
 @Get(":id")
-getUserById(@Param() { id }: IdParamDto) {}
+getUserById(@Param() { id }: PgIdParamDto) {}
 ```
 
 Mongo-backed routes do not use it. Their ids go through `ParseObjectIdPipe`,

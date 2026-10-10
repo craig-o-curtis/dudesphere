@@ -1,3 +1,18 @@
+// WHY A PROVIDER AND NOT A SERVICE
+//
+// In Nest the two are the same thing. A provider is any class Nest can
+// inject: it is marked @Injectable() and listed in a module's `providers`.
+// A service is a provider too. "Service" is only the name given to the
+// provider that holds one feature's logic and sits behind that feature's
+// controller, as UsersService sits behind UsersController.
+//
+// This class is not that. It belongs to no feature and has no controller of
+// its own. It is a tool every list route shares, so it takes the general
+// name, as HashingProvider does in src/hashing. The NestJS course this
+// project follows names it PaginationProvider too.
+//
+// Calling it PaginationService would change nothing about how it works.
+
 import { Injectable } from "@nestjs/common";
 import type { HydratedDocument, Model, QueryFilter } from "mongoose";
 import type { FindManyOptions, FindOptionsOrder, ObjectLiteral, Repository } from "typeorm";
@@ -5,7 +20,7 @@ import type { FindManyOptions, FindOptionsOrder, ObjectLiteral, Repository } fro
 import type { Page, Paginated, PageRequest } from "./paginated.interface.js";
 
 /**
- * What paginateQuery takes besides the page: any TypeORM find option except
+ * What paginatePgQuery takes besides the page: any TypeORM find option except
  * `skip` and `take`, which it sets itself. `order` is required, because a
  * paged query with no fixed order can repeat a row on two pages or skip one.
  */
@@ -17,7 +32,7 @@ export type PageFindOptions<TEntity> = Omit<FindManyOptions<TEntity>, "skip" | "
  * Everything a list route needs to page its rows. It has two halves, one for
  * each layer:
  *
- * - A service calls `paginateQuery` (Postgres) or `paginateModel` (Mongo). It
+ * - A service calls `paginatePgQuery` (Postgres) or `paginateMongoModel` (Mongo). It
  *   hands over its repository or model and gets back one page of rows and the
  *   count of all of them.
  * - A controller calls `toResponse` with that page and its own route path,
@@ -39,7 +54,7 @@ export class PaginationProvider {
    * It returns entities, not DTOs. The caller maps them, because only the
    * caller knows its response class.
    */
-  async paginateQuery<TEntity extends ObjectLiteral>(
+  async paginatePgQuery<TEntity extends ObjectLiteral>(
     pageRequest: PageRequest,
     repository: Repository<TEntity>,
     options: PageFindOptions<TEntity>,
@@ -83,7 +98,7 @@ export class PaginationProvider {
    * It returns documents, not DTOs. The caller maps them, because only the
    * caller knows its response class.
    */
-  async paginateModel<TDocument>(
+  async paginateMongoModel<TDocument>(
     pageRequest: PageRequest,
     model: Model<TDocument>,
     filter: QueryFilter<TDocument>,

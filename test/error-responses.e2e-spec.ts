@@ -42,7 +42,7 @@ describe("Error responses (e2e)", () => {
     await app.close();
   });
 
-  // This is the service's own conflict check, not QueryFailedFilter. The
+  // This is the service's own conflict check, not PgErrorFilter. The
   // filter only fires on a race, which a serial test cannot stage; its own
   // tests live in src/shared/filters.
   it("409 names the taken field and carries its errorCode", async () => {

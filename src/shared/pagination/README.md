@@ -12,8 +12,8 @@ count of all of them, and links to the other pages.
 ## In this folder
 
 - `pagination.provider.ts` holds `PaginationProvider`. It has three methods:
-  - `paginateQuery` reads one page from Postgres, through a TypeORM repository.
-  - `paginateModel` reads one page from Mongo, through a Mongoose model.
+  - `paginatePgQuery` reads one page from Postgres, through a TypeORM repository.
+  - `paginateMongoModel` reads one page from Mongo, through a Mongoose model.
   - `toResponse` turns a page into the body the route answers with.
 - `pagination.module.ts` holds `PaginationModule`, which exports the provider.
 - `paginated.interface.ts` holds three types: `Paginated`, the body of every
@@ -53,7 +53,7 @@ rows and the total. It maps the rows to its response DTO itself.
 ```ts
 // src/profiles/profiles.service.ts
 async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
-  const { items, total } = await this.paginationProvider.paginateQuery(
+  const { items, total } = await this.paginationProvider.paginatePgQuery(
     pageRequest,
     this.profileRepository,
     { order: { id: "ASC" } },
@@ -66,11 +66,11 @@ The third argument takes any TypeORM find option, such as `where` or
 `relations`. `order` is required. Without a fixed order a database may return
 rows in any order, and two pages of one list can repeat a row or skip one.
 
-A Mongo list calls `paginateModel` with its model, a filter and a sort:
+A Mongo list calls `paginateMongoModel` with its model, a filter and a sort:
 
 ```ts
 // src/hashtags/hashtags.service.ts
-const { items, total } = await this.paginationProvider.paginateModel(
+const { items, total } = await this.paginationProvider.paginateMongoModel(
   pageRequest,
   this.hashtagModel,
   { deletedAt: null },

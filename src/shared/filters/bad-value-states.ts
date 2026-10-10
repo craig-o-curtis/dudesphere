@@ -8,7 +8,7 @@
 // - 22012 (division by zero) and its neighbours point at our SQL, not at the
 //   caller's value.
 // - 22003 (number out of range) is also what a full id sequence raises.
-//   IdParamDto already stops the caller's case.
+//   PgIdParamDto already stops the caller's case.
 // - 23502 (not null) is left out too. If a migration adds a NOT NULL column
 //   that the code forgets to set, every insert raises it, and a 400 would
 //   hide that outage. The DTOs reject null where the column needs a value,
