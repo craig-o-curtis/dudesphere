@@ -3,10 +3,8 @@ import { Types } from "mongoose";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { UserRole } from "../users/user.entity.js";
-import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
-import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 
 describe("AbidingsController", () => {
   let controller: AbidingsController;
@@ -17,10 +15,6 @@ describe("AbidingsController", () => {
     createAbiding: vi.fn(),
     patchAbiding: vi.fn(),
     deleteAbiding: vi.fn(),
-  };
-
-  const usersService = {
-    getUsersByIds: vi.fn(),
   };
 
   // The user JwtAuthGuard puts on the request. The write routes pass it
@@ -41,10 +35,7 @@ describe("AbidingsController", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
-      providers: [
-        { provide: AbidingsService, useValue: abidingService },
-        { provide: UsersService, useValue: usersService },
-      ],
+      providers: [{ provide: AbidingsService, useValue: abidingService }],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: vi.fn(() => true) })
@@ -58,86 +49,20 @@ describe("AbidingsController", () => {
   });
 
   describe("getAbidings", () => {
-    // The old code loaded the first 20 users without checking who wrote what.
-    // This checks that it now asks for exactly the authors it needs.
-    it("asks for exactly the authors of the abidings, once each", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([
-          { id: "a1", userId: 1, message: "first" },
-          { id: "a2", userId: 1, message: "second" },
-          { id: "a3", userId: 25, message: "third" },
-        ]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([]);
-
-      await controller.getAbidings({ ...firstPage });
-
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([1, 25]);
-    });
-
-    it("fills in each abiding's username from its author", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([
-          { id: "a1", userId: 1, message: "first" },
-          { id: "a2", userId: 25, message: "second" },
-        ]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([
-        { id: 1, username: "Admin" },
-        { id: 25, username: "walter" },
-      ]);
+    // The service returns each abiding as a response, with its hashtags and
+    // its author's username. The controller must hand those on as they are:
+    // a copy would lose the class, and ClassSerializerInterceptor reads the
+    // class to apply the DTO's rules.
+    it("puts the service's abidings in data without copying them", async () => {
+      const first = { id: "a1", userId: 1, message: "easy #Sunday", username: "Admin" };
+      const second = { id: "a2", userId: 25, message: "second", username: "walter" };
+      abidingService.getAbidings.mockResolvedValue(pageOf([first, second]));
 
       const result = await controller.getAbidings({ ...firstPage });
 
-      expect(result.data.map((a) => a.username)).toEqual(["Admin", "walter"]);
-    });
-
-    it("falls back to Unknown when the author is not found", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([{ id: "a1", userId: 99, message: "orphan" }]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([]);
-
-      const result = await controller.getAbidings({ ...firstPage });
-
-      expect(result.data[0].username).toBe("Unknown");
-    });
-
-    // The response DTO is what a client actually receives, so the derived
-    // tags have to survive the mapping out of the service.
-    it("returns each abiding's hashtags in the response", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([{ id: "a1", userId: 1, message: "easy #Sunday", hashtags: ["sunday"] }]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
-
-      const result = await controller.getAbidings({ ...firstPage });
-
-      expect(result.data[0].hashtags).toEqual(["sunday"]);
-    });
-
-    it("returns an empty hashtags array for an abiding written before the field existed", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([{ id: "a1", userId: 1, message: "old" }]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
-
-      const result = await controller.getAbidings({ ...firstPage });
-
-      expect(result.data[0].hashtags).toEqual([]);
-    });
-
-    // ClassSerializerInterceptor reads each item's class to apply the DTO's
-    // rules. A plain object in `data` would skip them.
-    it("returns real AbidingResponseDto instances inside data", async () => {
-      abidingService.getAbidings.mockResolvedValue(
-        pageOf([{ id: "a1", userId: 1, message: "first" }]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "Admin" }]);
-
-      const result = await controller.getAbidings({ ...firstPage });
-
-      expect(result.data[0]).toBeInstanceOf(AbidingResponseDto);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toBe(first);
+      expect(result.data[1]).toBe(second);
     });
 
     // 5 and 2 differ from the defaults and from each other, so a swapped or
@@ -146,7 +71,6 @@ describe("AbidingsController", () => {
       abidingService.getAbidings.mockResolvedValue(
         pageOf([{ id: "a1", userId: 1, message: "first" }], 12),
       );
-      usersService.getUsersByIds.mockResolvedValue([]);
 
       const result = await controller.getAbidings({ limit: 5, page: 2 });
 
@@ -167,7 +91,6 @@ describe("AbidingsController", () => {
     // Following `next` has to stay inside the filtered list.
     it("keeps userId and the tags in the links", async () => {
       abidingService.getAbidings.mockResolvedValue(pageOf([], 30));
-      usersService.getUsersByIds.mockResolvedValue([]);
 
       const result = await controller.getAbidings({
         ...firstPage,
@@ -180,7 +103,6 @@ describe("AbidingsController", () => {
 
     it("passes the dates to the service and keeps them in the links", async () => {
       abidingService.getAbidings.mockResolvedValue(pageOf([], 30));
-      usersService.getUsersByIds.mockResolvedValue([]);
       const startDate = "2026-10-01T00:00:00Z";
       const endDate = "2026-10-08T00:00:00Z";
 
@@ -251,17 +173,15 @@ describe("AbidingsController", () => {
   });
 
   describe("getMyAbidings", () => {
-    it("passes the id from the token, not a request param, and fills in usernames", async () => {
-      abidingService.getAbidingsByUserId.mockResolvedValue(
-        pageOf([{ id: "a1", userId: 25, message: "mine" }]),
-      );
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+    it("passes the id from the token, not a request param", async () => {
+      const mine = { id: "a1", userId: 25, message: "mine", username: "walter" };
+      abidingService.getAbidingsByUserId.mockResolvedValue(pageOf([mine]));
       const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
 
       const result = await controller.getMyAbidings(mockUser, { ...firstPage });
 
       expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25, firstPage);
-      expect(result.data[0].username).toBe("walter");
+      expect(result.data[0]).toBe(mine);
     });
 
     it("passes limit and page to the service and links back to /abidings/me", async () => {
@@ -276,8 +196,6 @@ describe("AbidingsController", () => {
     });
   });
 
-  // These used to load the first page of users and search it, so an author
-  // past that page came back as "Unknown".
   describe("postAbiding", () => {
     // The service checks that the author still exists and puts their username
     // on the response. Both are tested in abiding.service.spec.ts.
@@ -297,10 +215,10 @@ describe("AbidingsController", () => {
     // hands the route. The service takes the string form. That the pipe is
     // actually bound to the route is proved in abidings.controller.http.spec.ts,
     // since pipes do not run on a direct method call like this one.
-    it("looks up the author by id and returns their username", async () => {
+    it("passes the id as a string and returns the service's response", async () => {
       const id = new Types.ObjectId("6ac543e3d91134719299fe49");
-      abidingService.patchAbiding.mockResolvedValue({ id: "a1", userId: 25, message: "edited" });
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      const edited = { id: "a1", userId: 25, message: "edited", username: "walter" };
+      abidingService.patchAbiding.mockResolvedValue(edited);
 
       const result = await controller.patchAbiding(id, { message: "edited" }, caller);
 
@@ -309,8 +227,7 @@ describe("AbidingsController", () => {
         { message: "edited" },
         caller,
       );
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
-      expect(result.username).toBe("walter");
+      expect(result).toBe(edited);
     });
   });
 });

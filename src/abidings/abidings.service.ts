@@ -85,7 +85,7 @@ export class AbidingsService {
     if (!abiding) {
       throw new NotFoundException("Abiding not found");
     }
-    return this.toResponseDto(abiding);
+    return this.withUsername(this.toResponseDto(abiding));
   }
 
   async getAbidingsByUserId(
@@ -201,7 +201,7 @@ export class AbidingsService {
       }
     }
 
-    return this.toResponseDto(updatedAbiding);
+    return this.withUsername(this.toResponseDto(updatedAbiding));
   }
 
   async deleteAbiding(abidingId: string, caller: AuthUser): Promise<void> {
@@ -260,8 +260,8 @@ export class AbidingsService {
   // indexes in abiding.schema.ts end with the same two keys.
   //
   // findMongoPage runs the page and the count. Its comment says what the
-  // count costs. This method adds the two things only abidings know: the
-  // sort, and the response class.
+  // count costs. This method adds the three things only abidings know: the
+  // sort, the response class, and each author's username.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     pageRequest: PageRequest,
@@ -272,12 +272,36 @@ export class AbidingsService {
       { createdAt: -1, _id: -1 },
       pageRequest,
     );
-    return { items: items.map((abiding) => this.toResponseDto(abiding)), total };
+    const abidings = items.map((abiding) => this.toResponseDto(abiding));
+    return { items: await this.withUsernames(abidings), total };
   }
 
-  // A real instance, not an object literal. ClassSerializerInterceptor only
-  // applies the DTO's @Expose and @Transform rules to an instance of the
-  // class, and a list hands these straight to toPaginatedResponse.
+  // Puts each author's current username on the abidings it is given. The
+  // names live in Postgres and the abidings in Mongo, so this is the join:
+  // one query for the distinct authors, however many abidings they wrote.
+  //
+  // getUsersByIds includes soft-deleted users, so their name still shows.
+  // "Unknown" covers an author whose row is gone altogether.
+  private async withUsernames(abidings: AbidingResponseDto[]): Promise<AbidingResponseDto[]> {
+    const authorIds = [...new Set(abidings.map((abiding) => abiding.userId))];
+    const users = await this.usersService.getUsersByIds(authorIds);
+    const usernames = new Map(users.map((user) => [user.id, user.username]));
+    for (const abiding of abidings) {
+      abiding.username = usernames.get(abiding.userId) || "Unknown";
+    }
+    return abidings;
+  }
+
+  // The same, for one abiding.
+  private async withUsername(abiding: AbidingResponseDto): Promise<AbidingResponseDto> {
+    await this.withUsernames([abiding]);
+    return abiding;
+  }
+
+  // The one place an abiding becomes a response. A real instance, not an
+  // object literal: ClassSerializerInterceptor only applies the DTO's @Expose
+  // and @Transform rules to an instance of the class, and the controller
+  // returns these as they are.
   private toResponseDto(abiding: AbidingDocument): AbidingResponseDto {
     return new AbidingResponseDto({
       id: abiding._id.toString(),

@@ -63,9 +63,12 @@ describe("AbidingsService", () => {
     registerTags: vi.fn(),
   };
 
-  // createAbiding reads the author from here before it writes.
+  // createAbiding reads the author from getMyUser before it writes. Every
+  // method that returns an abiding reads its author's username from
+  // getUsersByIds.
   const usersService = {
     getMyUser: vi.fn(),
+    getUsersByIds: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -79,6 +82,8 @@ describe("AbidingsService", () => {
     abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
     // Default: the caller's user exists.
     usersService.getMyUser.mockResolvedValue({ id: 1, username: "walter" });
+    // Default: no author is found, so every username reads "Unknown".
+    usersService.getUsersByIds.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -280,6 +285,79 @@ describe("AbidingsService", () => {
         deletedAt: null,
         createdAt: { $gte: startDate, $lt: startDate },
       });
+    });
+  });
+
+  // The names live in Postgres and the abidings in Mongo. The service joins
+  // them, so every abiding it returns already carries its author's username.
+  describe("authors' usernames", () => {
+    function abidingBy(userId: number) {
+      return { _id: new mongoose.Types.ObjectId(), userId, message: "hello" };
+    }
+
+    // An earlier version loaded the first 20 users without checking who wrote
+    // what. This checks it asks for exactly the authors it needs.
+    it("asks for the authors of a page once each, in one call", async () => {
+      abidingModel.find.mockReturnValue(listQueryOf([abidingBy(1), abidingBy(1), abidingBy(25)]));
+
+      await service.getAbidings(firstPage);
+
+      expect(usersService.getUsersByIds).toHaveBeenCalledTimes(1);
+      expect(usersService.getUsersByIds).toHaveBeenCalledWith([1, 25]);
+    });
+
+    it("puts each author's username on their abidings", async () => {
+      abidingModel.find.mockReturnValue(listQueryOf([abidingBy(1), abidingBy(25)]));
+      usersService.getUsersByIds.mockResolvedValue([
+        { id: 1, username: "Admin" },
+        { id: 25, username: "walter" },
+      ]);
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items.map((abiding) => abiding.username)).toEqual(["Admin", "walter"]);
+    });
+
+    it("falls back to Unknown when the author is not found", async () => {
+      abidingModel.find.mockReturnValue(listQueryOf([abidingBy(99)]));
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items[0].username).toBe("Unknown");
+    });
+
+    it("names the author on a caller's own list", async () => {
+      abidingModel.find.mockReturnValue(listQueryOf([abidingBy(25)]));
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+
+      const result = await service.getAbidingsByUserId(25, firstPage);
+
+      expect(result.items[0].username).toBe("walter");
+    });
+
+    it("names the author of one abiding read by id", async () => {
+      abidingModel.findOne.mockReturnValue(queryOf(abidingBy(25)));
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+
+      const result = await service.getAbidingById("6ac543e3d91134719299fe49");
+
+      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
+      expect(result.username).toBe("walter");
+    });
+
+    // The author, not the caller: an admin may edit someone else's abiding.
+    it("names the author of an abiding after an edit", async () => {
+      abidingModel.findOneAndUpdate.mockReturnValue(queryOf(abidingBy(25)));
+      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+
+      const result = await service.patchAbiding(
+        "6ac543e3d91134719299fe49",
+        { imageUrl: null },
+        admin,
+      );
+
+      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
+      expect(result.username).toBe("walter");
     });
   });
 

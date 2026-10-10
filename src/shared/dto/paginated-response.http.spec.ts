@@ -20,6 +20,7 @@ import type { App } from "supertest/types.js";
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { AbidingsController } from "../../abidings/abidings.controller.js";
 import { AbidingsService } from "../../abidings/abidings.service.js";
+import { AbidingResponseDto } from "../../abidings/dto/abiding-response.dto.js";
 import { configureApp } from "../../app-setup.js";
 import { UserResponseDto } from "../../users/dto/user-response.dto.js";
 import { UserRole } from "../../users/user.entity.js";
@@ -32,12 +33,11 @@ import type { PaginatedResponse } from "./paginated-response.js";
 describe("a paginated response (over HTTP)", () => {
   let app: INestApplication<App>;
 
-  const usersService = { getUsers: vi.fn(), getUsersByIds: vi.fn() };
+  const usersService = { getUsers: vi.fn() };
   const abidingsService = { getAbidings: vi.fn() };
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "walter" }]);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [UsersController, AbidingsController],
@@ -84,10 +84,13 @@ describe("a paginated response (over HTTP)", () => {
 
   // AbidingResponseDto turns a missing replyToId into null with @Transform.
   // That only happens if the item is still a class instance when it is
-  // serialized.
+  // serialized. The service returns instances, and the controller and
+  // toPaginatedResponse must pass them on without copying them.
   it("applies @Transform to the items inside data", async () => {
     abidingsService.getAbidings.mockResolvedValue({
-      items: [{ id: "a1", userId: 1, message: "hello" }],
+      items: [
+        new AbidingResponseDto({ id: "a1", userId: 1, message: "hello", username: "walter" }),
+      ],
       total: 1,
     });
 
