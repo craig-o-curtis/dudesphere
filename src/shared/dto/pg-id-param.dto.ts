@@ -11,7 +11,7 @@ export const PG_INT_MAX = 2_147_483_647;
  *
  * Replaces ParseIntPipe, which has no upper bound: its check is the regex
  * `/^-?\d+$/`, so a 20-digit id passed, parseInt returned 1e20, and Postgres
- * rejected the value with numeric_value_out_of_range. QueryFailedFilter only
+ * rejected the value with numeric_value_out_of_range. PgErrorFilter only
  * converts unique violations, so the caller got a 500 for what was plainly a
  * bad request.
  *
@@ -23,7 +23,7 @@ export const PG_INT_MAX = 2_147_483_647;
  * Mongo-backed routes do not use this. An abiding's id is an ObjectId, so it
  * goes through ParseObjectIdPipe, and a hashtag is keyed by its slug.
  */
-export class IdParamDto {
+export class PgIdParamDto {
   @IntFromDigits()
   @Min(1)
   @Max(PG_INT_MAX)

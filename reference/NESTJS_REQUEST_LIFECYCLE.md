@@ -14,17 +14,17 @@ interceptors again, and filters if anything threw.
 Checked on `@nestjs/core` 12.0.4 by running an app with one piece of each kind
 and logging when each one ran.
 
-| Step | Kind                     | What this app runs there                                       | How it can end the request                             |
-| ---- | ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------ |
-| 1    | Middleware               | `requestId`                                                    | It never does. It adds `x-request-id`.                 |
-| 2    | Body parser              | Express reads the JSON body                                    | 400 when the JSON does not parse                       |
-| 3    | Route match              | Nest finds the handler for the URL                             | 404 when no route matches                              |
-| 4    | Guards                   | `JwtAuthGuard`, then `RolesGuard`                              | 401 and 403                                            |
-| 5    | Interceptors, going in   | `TimeoutInterceptor`, then `ClassSerializerInterceptor`        | 408 when steps 6 to 8 take over 10 seconds             |
-| 6    | Pipes                    | `ValidationPipe`, and `ParseObjectIdPipe` on abiding ids       | 400                                                    |
-| 7    | Handler                  | The controller method and the service it calls                 | Whatever the service throws, such as 404 or 409        |
-| 8    | Interceptors, coming out | `ClassSerializerInterceptor`, then `TimeoutInterceptor`        | They do not. The serializer drops `@Exclude()` fields. |
-| 9    | Filters                  | `MongoErrorFilter`, `QueryFailedFilter`, `AllExceptionsFilter` | They write the error response                          |
+| Step | Kind                     | What this app runs there                                   | How it can end the request                             |
+| ---- | ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
+| 1    | Middleware               | `requestId`                                                | It never does. It adds `x-request-id`.                 |
+| 2    | Body parser              | Express reads the JSON body                                | 400 when the JSON does not parse                       |
+| 3    | Route match              | Nest finds the handler for the URL                         | 404 when no route matches                              |
+| 4    | Guards                   | `JwtAuthGuard`, then `RolesGuard`                          | 401 and 403                                            |
+| 5    | Interceptors, going in   | `TimeoutInterceptor`, then `ClassSerializerInterceptor`    | 408 when steps 6 to 8 take over 10 seconds             |
+| 6    | Pipes                    | `ValidationPipe`, and `ParseObjectIdPipe` on abiding ids   | 400                                                    |
+| 7    | Handler                  | The controller method and the service it calls             | Whatever the service throws, such as 404 or 409        |
+| 8    | Interceptors, coming out | `ClassSerializerInterceptor`, then `TimeoutInterceptor`    | They do not. The serializer drops `@Exclude()` fields. |
+| 9    | Filters                  | `MongoErrorFilter`, `PgErrorFilter`, `AllExceptionsFilter` | They write the error response                          |
 
 Step 9 runs only when an earlier step threw. An error from any of steps 2 to 8
 lands there.

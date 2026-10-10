@@ -93,7 +93,7 @@ export class ProfilesService {
     caller: AuthUser,
   ): Promise<ProfileResponseDto> {
     // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
-    // that is not a QueryFailedError, so QueryFailedFilter lets it through as
+    // that is not a QueryFailedError, so PgErrorFilter lets it through as
     // a 500. Every field on UpdateProfileDto is optional, so an empty body
     // reaches here through PATCH /profiles/me and PATCH /profiles/:id alike.
     if (Object.keys(updateProfileDto).length === 0) {

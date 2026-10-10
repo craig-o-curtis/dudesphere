@@ -17,7 +17,12 @@ export const UNIQUE_VIOLATION = "23505";
 export const QUERY_CANCELED = "57014";
 
 /**
- * Safety net for constraints the service layer did not check.
+ * Turns a Postgres error into the right status. Safety net for constraints
+ * the service layer did not check.
+ *
+ * Named for the database, to match MongoErrorFilter. What it catches is
+ * TypeORM's QueryFailedError, which is how every failed Postgres statement
+ * arrives.
  *
  * A unique violation means two callers raced, or a service forgot a lookup.
  * Either way it is a conflict, not a server fault, so it becomes a 409.
@@ -32,8 +37,8 @@ export const QUERY_CANCELED = "57014";
  * every other fault. That path never logs the query's parameters.
  */
 @Catch(QueryFailedError)
-export class QueryFailedFilter extends AllExceptionsFilter {
-  private readonly logger = new Logger(QueryFailedFilter.name);
+export class PgErrorFilter extends AllExceptionsFilter {
+  private readonly logger = new Logger(PgErrorFilter.name);
 
   override catch(exception: QueryFailedError, host: ArgumentsHost): void {
     const { code } = exception as QueryFailedError & { code?: string };

@@ -15,7 +15,7 @@ export const DUPLICATE_KEY = 11000;
 export const MAX_TIME_EXPIRED = 50;
 
 /**
- * The Mongo twin of QueryFailedFilter.
+ * The Mongo twin of PgErrorFilter.
  *
  * A duplicate key is a race on a unique index, the same thing as Postgres
  * 23505 (duplicate key violation), so it becomes a 409. A network or server-selection error means
