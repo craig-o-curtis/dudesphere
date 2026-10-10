@@ -8,6 +8,7 @@ import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
+import { UsersService } from "../users/users.service.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -62,6 +63,11 @@ describe("AbidingsService", () => {
     registerTags: vi.fn(),
   };
 
+  // createAbiding reads the author from here before it writes.
+  const usersService = {
+    getMyUser: vi.fn(),
+  };
+
   beforeEach(async () => {
     // resetAllMocks, not clearAllMocks: clearAllMocks keeps implementations, so
     // a mockResolvedValue set in one test leaks into the next.
@@ -71,12 +77,15 @@ describe("AbidingsService", () => {
     // Default: the abiding exists, so a write that matched nothing reads as an
     // ownership refusal. Tests for a missing abiding override this with null.
     abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
+    // Default: the caller's user exists.
+    usersService.getMyUser.mockResolvedValue({ id: 1, username: "walter" });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AbidingsService,
         { provide: getModelToken(Abiding.name), useValue: abidingModel },
         { provide: HashtagsService, useValue: hashtagsService },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
@@ -237,7 +246,12 @@ describe("AbidingsService", () => {
     });
 
     it("narrows a tag's list as well", async () => {
-      await service.getAbidingsByHashtag("sunday", firstPage, { userId: 3, startDate, endDate });
+      await service.getAbidings(firstPage, {
+        userId: 3,
+        startDate,
+        endDate,
+        hashtags: ["sunday"],
+      });
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -251,12 +265,10 @@ describe("AbidingsService", () => {
       const backwards = { startDate: endDate, endDate: startDate };
 
       await expect(service.getAbidings(firstPage, backwards)).rejects.toThrow(BadRequestException);
-      await expect(service.getAbidingsByHashtag("###", firstPage, backwards)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.getAbidingsByHashtags(["a", "b"], firstPage, backwards)).rejects.toThrow(
-        BadRequestException,
-      );
+      // Also when the tags are unusable, which would otherwise be an empty page.
+      await expect(
+        service.getAbidings(firstPage, { ...backwards, hashtags: ["###"] }),
+      ).rejects.toThrow(BadRequestException);
       expect(abidingModel.find).not.toHaveBeenCalled();
     });
 
@@ -271,35 +283,15 @@ describe("AbidingsService", () => {
     });
   });
 
-  describe("getAbidingsByHashtag", () => {
-    it("normalizes the tag before querying", async () => {
-      await service.getAbidingsByHashtag("SUNDAY", firstPage);
+  describe("getAbidings with tags", () => {
+    it("normalizes one tag and matches it exactly", async () => {
+      await service.getAbidings(firstPage, { hashtags: ["SUNDAY"] });
 
       expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, hashtags: "sunday" });
     });
 
-    it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtag("sunday", firstPage, { userId: 3 });
-
-      expect(abidingModel.find).toHaveBeenCalledWith({
-        deletedAt: null,
-        hashtags: "sunday",
-        userId: 3,
-      });
-    });
-
-    it("returns an empty page for a tag that can't normalize, without querying", async () => {
-      const result = await service.getAbidingsByHashtag("###", firstPage);
-
-      expect(result).toEqual({ items: [], total: 0 });
-      expect(abidingModel.find).not.toHaveBeenCalled();
-      expect(abidingModel.countDocuments).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("getAbidingsByHashtags", () => {
-    it("normalizes, dedupes and queries with $in for OR matching", async () => {
-      await service.getAbidingsByHashtags(["Sunday", "sunday", "Dude"], firstPage);
+    it("normalizes and dedupes several tags and matches any of them with $in", async () => {
+      await service.getAbidings(firstPage, { hashtags: ["Sunday", "sunday", "Dude"] });
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -307,26 +299,66 @@ describe("AbidingsService", () => {
       });
     });
 
+    it("treats two spellings of one tag as one tag", async () => {
+      await service.getAbidings(firstPage, { hashtags: ["Sunday", "#sunday"] });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, hashtags: "sunday" });
+    });
+
     it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtags(["sunday"], firstPage, { userId: 3 });
+      await service.getAbidings(firstPage, { userId: 3, hashtags: ["sunday", "dude"] });
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
-        hashtags: { $in: ["sunday"] },
         userId: 3,
+        hashtags: { $in: ["sunday", "dude"] },
       });
     });
 
     it("returns an empty page when no tag can normalize, without querying", async () => {
-      const result = await service.getAbidingsByHashtags(["###", ""], firstPage);
+      const result = await service.getAbidings(firstPage, { hashtags: ["###", ""] });
 
       expect(result).toEqual({ items: [], total: 0 });
       expect(abidingModel.find).not.toHaveBeenCalled();
       expect(abidingModel.countDocuments).not.toHaveBeenCalled();
     });
+
+    it("adds no tag filter for an empty list", async () => {
+      await service.getAbidings(firstPage, { hashtags: [] });
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null });
+    });
   });
 
   describe("createAbiding", () => {
+    it("looks up the author by the id in the token and returns their username", async () => {
+      abidingModel.create.mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        userId: 1,
+        message: "new abiding",
+      });
+      usersService.getMyUser.mockResolvedValue({ id: 1, username: "the-dude" });
+
+      const result = await service.createAbiding({ message: "new abiding" }, author);
+
+      expect(usersService.getMyUser).toHaveBeenCalledWith(1);
+      // The current name from the database, not the one in the token.
+      expect(result.username).toBe("the-dude");
+      expect(result).toBeInstanceOf(AbidingResponseDto);
+    });
+
+    // A token outlives its user: it stays valid until it expires. Without
+    // this, a deleted user could keep posting, and the abidings would be live.
+    it("writes nothing when the caller's user is deleted or missing", async () => {
+      usersService.getMyUser.mockRejectedValue(new NotFoundException("My User #1 not found"));
+
+      await expect(service.createAbiding({ message: "new abiding" }, author)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(abidingModel.create).not.toHaveBeenCalled();
+      expect(hashtagsService.registerTags).not.toHaveBeenCalled();
+    });
+
     it("creates and returns the abiding", async () => {
       const utcNow = getUtcNow();
       const mockAbiding = {

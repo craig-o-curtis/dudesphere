@@ -14,6 +14,7 @@ import {
 } from "../shared/utils/hashtag.js";
 import { findMongoPage } from "../shared/utils/mongo-page.js";
 import { UserRole } from "../users/user.entity.js";
+import { UsersService } from "../users/users.service.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
@@ -25,6 +26,10 @@ export interface AbidingFilters {
   // UTC instants. startDate is included in the range and endDate is not.
   startDate?: string;
   endDate?: string;
+  // Matched with OR: an abiding needs only one of them. Each is accepted
+  // with or without a leading # and in any case. Leave it out, or pass an
+  // empty list, for no tag filter.
+  hashtags?: string[];
 }
 
 @Injectable()
@@ -32,13 +37,47 @@ export class AbidingsService {
   constructor(
     @InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>,
     private readonly hashtagsService: HashtagsService,
+    private readonly usersService: UsersService,
   ) {}
 
+  // The one list GET /abidings needs. It decides which query to run, so the
+  // controller only has to pass the filters on.
   async getAbidings(
     pageRequest: PageRequest,
     filters: AbidingFilters = {},
   ): Promise<Page<AbidingResponseDto>> {
-    return this.findPage(this.sharedFilter(filters), pageRequest);
+    // First, so a bad date range is a 400 whatever the tags are.
+    const filter = this.sharedFilter(filters);
+    if (!filters.hashtags || filters.hashtags.length === 0) {
+      return this.findPage(filter, pageRequest);
+    }
+
+    // Normalized here, not in the controller, so any other caller gets the
+    // same rule applied — see src/shared/utils/hashtag.ts. The Set drops a
+    // tag that was sent twice.
+    const tags = [
+      ...new Set(
+        filters.hashtags.map((tag) => normalizeHashtag(tag)).filter((tag): tag is string => !!tag),
+      ),
+    ];
+    // Tags were asked for and none is usable, so nothing can match. An empty
+    // page, not a query: $in: [] matches nothing anyway, and a query built
+    // without the tag filter would return everything.
+    if (tags.length === 0) {
+      return { items: [], total: 0 };
+    }
+
+    // $in over the multikey index ({ hashtags: 1, createdAt: -1, _id: -1 }) is
+    // OR across tags, not a query per tag. Mongo reads one sorted run per tag
+    // and merges them, so the page still comes off the index in order.
+    //
+    // That holds for up to 200 tags. Past that Mongo gives up on merging and
+    // sorts every match in memory. GetAbidingsDto refuses more than
+    // MAX_TAGS, so a request never gets near it.
+    return this.findPage(
+      { ...filter, hashtags: tags.length === 1 ? tags[0] : { $in: tags } },
+      pageRequest,
+    );
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
@@ -56,65 +95,19 @@ export class AbidingsService {
     return this.findPage({ userId, deletedAt: null }, pageRequest);
   }
 
-  // One tag. The filters narrow the list the same way they do in getAbidings.
-  async getAbidingsByHashtag(
-    hashtag: string,
-    pageRequest: PageRequest,
-    filters: AbidingFilters = {},
-  ): Promise<Page<AbidingResponseDto>> {
-    // First, so a bad date range is a 400 whatever the tag is.
-    const query = this.sharedFilter(filters);
-
-    // Normalized here, not in the controller, so any other caller gets the
-    // same rule applied — see src/shared/utils/hashtag.ts.
-    const normalized = normalizeHashtag(hashtag);
-    // An unusable tag can never match a stored one, so short-circuit to an
-    // empty result instead of sending a query that always matches nothing
-    // (or, if built wrong, everything).
-    if (!normalized) {
-      return { items: [], total: 0 };
-    }
-
-    return this.findPage({ ...query, hashtags: normalized }, pageRequest);
-  }
-
-  // Several tags, matched with OR: an abiding needs only one of them.
-  // The filters narrow the list the same way they do in getAbidings.
-  async getAbidingsByHashtags(
-    hashtags: string[],
-    pageRequest: PageRequest,
-    filters: AbidingFilters = {},
-  ): Promise<Page<AbidingResponseDto>> {
-    // First, so a bad date range is a 400 whatever the tags are.
-    const query = this.sharedFilter(filters);
-
-    const normalized = [
-      ...new Set(
-        hashtags.map((tag) => normalizeHashtag(tag)).filter((tag): tag is string => !!tag),
-      ),
-    ];
-    // Same reasoning as getAbidingsByHashtag: nothing usable left means the
-    // query can never match, so skip it rather than send $in: [].
-    if (normalized.length === 0) {
-      return { items: [], total: 0 };
-    }
-
-    // $in over the multikey index ({ hashtags: 1, createdAt: -1, _id: -1 }) is
-    // OR across tags, not a query per tag. Mongo reads one sorted run per tag
-    // and merges them, so the page still comes off the index in order.
-    //
-    // That holds for up to 200 tags. Past that Mongo gives up on merging and
-    // sorts every match in memory. GetAbidingsDto refuses more than
-    // MAX_TAGS, so a request never gets near it.
-    return this.findPage({ ...query, hashtags: { $in: normalized } }, pageRequest);
-  }
-
   // The author is the caller, taken from the verified token. It was previously
   // read from the request body, which let anyone post as anyone.
   async createAbiding(
     createAbidingDto: CreateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
+    // Looked up before the write, not after. A token proves who logged in, not
+    // that the account still exists: it stays valid until it expires, even
+    // after the user is deleted. getMyUser throws a 404 for a user who is
+    // deleted or was never there, so no abiding is written for an author
+    // nobody can find.
+    const author = await this.usersService.getMyUser(caller.userId);
+
     if (createAbidingDto.replyToId) {
       await this.assertReplyTargetExists(createAbidingDto.replyToId);
     }
@@ -139,7 +132,11 @@ export class AbidingsService {
       await this.hashtagsService.registerTags(hashtags);
     }
 
-    return this.toResponseDto(newAbiding);
+    // The author was read above, so the response can carry the username and
+    // the controller has nothing to add.
+    const response = this.toResponseDto(newAbiding);
+    response.username = author.username;
+    return response;
   }
 
   async patchAbiding(
@@ -294,8 +291,8 @@ export class AbidingsService {
     });
   }
 
-  // The part of a filter every list shares: live abidings only, one author
-  // if asked for, and a date range if asked for.
+  // The part of getAbidings' filter that has nothing to do with tags: live
+  // abidings only, one author if asked for, and a date range if asked for.
   private sharedFilter({
     userId,
     startDate,

@@ -35,7 +35,6 @@ describe("AbidingsController id params (over HTTP)", () => {
 
   const abidingService = {
     getAbidings: vi.fn(),
-    getAbidingsByHashtags: vi.fn(),
     getAbidingById: vi.fn(),
     getAbidingsByUserId: vi.fn(),
     patchAbiding: vi.fn(),
@@ -54,7 +53,6 @@ describe("AbidingsController id params (over HTTP)", () => {
     abidingService.deleteAbiding.mockResolvedValue(undefined);
     abidingService.getAbidingsByUserId.mockResolvedValue({ items: [], total: 0 });
     abidingService.getAbidings.mockResolvedValue({ items: [], total: 0 });
-    abidingService.getAbidingsByHashtags.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
@@ -174,14 +172,17 @@ describe("AbidingsController id params (over HTTP)", () => {
 
       expect(abidingService.getAbidings).toHaveBeenCalledWith(
         { limit: 10, page: 1 },
-        { userId: 3 },
+        { userId: 3, hashtags: [] },
       );
     });
 
     it("passes a limit and page through as numbers", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3&limit=5&page=2").expect(200);
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, { userId: 3 });
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 5, page: 2 },
+        { userId: 3, hashtags: [] },
+      );
     });
 
     it("passes startDate and endDate through as strings", async () => {
@@ -191,7 +192,7 @@ describe("AbidingsController id params (over HTTP)", () => {
 
       expect(abidingService.getAbidings).toHaveBeenCalledWith(
         { limit: 10, page: 1 },
-        { startDate: "2026-10-01T00:00:00Z", endDate: "2026-10-08T00:00:00Z" },
+        { startDate: "2026-10-01T00:00:00Z", endDate: "2026-10-08T00:00:00Z", hashtags: [] },
       );
     });
 
@@ -239,7 +240,7 @@ describe("AbidingsController id params (over HTTP)", () => {
         .get(`/abidings?hashtag=${tags(10)}`)
         .expect(200);
 
-      expect(abidingService.getAbidingsByHashtags.mock.calls[0][0]).toHaveLength(10);
+      expect(abidingService.getAbidings.mock.calls[0][1].hashtags).toHaveLength(10);
     });
 
     it("rejects 11 tags with 400", async () => {
@@ -247,7 +248,7 @@ describe("AbidingsController id params (over HTTP)", () => {
         .get(`/abidings?hashtag=${tags(11)}`)
         .expect(400);
 
-      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
     });
 
     // Empty parts are dropped before the tags are counted.
