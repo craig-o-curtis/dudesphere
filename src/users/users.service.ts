@@ -37,6 +37,9 @@ export class UsersService {
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
+    // how does this know to get all users on this.usersRepository?
+    // Answer: it calls findAndCount internally in paginatePgQuery
+    //
     const { items, total } = await this.paginationProvider.paginatePgQuery(
       pageRequest,
       this.usersRepository,
