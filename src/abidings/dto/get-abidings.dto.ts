@@ -2,6 +2,7 @@ import { IntersectionType } from "@nestjs/mapped-types";
 import { IsOptional, IsString, Min } from "class-validator";
 
 import { IntFromDigits } from "../../shared/decorators/int-from-digits.decorator.js";
+import { IsUtcDateTime } from "../../shared/decorators/is-utc-date-time.decorator.js";
 import { MaxCommaSeparated } from "../../shared/decorators/max-comma-separated.decorator.js";
 import { PaginationQueryDto } from "../../shared/dto/pagination-query.dto.js";
 import { MAX_TAGS } from "../../shared/utils/hashtag.js";
@@ -33,6 +34,16 @@ class GetAbidingsBaseDto {
   @IsString()
   @MaxCommaSeparated(MAX_TAGS)
   hashtag?: string;
+
+  // UTC instants such as 2026-10-01T00:00:00Z, kept as strings. See
+  // @IsUtcDateTime for the one shape it accepts.
+  @IsOptional()
+  @IsUtcDateTime()
+  startDate?: string;
+
+  @IsOptional()
+  @IsUtcDateTime()
+  endDate?: string;
 }
 
 // limit and page come from PaginationQueryDto, with their defaults and their

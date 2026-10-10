@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
+import { isAfterUtc } from "@northguild/gmt";
 import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
@@ -18,6 +19,14 @@ import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
+/** The filters every list of abidings takes. Each one is optional. */
+export interface AbidingFilters {
+  userId?: number;
+  // UTC instants. startDate is included in the range and endDate is not.
+  startDate?: string;
+  endDate?: string;
+}
+
 @Injectable()
 export class AbidingsService {
   constructor(
@@ -25,14 +34,11 @@ export class AbidingsService {
     private readonly hashtagsService: HashtagsService,
   ) {}
 
-  async getAbidings(pageRequest: PageRequest, userId?: number): Promise<Page<AbidingResponseDto>> {
-    // deletedAt: null hides abidings of soft-deleted users
-    const query: QueryFilter<AbidingDocument> = { deletedAt: null };
-    if (userId) {
-      query.userId = userId;
-    }
-
-    return this.findPage(query, pageRequest);
+  async getAbidings(
+    pageRequest: PageRequest,
+    filters: AbidingFilters = {},
+  ): Promise<Page<AbidingResponseDto>> {
+    return this.findPage(this.sharedFilter(filters), pageRequest);
   }
 
   async getAbidingById(id: string): Promise<AbidingResponseDto> {
@@ -50,12 +56,15 @@ export class AbidingsService {
     return this.findPage({ userId, deletedAt: null }, pageRequest);
   }
 
-  // One tag. userId narrows to that author's abidings, same as getAbidings.
+  // One tag. The filters narrow the list the same way they do in getAbidings.
   async getAbidingsByHashtag(
     hashtag: string,
     pageRequest: PageRequest,
-    userId?: number,
+    filters: AbidingFilters = {},
   ): Promise<Page<AbidingResponseDto>> {
+    // First, so a bad date range is a 400 whatever the tag is.
+    const query = this.sharedFilter(filters);
+
     // Normalized here, not in the controller, so any other caller gets the
     // same rule applied — see src/shared/utils/hashtag.ts.
     const normalized = normalizeHashtag(hashtag);
@@ -66,21 +75,19 @@ export class AbidingsService {
       return { items: [], total: 0 };
     }
 
-    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: normalized };
-    if (userId) {
-      query.userId = userId;
-    }
-
-    return this.findPage(query, pageRequest);
+    return this.findPage({ ...query, hashtags: normalized }, pageRequest);
   }
 
   // Several tags, matched with OR: an abiding needs only one of them.
-  // userId narrows to that author's abidings, same as getAbidings.
+  // The filters narrow the list the same way they do in getAbidings.
   async getAbidingsByHashtags(
     hashtags: string[],
     pageRequest: PageRequest,
-    userId?: number,
+    filters: AbidingFilters = {},
   ): Promise<Page<AbidingResponseDto>> {
+    // First, so a bad date range is a 400 whatever the tags are.
+    const query = this.sharedFilter(filters);
+
     const normalized = [
       ...new Set(
         hashtags.map((tag) => normalizeHashtag(tag)).filter((tag): tag is string => !!tag),
@@ -99,12 +106,7 @@ export class AbidingsService {
     // That holds for up to 200 tags. Past that Mongo gives up on merging and
     // sorts every match in memory. GetAbidingsDto refuses more than
     // MAX_TAGS, so a request never gets near it.
-    const query: QueryFilter<AbidingDocument> = { deletedAt: null, hashtags: { $in: normalized } };
-    if (userId) {
-      query.userId = userId;
-    }
-
-    return this.findPage(query, pageRequest);
+    return this.findPage({ ...query, hashtags: { $in: normalized } }, pageRequest);
   }
 
   // The author is the caller, taken from the verified token. It was previously
@@ -290,5 +292,33 @@ export class AbidingsService {
       replyToId: abiding.replyToId ?? undefined,
       hashtags: abiding.hashtags ?? [],
     });
+  }
+
+  // The part of a filter every list shares: live abidings only, one author
+  // if asked for, and a date range if asked for.
+  private sharedFilter({
+    userId,
+    startDate,
+    endDate,
+  }: AbidingFilters): QueryFilter<AbidingDocument> {
+    if (startDate && endDate && isAfterUtc(startDate, endDate)) {
+      throw new BadRequestException("startDate must not be after endDate");
+    }
+
+    // deletedAt: null hides abidings of soft-deleted users
+    const filter: QueryFilter<AbidingDocument> = { deletedAt: null };
+    if (userId) {
+      filter.userId = userId;
+    }
+    // startDate is included and endDate is not, so two ranges placed end to
+    // start never share an abiding. The values stay strings: Mongoose casts
+    // them to the date type createdAt is stored as.
+    if (startDate || endDate) {
+      filter.createdAt = {
+        ...(startDate ? { $gte: startDate } : {}),
+        ...(endDate ? { $lt: endDate } : {}),
+      };
+    }
+    return filter;
   }
 }

@@ -154,7 +154,7 @@ describe("AbidingsController", () => {
 
       const result = await controller.getAbidings({ limit: 5, page: 2 });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, undefined);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, {});
       expect(result.meta).toEqual({
         itemsPerPage: 5,
         totalItems: 12,
@@ -179,12 +179,26 @@ describe("AbidingsController", () => {
       expect(result.links.next).toBe("/abidings?userId=3&hashtag=%23sunday%2Cdude&limit=10&page=2");
     });
 
+    it("passes the dates to the service and keeps them in the links", async () => {
+      abidingService.getAbidings.mockResolvedValue(pageOf([], 30));
+      usersService.getUsersByIds.mockResolvedValue([]);
+      const startDate = "2026-10-01T00:00:00Z";
+      const endDate = "2026-10-08T00:00:00Z";
+
+      const result = await controller.getAbidings({ ...firstPage, startDate, endDate });
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, { startDate, endDate });
+      expect(result.links.next).toBe(
+        "/abidings?startDate=2026-10-01T00%3A00%3A00Z&endDate=2026-10-08T00%3A00%3A00Z&limit=10&page=2",
+      );
+    });
+
     it("calls getAbidings, not a hashtag method, when no tag is given", async () => {
       abidingService.getAbidings.mockResolvedValue(pageOf([]));
 
       await controller.getAbidings({ ...firstPage });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, undefined);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {});
       expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
     });
@@ -196,7 +210,7 @@ describe("AbidingsController", () => {
 
       const result = await controller.getAbidings({ ...firstPage, hashtag: " , , " });
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, undefined);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(firstPage, {});
       expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
       // The list was not filtered, so its links say so too.
@@ -208,11 +222,7 @@ describe("AbidingsController", () => {
 
       await controller.getAbidings({ ...firstPage, hashtag: "sunday" });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith(
-        "sunday",
-        firstPage,
-        undefined,
-      );
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, {});
       expect(abidingService.getAbidings).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
     });
@@ -225,7 +235,7 @@ describe("AbidingsController", () => {
       expect(abidingService.getAbidingsByHashtags).toHaveBeenCalledWith(
         ["sunday", "dude"],
         firstPage,
-        undefined,
+        {},
       );
       expect(abidingService.getAbidings).not.toHaveBeenCalled();
       expect(abidingService.getAbidingsByHashtag).not.toHaveBeenCalled();
@@ -238,7 +248,9 @@ describe("AbidingsController", () => {
       // controller no longer converts it by hand.
       await controller.getAbidings({ ...firstPage, hashtag: "sunday", userId: 3 });
 
-      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, 3);
+      expect(abidingService.getAbidingsByHashtag).toHaveBeenCalledWith("sunday", firstPage, {
+        userId: 3,
+      });
     });
   });
 
