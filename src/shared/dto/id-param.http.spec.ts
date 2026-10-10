@@ -20,6 +20,7 @@ import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
+import { PaginationProvider } from "../pagination/pagination.provider.js";
 import { PG_INT_MAX } from "./id-param.dto.js";
 
 // IdParamDto is enforced by the global ValidationPipe, which only runs in the
@@ -43,7 +44,11 @@ describe("IdParamDto (over HTTP)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [{ provide: UsersService, useValue: usersService }],
+      providers: [
+        { provide: UsersService, useValue: usersService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();

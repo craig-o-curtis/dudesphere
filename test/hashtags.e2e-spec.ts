@@ -8,7 +8,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import type { PaginatedResponse } from "./../src/shared/dto/paginated-response.js";
+import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
@@ -46,7 +46,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     let next: string | null = "/hashtags?limit=100";
     while (next) {
       const page = await request(app.getHttpServer()).get(next).expect(200);
-      const body = page.body as PaginatedResponse<{ slug: string }>;
+      const body = page.body as Paginated<{ slug: string }>;
       slugs.push(...body.data.map((hashtag) => hashtag.slug));
       next = body.links.next;
     }
@@ -203,7 +203,7 @@ describe("Hashtag delete and restore (e2e)", () => {
 
       // The slug is unique to this run, so the total is exact even on a
       // database other suites are writing to.
-      const body = filtered.body as PaginatedResponse<{ hashtags: string[] }>;
+      const body = filtered.body as Paginated<{ hashtags: string[] }>;
       expect(body.data).toHaveLength(1);
       expect(body.meta.totalItems).toBe(1);
       expect(body.data[0].hashtags).toContain(slug);
@@ -229,7 +229,7 @@ describe("Hashtag delete and restore (e2e)", () => {
         .get(`/abidings?hashtag=${slug}`)
         .expect(200);
 
-      const body = filtered.body as PaginatedResponse<unknown>;
+      const body = filtered.body as Paginated<unknown>;
       expect(body.data).toHaveLength(2);
       expect(body.meta.totalItems).toBe(2);
     });

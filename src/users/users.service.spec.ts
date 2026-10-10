@@ -7,6 +7,7 @@ import { UserAbidingsService } from "../abidings/user-abidings.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { User } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
@@ -65,6 +66,8 @@ describe("UsersService", () => {
         { provide: ProfilesService, useValue: profilesService },
         { provide: UserAbidingsService, useValue: userAbidingsService },
         { provide: HashingProvider, useValue: hashingProvider },
+        // The real one. It has no dependencies, and getUsers is tested through it.
+        PaginationProvider,
       ],
     }).compile();
 
