@@ -12,12 +12,13 @@ import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
-import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { ErrorCode } from "../shared/error-codes.js";
 import {
   type TakenField,
   ValueTakenException,
 } from "../shared/exceptions/value-taken.exception.js";
+import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -32,17 +33,20 @@ export class UsersService {
     private readonly profilesService: ProfilesService,
     private readonly userAbidingsService: UserAbidingsService,
     private readonly hashingProvider: HashingProvider,
+    private readonly paginationProvider: PaginationProvider,
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
-    const [users, total] = await this.usersRepository.findAndCount({
-      // A fixed order. Without one Postgres may return rows in any order, so
-      // two pages of the same list could repeat a user or skip one.
-      order: { id: "ASC" },
-      skip: toSkip(pageRequest),
-      take: pageRequest.limit,
-    });
-    return { items: users.map((user) => this.toResponseDto(user)), total };
+    const { items, total } = await this.paginationProvider.paginateQuery(
+      pageRequest,
+      this.usersRepository,
+      {
+        // A fixed order. Without one Postgres may return rows in any order, so
+        // two pages of the same list could repeat a user or skip one.
+        order: { id: "ASC" },
+      },
+    );
+    return { items: items.map((user) => this.toResponseDto(user)), total };
   }
 
   async getMyUser(userId: number): Promise<UserResponseDto> {

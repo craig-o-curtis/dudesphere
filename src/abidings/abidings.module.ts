@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AbidingSeedService } from "../database/seeds/abiding.seed.js";
 import { HashtagBackfillService } from "../database/seeds/hashtag-backfill.seed.js";
 import { HashtagsModule } from "../hashtags/hashtags.module.js";
+import { PaginationModule } from "../shared/pagination/pagination.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
@@ -15,6 +16,6 @@ import { UserAbidingsModule } from "./user-abidings.module.js";
 @Module({
   controllers: [AbidingsController],
   providers: [AbidingsService, AbidingSeedService, HashtagBackfillService],
-  imports: [UsersModule, UserAbidingsModule, HashtagsModule],
+  imports: [UsersModule, UserAbidingsModule, HashtagsModule, PaginationModule],
 })
 export class AbidingsModule {}

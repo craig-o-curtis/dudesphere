@@ -17,7 +17,7 @@ import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../test/listen-on-loopback.js";
 import { configureApp } from "../app-setup.js";
-import { UsersService } from "../users/users.service.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -35,32 +35,28 @@ describe("AbidingsController id params (over HTTP)", () => {
 
   const abidingService = {
     getAbidings: vi.fn(),
-    getAbidingsByHashtags: vi.fn(),
     getAbidingById: vi.fn(),
     getAbidingsByUserId: vi.fn(),
     patchAbiding: vi.fn(),
     deleteAbiding: vi.fn(),
   };
 
-  const usersService = { getUsersByIds: vi.fn() };
-
   const VALID_ID = "6ac543e3d91134719299fe49";
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "walter" }]);
     abidingService.getAbidingById.mockResolvedValue({ id: VALID_ID, userId: 1, message: "hi" });
     abidingService.patchAbiding.mockResolvedValue({ id: VALID_ID, userId: 1, message: "edited" });
     abidingService.deleteAbiding.mockResolvedValue(undefined);
     abidingService.getAbidingsByUserId.mockResolvedValue({ items: [], total: 0 });
     abidingService.getAbidings.mockResolvedValue({ items: [], total: 0 });
-    abidingService.getAbidingsByHashtags.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
       providers: [
         { provide: AbidingsService, useValue: abidingService },
-        { provide: UsersService, useValue: usersService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
       ],
     }).compile();
 
@@ -165,20 +161,49 @@ describe("AbidingsController id params (over HTTP)", () => {
     expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(1, { limit: 5, page: 2 });
   });
 
-  // ListAbidingsQueryDto extends PaginationQueryDto. This checks the
-  // inherited fields keep their defaults, their conversion and their bounds
-  // next to the route's own filter.
+  // GetAbidingsDto joins PaginationQueryDto to the route's own filters. This
+  // checks limit and page keep their defaults, their conversion and their
+  // bounds next to those filters.
   describe("GET /abidings takes limit and page alongside its filters", () => {
     it("defaults to limit 10 and page 1", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3").expect(200);
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 10, page: 1 }, 3);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 10, page: 1 },
+        { userId: 3, hashtags: [] },
+      );
     });
 
     it("passes a limit and page through as numbers", async () => {
       await request(app.getHttpServer()).get("/abidings?userId=3&limit=5&page=2").expect(200);
 
-      expect(abidingService.getAbidings).toHaveBeenCalledWith({ limit: 5, page: 2 }, 3);
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 5, page: 2 },
+        { userId: 3, hashtags: [] },
+      );
+    });
+
+    it("passes startDate and endDate through as strings", async () => {
+      await request(app.getHttpServer())
+        .get("/abidings?startDate=2026-10-01T00:00:00Z&endDate=2026-10-08T00:00:00Z")
+        .expect(200);
+
+      expect(abidingService.getAbidings).toHaveBeenCalledWith(
+        { limit: 10, page: 1 },
+        { startDate: "2026-10-01T00:00:00Z", endDate: "2026-10-08T00:00:00Z", hashtags: [] },
+      );
+    });
+
+    // Only a full UTC instant passes: see @IsUtcDateTime.
+    it.each([
+      "startDate=2026-10-01",
+      "startDate=2026-02-30T00:00:00Z",
+      "endDate=2026-10-01T00:00:00%2B03:00",
+      "endDate=yesterday",
+    ])("rejects ?%s with 400", async (query) => {
+      await request(app.getHttpServer()).get(`/abidings?${query}`).expect(400);
+
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
     });
 
     // Number() reads each of these as a number. %2B is an encoded "+".
@@ -213,7 +238,7 @@ describe("AbidingsController id params (over HTTP)", () => {
         .get(`/abidings?hashtag=${tags(10)}`)
         .expect(200);
 
-      expect(abidingService.getAbidingsByHashtags.mock.calls[0][0]).toHaveLength(10);
+      expect(abidingService.getAbidings.mock.calls[0][1].hashtags).toHaveLength(10);
     });
 
     it("rejects 11 tags with 400", async () => {
@@ -221,7 +246,7 @@ describe("AbidingsController id params (over HTTP)", () => {
         .get(`/abidings?hashtag=${tags(11)}`)
         .expect(400);
 
-      expect(abidingService.getAbidingsByHashtags).not.toHaveBeenCalled();
+      expect(abidingService.getAbidings).not.toHaveBeenCalled();
     });
 
     // Empty parts are dropped before the tags are counted.

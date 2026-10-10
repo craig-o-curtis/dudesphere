@@ -19,6 +19,7 @@ import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
 import { RolesGuard } from "./shared/guards/roles.guard.js";
 import { REQUEST_TIMEOUT_MS } from "./shared/interceptors/timeout.interceptor.js";
+import { PaginationModule } from "./shared/pagination/pagination.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -92,6 +93,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AuthModule,
     ProfilesModule,
     HashtagsModule,
+    PaginationModule,
   ],
   controllers: [AppController],
   providers: [

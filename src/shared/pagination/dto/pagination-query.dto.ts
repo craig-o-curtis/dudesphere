@@ -1,6 +1,6 @@
 import { IsOptional, Max, Min } from "class-validator";
 
-import { IntFromDigits } from "../decorators/int-from-digits.decorator.js";
+import { IntFromDigits } from "../../decorators/int-from-digits.decorator.js";
 
 export const DEFAULT_LIMIT = 10;
 // Caps how much of a table or collection one request can read.
@@ -12,8 +12,9 @@ export const MAX_PAGE = 1_000_000;
 /**
  * The `?limit=&page=` query on every list route.
  *
- * A route with filters of its own extends this class. It must not redeclare
- * `limit` or `page`: a redeclared field loses its default and its decorators.
+ * A route with filters of its own joins this class to its own DTO with
+ * IntersectionType, as GetAbidingsDto does. It must not redeclare `limit` or
+ * `page`: a redeclared field loses its default and its decorators.
  */
 export class PaginationQueryDto {
   // Query params arrive as strings. The @IntFromDigits here converts the

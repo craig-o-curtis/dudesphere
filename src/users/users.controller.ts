@@ -5,8 +5,9 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
 import { IdParamDto } from "../shared/dto/id-param.dto.js";
-import { type PaginatedResponse, toPaginatedResponse } from "../shared/dto/paginated-response.js";
-import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
+import type { Paginated } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -16,7 +17,10 @@ import { UsersService } from "./users.service.js";
 
 @Controller("users")
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly paginationProvider: PaginationProvider,
+  ) {}
 
   // Admin only. This route returned every user's email address to anyone who
   // asked, with no token, which made it a mass harvest. A single record stays
@@ -24,9 +28,9 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Get()
   // @HttpCode(200)
-  async getUsers(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<UserResponseDto>> {
+  async getUsers(@Query() query: PaginationQueryDto): Promise<Paginated<UserResponseDto>> {
     const users = await this.usersService.getUsers(query);
-    return toPaginatedResponse(users, query, "/users");
+    return this.paginationProvider.toResponse(users, query, "/users");
   }
 
   @Get("me")

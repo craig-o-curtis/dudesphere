@@ -5,64 +5,52 @@ import type { Types as MongooseTypes } from "mongoose";
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
-import {
-  type PageRequest,
-  type PaginatedResponse,
-  toPaginatedResponse,
-} from "../shared/dto/paginated-response.js";
-import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
+import type { Paginated, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
-import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
-import { ListAbidingsQueryDto } from "./dto/list-abidings-query.dto.js";
+import { GetAbidingsDto } from "./dto/get-abidings.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
+// Every route here reads the request, calls AbidingsService and returns what
+// it gets. The service returns each abiding as an AbidingResponseDto with its
+// author's username already on it. A list route also asks PaginationProvider
+// to wrap the page in the response body, with links for this route's path.
 @Controller("abidings")
 export class AbidingsController {
   constructor(
-    private readonly AbidingsService: AbidingsService,
-    private readonly usersService: UsersService,
+    private readonly abidingsService: AbidingsService,
+    private readonly paginationProvider: PaginationProvider,
   ) {}
 
   @Public()
   @Get()
-  public async getAbidings(
-    @Query() query: ListAbidingsQueryDto,
-  ): Promise<PaginatedResponse<AbidingResponseDto>> {
-    // Already a number: ListAbidingsQueryDto coerces and validates it, so an
-    // unusable value is a 400 before it reaches here.
-    const userId = query.userId;
-    // Only limit and page go to the service. The filters are passed by name.
+  public async getAbidings(@Query() query: GetAbidingsDto): Promise<Paginated<AbidingResponseDto>> {
+    // Already checked: GetAbidingsDto converts userId to a number and
+    // validates the dates, so an unusable value is a 400 before it reaches
+    // here.
+    const { userId, startDate, endDate } = query;
+    // Only limit and page go to the service as the page. The rest are filters.
     const pageRequest: PageRequest = { limit: query.limit, page: query.page };
-    // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
-    // tag still goes through the dedicated single-tag call rather than the
-    // multi-tag one, since that's the call the rest of the service (and any
-    // future caller) should reach for when it only has one tag.
+    // Reading a comma-separated query param is this layer's job. What the
+    // tags mean, and which query they need, is the service's.
     const tags = query.hashtag ? splitCommaSeparated(query.hashtag) : [];
 
-    const abidings =
-      tags.length === 0
-        ? await this.AbidingsService.getAbidings(pageRequest, userId)
-        : tags.length === 1
-          ? await this.AbidingsService.getAbidingsByHashtag(tags[0], pageRequest, userId)
-          : await this.AbidingsService.getAbidingsByHashtags(tags, pageRequest, userId);
-    // The authors of this page only, so at most one id per abiding on it.
-    const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
-    const users = await this.usersService.getUsersByIds(authorIds);
-    const usernames = new Map(users.map((u) => [u.id, u.username]));
-
-    // Mapped to response instances first, wrapped second. toPaginatedResponse
-    // passes its items through, and the serializer needs each one to be a
-    // real AbidingResponseDto — see toResponse below.
-    const items = abidings.items.map((a) =>
-      this.toResponse(a, usernames.get(a.userId) || "Unknown"),
-    );
+    const abidings = await this.abidingsService.getAbidings(pageRequest, {
+      userId,
+      startDate,
+      endDate,
+      hashtags: tags,
+    });
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
-    return toPaginatedResponse({ items, total: abidings.total }, pageRequest, "/abidings", {
+    return this.paginationProvider.toResponse(abidings, pageRequest, "/abidings", {
       userId,
+      startDate,
+      endDate,
       hashtag: tags.length > 0 ? tags.join(",") : undefined,
     });
   }
@@ -84,10 +72,9 @@ export class AbidingsController {
   public async getMyAbidings(
     @CurrentUser() user: AuthUser,
     @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResponse<AbidingResponseDto>> {
-    const myAbidings = await this.AbidingsService.getAbidingsByUserId(user.userId, query);
-    const items = myAbidings.items.map((a) => this.toResponse(a, user.username));
-    return toPaginatedResponse({ items, total: myAbidings.total }, query, "/abidings/me");
+  ): Promise<Paginated<AbidingResponseDto>> {
+    const myAbidings = await this.abidingsService.getAbidingsByUserId(user.userId, query);
+    return this.paginationProvider.toResponse(myAbidings, query, "/abidings/me");
   }
 
   @Public()
@@ -99,9 +86,7 @@ export class AbidingsController {
   public async getAbidingById(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
   ): Promise<AbidingResponseDto> {
-    const abiding = await this.AbidingsService.getAbidingById(id.toString());
-    const [author] = await this.usersService.getUsersByIds([abiding.userId]);
-    return this.toResponse(abiding, author?.username || "Unknown");
+    return this.abidingsService.getAbidingById(id.toString());
   }
 
   @Post()
@@ -109,14 +94,8 @@ export class AbidingsController {
     @Body() createAbidingDto: CreateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // Looked up before the write, not after. A token proves who logged in, not
-    // that the account still exists: it stays valid until it expires, even
-    // after the user is deleted. getMyUser throws a 404 for a user who is
-    // deleted or was never there, so no abiding is written for an author
-    // nobody can find.
-    const author = await this.usersService.getMyUser(user.userId);
-    const newAbiding = await this.AbidingsService.createAbiding(createAbidingDto, user);
-    return this.toResponse(newAbiding, author.username);
+    // The service also checks that the author still exists.
+    return this.abidingsService.createAbiding(createAbidingDto, user);
   }
 
   // Author or admin. The service enforces it, in the same filter as the write.
@@ -126,13 +105,7 @@ export class AbidingsController {
     @Body() updateAbidingDto: UpdateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const updatedAbiding = await this.AbidingsService.patchAbiding(
-      id.toString(),
-      updateAbidingDto,
-      user,
-    );
-    const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
-    return this.toResponse(updatedAbiding, author?.username || "Unknown");
+    return this.abidingsService.patchAbiding(id.toString(), updateAbidingDto, user);
   }
 
   // Author or admin, same rule as PATCH above.
@@ -142,22 +115,6 @@ export class AbidingsController {
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
-    await this.AbidingsService.deleteAbiding(id.toString(), user);
-  }
-
-  // The one place an abiding becomes a response. Everything the service
-  // returned is passed on, so a field added there reaches the caller with no
-  // change here. Five routes each used to list the fields by hand, and two
-  // fields, imageUrl and updatedAt, were left off all five.
-  //
-  // Only the username is added. It is the author's current one, read from
-  // Postgres, because the abiding itself lives in Mongo.
-  private toResponse(abiding: AbidingResponseDto, username: string): AbidingResponseDto {
-    // The constructor copies every field across. A real instance is needed,
-    // not a copy made with spread: ClassSerializerInterceptor only applies
-    // the DTO's @Expose and @Transform rules to an instance of the class.
-    const response = new AbidingResponseDto(abiding);
-    response.username = username;
-    return response;
+    await this.abidingsService.deleteAbiding(id.toString(), user);
   }
 }
