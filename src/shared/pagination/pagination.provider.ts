@@ -1,3 +1,18 @@
+// WHY A PROVIDER AND NOT A SERVICE
+//
+// In Nest the two are the same thing. A provider is any class Nest can
+// inject: it is marked @Injectable() and listed in a module's `providers`.
+// A service is a provider too. "Service" is only the name given to the
+// provider that holds one feature's logic and sits behind that feature's
+// controller, as UsersService sits behind UsersController.
+//
+// This class is not that. It belongs to no feature and has no controller of
+// its own. It is a tool every list route shares, so it takes the general
+// name, as HashingProvider does in src/hashing. The NestJS course this
+// project follows names it PaginationProvider too.
+//
+// Calling it PaginationService would change nothing about how it works.
+
 import { Injectable } from "@nestjs/common";
 import type { HydratedDocument, Model, QueryFilter } from "mongoose";
 import type { FindManyOptions, FindOptionsOrder, ObjectLiteral, Repository } from "typeorm";
