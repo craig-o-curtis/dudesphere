@@ -60,12 +60,15 @@ describe("Timestamps (e2e)", () => {
     const name = randomUUID().replaceAll("-", "").slice(0, 8);
     const credentials = { email: `e2e-${name}@example.com`, password: "secret123" };
     const created = await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send({ ...credentials, username: `e2e-${name}` })
       .expect(201);
     user = created.body as { createdAt: string; updatedAt: string };
 
-    const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send(credentials)
+      .expect(201);
     token = (login.body as { token: string }).token;
   });
 
