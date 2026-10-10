@@ -16,7 +16,7 @@ import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
-import { ListAbidingsQueryDto } from "./dto/list-abidings-query.dto.js";
+import { GetAbidingsDto } from "./dto/get-abidings.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
 @Controller("abidings")
@@ -29,14 +29,14 @@ export class AbidingsController {
   @Public()
   @Get()
   public async getAbidings(
-    @Query() query: ListAbidingsQueryDto,
+    @Query() query: GetAbidingsDto,
   ): Promise<PaginatedResponse<AbidingResponseDto>> {
-    // Already a number: ListAbidingsQueryDto coerces and validates it, so an
+    // Already a number: GetAbidingsDto coerces and validates it, so an
     // unusable value is a 400 before it reaches here.
     const userId = query.userId;
     // Only limit and page go to the service. The filters are passed by name.
     const pageRequest: PageRequest = { limit: query.limit, page: query.page };
-    // Comma-separated, matched with OR — see ListAbidingsQueryDto. A single
+    // Comma-separated, matched with OR — see GetAbidingsDto. A single
     // tag still goes through the dedicated single-tag call rather than the
     // multi-tag one, since that's the call the rest of the service (and any
     // future caller) should reach for when it only has one tag.

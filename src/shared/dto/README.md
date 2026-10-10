@@ -103,5 +103,6 @@ runs that pair for every Mongo list; pass it the model, the filter and a sort.
 - Each item in `data` must be an instance of its response DTO, not a plain
   copy. The serializer finds `@Exclude` by looking at the item's class.
 
-A route with filters of its own extends the query class and does not redeclare
-`limit` or `page`: see `src/abidings/dto/list-abidings-query.dto.ts`.
+A route with filters of its own joins the query class to its own DTO with
+`IntersectionType` and does not redeclare `limit` or `page`: see
+`src/abidings/dto/get-abidings.dto.ts`.
