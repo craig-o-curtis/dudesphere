@@ -4,7 +4,7 @@ import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { Roles } from "../shared/decorators/roles.decorator.js";
-import { IdParamDto } from "../shared/dto/id-param.dto.js";
+import { PgIdParamDto } from "../shared/dto/pg-id-param.dto.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -40,7 +40,7 @@ export class UsersController {
 
   @Public()
   @Get(":id")
-  getUserById(@Param() { id }: IdParamDto): Promise<UserResponseDto> {
+  getUserById(@Param() { id }: PgIdParamDto): Promise<UserResponseDto> {
     return this.usersService.getUserById(id);
   }
 
@@ -74,7 +74,7 @@ export class UsersController {
   @Patch(":id")
   // @HttpCode(200)
   updateUser(
-    @Param() { id }: IdParamDto,
+    @Param() { id }: PgIdParamDto,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updateUser(id, updateUserDto);
@@ -104,7 +104,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
-  deleteUser(@Param() { id }: IdParamDto): Promise<void> {
+  deleteUser(@Param() { id }: PgIdParamDto): Promise<void> {
     return this.usersService.deleteUser(id);
   }
 
@@ -113,7 +113,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Post(":id/restore")
   @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
-  restoreUser(@Param() { id }: IdParamDto): Promise<UserResponseDto> {
+  restoreUser(@Param() { id }: PgIdParamDto): Promise<UserResponseDto> {
     return this.usersService.restoreUser(id);
   }
 }

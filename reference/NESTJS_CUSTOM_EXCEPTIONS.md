@@ -138,7 +138,7 @@ the only thing to hand over is the error that set them off.
 **EXISTING FILE:** the Postgres filter, when the connection was lost.
 
 ```ts
-// src/shared/filters/query-failed.filter.ts
+// src/shared/filters/pg-error.filter.ts
 super.catch(new DatabaseUnavailableException(exception), host);
 ```
 
@@ -195,7 +195,7 @@ throw new ValueTakenException(takenField(existing, createUserDto));
 does not know the field, so it passes none and gets the general answer.
 
 ```ts
-// src/shared/filters/query-failed.filter.ts
+// src/shared/filters/pg-error.filter.ts
 super.catch(new ValueTakenException(undefined, { cause: exception }), host);
 ```
 

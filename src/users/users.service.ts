@@ -178,7 +178,7 @@ export class UsersService {
     const { profile: _profile, ...userFields } = updateUserDto;
 
     // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
-    // that is not a QueryFailedError, so QueryFailedFilter lets it through as
+    // that is not a QueryFailedError, so PgErrorFilter lets it through as
     // a 500. Every field on UpdateUserDto is optional, so an empty body and a
     // profile-only body both land here.
     if (Object.keys(userFields).length === 0) {
@@ -229,7 +229,7 @@ export class UsersService {
     //
     // No try/catch here on purpose. Everything this throws already carries the
     // right status: the NotFoundException below, a ServiceUnavailableException
-    // from UserAbidingsService, or a QueryFailedError that QueryFailedFilter
+    // from UserAbidingsService, or a QueryFailedError that PgErrorFilter
     // turns into a 409. Catching and re-wrapping would flatten all three into
     // a 500 and throw the stack away.
     await this.dataSource.transaction(async (manager) => {

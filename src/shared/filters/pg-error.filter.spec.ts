@@ -7,9 +7,9 @@ import { InvalidValueException } from "../exceptions/invalid-value.exception.js"
 import { TimeLimitExceededException } from "../exceptions/time-limit-exceeded.exception.js";
 import { ValueTakenException } from "../exceptions/value-taken.exception.js";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
-import { QueryFailedFilter, UNIQUE_VIOLATION } from "./query-failed.filter.js";
+import { PgErrorFilter, UNIQUE_VIOLATION } from "./pg-error.filter.js";
 
-describe("QueryFailedFilter", () => {
+describe("PgErrorFilter", () => {
   // The request the filter names in its warnings.
   const request = {
     method: "PATCH",
@@ -48,7 +48,7 @@ describe("QueryFailedFilter", () => {
   });
 
   it("turns a unique violation into a 409 that hides the driver message", () => {
-    new QueryFailedFilter().catch(queryFailed(UNIQUE_VIOLATION), host);
+    new PgErrorFilter().catch(queryFailed(UNIQUE_VIOLATION), host);
 
     expect(baseCatch).toHaveBeenCalledTimes(1);
     const [passed, passedHost] = baseCatch.mock.calls[0];
@@ -67,7 +67,7 @@ describe("QueryFailedFilter", () => {
       new Error("Connection terminated unexpectedly"),
     );
 
-    new QueryFailedFilter().catch(exception, host);
+    new PgErrorFilter().catch(exception, host);
 
     const [passed] = baseCatch.mock.calls[0];
     expect(passed).toBeInstanceOf(DatabaseUnavailableException);
@@ -77,7 +77,7 @@ describe("QueryFailedFilter", () => {
 
   it("turns a Postgres shutdown into a 503", () => {
     // 57P01 is admin_shutdown.
-    new QueryFailedFilter().catch(queryFailed("57P01"), host);
+    new PgErrorFilter().catch(queryFailed("57P01"), host);
 
     const [passed] = baseCatch.mock.calls[0];
     expect(passed).toBeInstanceOf(DatabaseUnavailableException);
@@ -90,7 +90,7 @@ describe("QueryFailedFilter", () => {
     it("becomes the same 408 the request time limit gives", () => {
       const exception = queryFailed("57014", "canceling statement due to statement timeout");
 
-      new QueryFailedFilter().catch(exception, host);
+      new PgErrorFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
       expect(passed).toBeInstanceOf(TimeLimitExceededException);
@@ -102,7 +102,7 @@ describe("QueryFailedFilter", () => {
     });
 
     it("logs a warning that names the route, so the slow query can be found", () => {
-      new QueryFailedFilter().catch(queryFailed("57014"), host);
+      new PgErrorFilter().catch(queryFailed("57014"), host);
 
       expect(warn).toHaveBeenCalledWith(
         "PATCH /profiles/me for user 7 (request req-1): Postgres cancelled a query that ran " +
@@ -125,7 +125,7 @@ describe("QueryFailedFilter", () => {
     ])("turns %s (%s) into a 400 that hides the driver message", (code) => {
       const exception = queryFailed(code, 'invalid input syntax for type timestamp: "the value"');
 
-      new QueryFailedFilter().catch(exception, host);
+      new PgErrorFilter().catch(exception, host);
 
       const [passed] = baseCatch.mock.calls[0];
       expect(passed).toBeInstanceOf(InvalidValueException);
@@ -140,7 +140,7 @@ describe("QueryFailedFilter", () => {
     // Every hit on this net is a DTO rule that is missing. The warning has to
     // say which route, or nobody can find it.
     it("logs a warning that names the route, the user and the request id", () => {
-      new QueryFailedFilter().catch(queryFailed("22001", "value too long"), host);
+      new PgErrorFilter().catch(queryFailed("22001", "value too long"), host);
 
       expect(warn).toHaveBeenCalledWith(
         "PATCH /profiles/me for user 7 (request req-1): Postgres refused a value a DTO " +
@@ -165,7 +165,7 @@ describe("QueryFailedFilter", () => {
   ])("wraps %s (%s) in a plain 500 that keeps it as cause", (code) => {
     const exception = queryFailed(code);
 
-    new QueryFailedFilter().catch(exception, host);
+    new PgErrorFilter().catch(exception, host);
 
     expect(baseCatch).toHaveBeenCalledTimes(1);
     const [passed, passedHost] = baseCatch.mock.calls[0];

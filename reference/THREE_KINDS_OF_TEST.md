@@ -68,7 +68,7 @@ const module = await Test.createTestingModule({
 and a fake service.
 
 ```ts
-// src/shared/dto/id-param.http.spec.ts
+// src/shared/dto/pg-id-param.http.spec.ts
 const moduleFixture = await Test.createTestingModule({
   controllers: [UsersController],
   providers: [{ provide: UsersService, useValue: usersService }],
