@@ -141,6 +141,69 @@ db.abidings.updateMany({}, { $unset: { username: "" } });
 that only the seed ever wrote, and every response already read the current
 name from Postgres.
 
+### When you change an index
+
+Indexes are declared at the bottom of each schema file with
+`Schema.index(...)`. Mongoose builds any that are missing when the app starts.
+It never drops one. So after you change an index, the new one appears on the
+next start and the old one stays behind. An unused index does no harm to a
+read, but every write still updates it.
+
+List what is there:
+
+```js
+db.abidings.getIndexes();
+```
+
+Drop one by name:
+
+```js
+db.abidings.dropIndex("createdAt_-1");
+```
+
+The list routes sort by `{ createdAt: -1, _id: -1 }`, and four indexes were
+changed to end with those two keys. These are the four they replaced. Drop
+them once, in `mongosh` or Mongo Express, in any database that had them:
+
+```js
+db.abidings.dropIndex("createdAt_-1");
+db.abidings.dropIndex("userId_1_createdAt_-1");
+db.abidings.dropIndex("hashtags_1_createdAt_-1");
+db.abidings.dropIndex("userId_1_hashtags_1");
+```
+
+To check that a query reads from an index, ask Mongo for its plan. A `SORT`
+stage in the answer means it sorted in memory and the index did not help:
+
+```js
+db.abidings
+  .find({ deletedAt: null, userId: 1 })
+  .sort({ createdAt: -1, _id: -1 })
+  .limit(10)
+  .explain("executionStats");
+```
+
+A filter on several tags reads one sorted run of the index for each tag and
+merges them. That shows as `SORT_MERGE`, which is fine: it is not a sort in
+memory.
+
+```js
+db.abidings
+  .find({ deletedAt: null, hashtags: { $in: ["dude", "sunday"] } })
+  .sort({ createdAt: -1, _id: -1 })
+  .limit(10)
+  .explain("executionStats");
+```
+
+Mongo 8 merges up to 200 tags this way. At 201 the plan changes to a plain
+`SORT`. `GET /abidings` takes at most 10 tags, so no request gets there.
+
+A count is different. `countDocuments({ deletedAt: null })` reads every
+document, because no index holds `deletedAt`, and Mongo cannot answer a
+`null` match from an index alone. Every list request runs one for
+`meta.totalItems`. The comment on `findPage` in
+`src/abidings/abidings.service.ts` says why that is accepted.
+
 ## Seeds and Backfills
 
 ### Seed data
@@ -291,8 +354,13 @@ these rules leaves rows behind on every run.
   `test/listen-on-loopback.ts` explains how.
 - **Suites run in parallel, against one database.** Make every name random, and
   never assert on a count that another suite or your own dev data could change,
-  such as the length of `GET /abidings`. Use
+  such as `meta.totalItems` on `GET /abidings`. A count is safe once the list
+  is filtered by something only your suite made, such as its own user id. Use
   `randomUUID()`: the lint rules ban `Date.now()`.
+- **A list comes back one page at a time.** The row you are looking for may
+  not be on page 1 of the dev database. To check that a row is on a list, or
+  is not, follow `links.next` to the end, as `listEverySlug` does in
+  `test/hashtags.e2e-spec.ts`.
 - **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
   links its abidings to the e2e run, and no later run removes them. If that
   happens, delete the stranded abidings in Mongo Express.

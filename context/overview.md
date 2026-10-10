@@ -124,6 +124,11 @@ Costs accepted with this design:
 Every route needs a token unless it is marked public. A token comes from
 `POST /auth`.
 
+Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
+default 1). It answers with `data`, `meta` and `links`, where `links.next` is
+the next page or `null`. [src/shared/dto/README.md](../src/shared/dto/README.md)
+shows the full shape.
+
 ### Auth
 
 | Method | Endpoint | Access | Description                |
@@ -135,7 +140,7 @@ Every route needs a token unless it is marked public. A token comes from
 | Method | Endpoint             | Access | Description                             |
 | ------ | -------------------- | ------ | --------------------------------------- |
 | POST   | `/users`             | Public | Sign up. Creates the user and a profile |
-| GET    | `/users`             | Admin  | List users, paginated                   |
+| GET    | `/users`             | Admin  | List users, paginated, in id order      |
 | GET    | `/users/me`          | Token  | The caller's own user                   |
 | GET    | `/users/:id`         | Public | One user                                |
 | PATCH  | `/users/me`          | Token  | Update the caller's own user            |
@@ -157,25 +162,25 @@ Every route needs a token unless it is marked public. A token comes from
 
 ### Abidings (MongoDB)
 
-| Method | Endpoint              | Access          | Description                                        |
-| ------ | --------------------- | --------------- | -------------------------------------------------- |
-| GET    | `/abidings`           | Public          | List abidings                                      |
-| GET    | `/abidings?userId=X`  | Public          | Filter by author                                   |
-| GET    | `/abidings?hashtag=X` | Public          | Filter by tag. Several, comma-separated, match any |
-| GET    | `/abidings/me`        | Token           | The caller's own abidings                          |
-| GET    | `/abidings/:id`       | Public          | One abiding                                        |
-| POST   | `/abidings`           | Token           | Post an abiding, or a reply with `replyToId`       |
-| PATCH  | `/abidings/:id`       | Author or admin | Edit an abiding                                    |
-| DELETE | `/abidings/:id`       | Author or admin | Delete an abiding                                  |
+| Method | Endpoint              | Access          | Description                                         |
+| ------ | --------------------- | --------------- | --------------------------------------------------- |
+| GET    | `/abidings`           | Public          | List abidings, paginated, newest first              |
+| GET    | `/abidings?userId=X`  | Public          | Filter by author                                    |
+| GET    | `/abidings?hashtag=X` | Public          | Filter by tag. Up to 10, comma-separated, match any |
+| GET    | `/abidings/me`        | Token           | The caller's own abidings, paginated, newest first  |
+| GET    | `/abidings/:id`       | Public          | One abiding                                         |
+| POST   | `/abidings`           | Token           | Post an abiding, or a reply with `replyToId`        |
+| PATCH  | `/abidings/:id`       | Author or admin | Edit an abiding                                     |
+| DELETE | `/abidings/:id`       | Author or admin | Delete an abiding                                   |
 
 ### Hashtags (MongoDB)
 
-| Method | Endpoint                  | Access | Description                      |
-| ------ | ------------------------- | ------ | -------------------------------- |
-| GET    | `/hashtags`               | Public | Every live tag (dropdown source) |
-| GET    | `/hashtags/:slug`         | Public | One tag, or 404                  |
-| DELETE | `/hashtags/:slug`         | Admin  | Hide a tag (soft delete)         |
-| POST   | `/hashtags/:slug/restore` | Admin  | Bring a hidden tag back          |
+| Method | Endpoint                  | Access | Description                   |
+| ------ | ------------------------- | ------ | ----------------------------- |
+| GET    | `/hashtags`               | Public | Live tags, paginated, by slug |
+| GET    | `/hashtags/:slug`         | Public | One tag, or 404               |
+| DELETE | `/hashtags/:slug`         | Admin  | Hide a tag (soft delete)      |
+| POST   | `/hashtags/:slug/restore` | Admin  | Bring a hidden tag back       |
 
 ## Roles
 

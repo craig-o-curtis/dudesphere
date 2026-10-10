@@ -12,6 +12,7 @@ import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
+import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
 import { ErrorCode } from "../shared/error-codes.js";
 import {
   type TakenField,
@@ -33,14 +34,15 @@ export class UsersService {
     private readonly hashingProvider: HashingProvider,
   ) {}
 
-  async getUsers(limit: number = 10, page: number = 1): Promise<UserResponseDto[]> {
-    const pageSize = limit;
-    const pageNum = page;
-    const users = await this.usersRepository.find({
-      skip: (pageNum - 1) * pageSize,
-      take: pageSize,
+  async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
+    const [users, total] = await this.usersRepository.findAndCount({
+      // A fixed order. Without one Postgres may return rows in any order, so
+      // two pages of the same list could repeat a user or skip one.
+      order: { id: "ASC" },
+      skip: toSkip(pageRequest),
+      take: pageRequest.limit,
     });
-    return users.map((user) => this.toResponseDto(user));
+    return { items: users.map((user) => this.toResponseDto(user)), total };
   }
 
   async getMyUser(userId: number): Promise<UserResponseDto> {

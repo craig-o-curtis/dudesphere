@@ -10,16 +10,37 @@ import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { UserRole } from "../users/user.entity.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
+import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 
 describe("AbidingsService", () => {
   let service: AbidingsService;
 
   // Mongoose query methods return a Query, and the service calls .exec() on it.
   // create() is the exception: it returns a promise directly.
-  const queryOf = <T>(value: T) => ({ exec: vi.fn().mockResolvedValue(value) });
+  function queryOf<T>(value: T) {
+    return { exec: vi.fn().mockResolvedValue(value) };
+  }
+
+  // A list query is a chain: find().sort().skip().limit().exec(). Each step
+  // returns the same query, so a test can ask what any of them was called with.
+  function listQueryOf<T>(value: T) {
+    const query = {
+      sort: vi.fn(),
+      skip: vi.fn(),
+      limit: vi.fn(),
+      exec: vi.fn().mockResolvedValue(value),
+    };
+    query.sort.mockReturnValue(query);
+    query.skip.mockReturnValue(query);
+    query.limit.mockReturnValue(query);
+    return query;
+  }
+
+  const firstPage = { limit: 10, page: 1 };
 
   const abidingModel = {
     find: vi.fn(),
+    countDocuments: vi.fn(),
     findOne: vi.fn(),
     create: vi.fn(),
     findOneAndUpdate: vi.fn(),
@@ -45,7 +66,8 @@ describe("AbidingsService", () => {
     // resetAllMocks, not clearAllMocks: clearAllMocks keeps implementations, so
     // a mockResolvedValue set in one test leaks into the next.
     vi.resetAllMocks();
-    abidingModel.find.mockReturnValue(queryOf([]));
+    abidingModel.find.mockReturnValue(listQueryOf([]));
+    abidingModel.countDocuments.mockReturnValue(queryOf(0));
     // Default: the abiding exists, so a write that matched nothing reads as an
     // ownership refusal. Tests for a missing abiding override this with null.
     abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
@@ -93,25 +115,97 @@ describe("AbidingsService", () => {
     });
   });
 
+  // Every list method ends in the same private findPage, so the sort, the
+  // limit and the count are checked once here, through getAbidings.
+  describe("paging a list", () => {
+    it("sorts newest first, with _id to break ties on createdAt", async () => {
+      const query = listQueryOf([]);
+      abidingModel.find.mockReturnValue(query);
+
+      await service.getAbidings(firstPage);
+
+      expect(query.sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
+    });
+
+    it("reads one page: skips the earlier pages and stops at the limit", async () => {
+      const query = listQueryOf([]);
+      abidingModel.find.mockReturnValue(query);
+
+      await service.getAbidings({ limit: 5, page: 3 });
+
+      expect(query.skip).toHaveBeenCalledWith(10);
+      expect(query.limit).toHaveBeenCalledWith(5);
+    });
+
+    // The count has to use the filter the page used, or the total would
+    // describe a different list from the one the caller is paging through.
+    it("counts with the same filter it reads with", async () => {
+      await service.getAbidings(firstPage, 3);
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, userId: 3 });
+      expect(abidingModel.countDocuments).toHaveBeenCalledWith({ deletedAt: null, userId: 3 });
+    });
+
+    it("returns the page's abidings and the count of all of them", async () => {
+      const utcNow = getUtcNow();
+      const mockAbiding = {
+        _id: new mongoose.Types.ObjectId(),
+        userId: 1,
+        message: "hello",
+        createdAt: utcNow,
+        updatedAt: utcNow,
+      };
+      abidingModel.find.mockReturnValue(listQueryOf([mockAbiding]));
+      abidingModel.countDocuments.mockReturnValue(queryOf(41));
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items.map((abiding) => abiding.id)).toEqual([mockAbiding._id.toString()]);
+      expect(result.total).toBe(41);
+    });
+
+    // toPaginatedResponse passes items through, and the serializer applies
+    // the DTO's @Transform rules by looking at each item's class. An object
+    // literal has none.
+    it("returns real AbidingResponseDto instances", async () => {
+      abidingModel.find.mockReturnValue(
+        listQueryOf([{ _id: new mongoose.Types.ObjectId(), userId: 1, message: "hello" }]),
+      );
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items[0]).toBeInstanceOf(AbidingResponseDto);
+    });
+  });
+
+  describe("getAbidings", () => {
+    it("reads every abiding that is not deleted when given no user", async () => {
+      await service.getAbidings(firstPage);
+
+      expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null });
+    });
+  });
+
   describe("getAbidingsByUserId", () => {
     // deletedAt: null hides abidings of a soft-deleted user, same as
     // getAbidings does when it's given a userId.
     it("scopes the query to the user's abidings that are not deleted", async () => {
-      await service.getAbidingsByUserId(3);
+      await service.getAbidingsByUserId(3, firstPage);
 
       expect(abidingModel.find).toHaveBeenCalledWith({ userId: 3, deletedAt: null });
+      expect(abidingModel.countDocuments).toHaveBeenCalledWith({ userId: 3, deletedAt: null });
     });
   });
 
   describe("getAbidingsByHashtag", () => {
     it("normalizes the tag before querying", async () => {
-      await service.getAbidingsByHashtag("SUNDAY");
+      await service.getAbidingsByHashtag("SUNDAY", firstPage);
 
       expect(abidingModel.find).toHaveBeenCalledWith({ deletedAt: null, hashtags: "sunday" });
     });
 
     it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtag("sunday", 3);
+      await service.getAbidingsByHashtag("sunday", firstPage, 3);
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -120,17 +214,18 @@ describe("AbidingsService", () => {
       });
     });
 
-    it("returns an empty array for a tag that can't normalize, without querying", async () => {
-      const result = await service.getAbidingsByHashtag("###");
+    it("returns an empty page for a tag that can't normalize, without querying", async () => {
+      const result = await service.getAbidingsByHashtag("###", firstPage);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ items: [], total: 0 });
       expect(abidingModel.find).not.toHaveBeenCalled();
+      expect(abidingModel.countDocuments).not.toHaveBeenCalled();
     });
   });
 
   describe("getAbidingsByHashtags", () => {
     it("normalizes, dedupes and queries with $in for OR matching", async () => {
-      await service.getAbidingsByHashtags(["Sunday", "sunday", "Dude"]);
+      await service.getAbidingsByHashtags(["Sunday", "sunday", "Dude"], firstPage);
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -139,7 +234,7 @@ describe("AbidingsService", () => {
     });
 
     it("narrows to a user when given one", async () => {
-      await service.getAbidingsByHashtags(["sunday"], 3);
+      await service.getAbidingsByHashtags(["sunday"], firstPage, 3);
 
       expect(abidingModel.find).toHaveBeenCalledWith({
         deletedAt: null,
@@ -148,11 +243,12 @@ describe("AbidingsService", () => {
       });
     });
 
-    it("returns an empty array when no tag can normalize, without querying", async () => {
-      const result = await service.getAbidingsByHashtags(["###", ""]);
+    it("returns an empty page when no tag can normalize, without querying", async () => {
+      const result = await service.getAbidingsByHashtags(["###", ""], firstPage);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ items: [], total: 0 });
       expect(abidingModel.find).not.toHaveBeenCalled();
+      expect(abidingModel.countDocuments).not.toHaveBeenCalled();
     });
   });
 
@@ -329,8 +425,9 @@ describe("AbidingsService", () => {
     // could never be turned back into a plain abiding.
     describe("replyToId and imageUrl", () => {
       const PARENT_ID = "65f000000000000000000001";
-      const writtenUpdate = () =>
-        abidingModel.findOneAndUpdate.mock.calls[0][1] as Record<string, unknown>;
+      function writtenUpdate() {
+        return abidingModel.findOneAndUpdate.mock.calls[0][1] as Record<string, unknown>;
+      }
 
       beforeEach(() => {
         abidingModel.findOneAndUpdate.mockReturnValue(queryOf({ _id: "x", message: "m" }));

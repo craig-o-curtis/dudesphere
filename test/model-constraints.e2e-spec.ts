@@ -34,7 +34,9 @@ describe("Model constraints (e2e)", () => {
   // One visible letter, two code points.
   const LETTER_WITH_SELECTOR = "a️";
 
-  const tag = () => randomUUID().replaceAll("-", "").slice(0, 8);
+  function tag() {
+    return randomUUID().replaceAll("-", "").slice(0, 8);
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -60,20 +62,28 @@ describe("Model constraints (e2e)", () => {
     await app.close();
   });
 
-  const patch = (path: string, body: object) =>
-    request(app.getHttpServer()).patch(path).set("Authorization", `Bearer ${token}`).send(body);
+  function patch(path: string, body: object) {
+    return request(app.getHttpServer())
+      .patch(path)
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+  }
 
-  const post = (path: string, body: object) =>
-    request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${token}`).send(body);
+  function post(path: string, body: object) {
+    return request(app.getHttpServer())
+      .post(path)
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+  }
 
   /** A 400 from the ValidationPipe whose list of problems names `field`. */
-  const expectRejectedField = (body: unknown, field: string) => {
+  function expectRejectedField(body: unknown, field: string) {
     expect(body).toMatchObject({
       statusCode: 400,
       error: "Bad Request",
       message: expect.arrayContaining([expect.stringContaining(field)]) as unknown,
     });
-  };
+  }
 
   describe("null where the column is NOT NULL", () => {
     it.each(["username", "email"])("PATCH /users/me rejects null for %s", async (field) => {

@@ -15,7 +15,7 @@ describe("ProfilesService", () => {
 
   // A fake repository: only the methods ProfilesService actually calls.
   const profileRepository = {
-    find: vi.fn(),
+    findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
     create: vi.fn(),
@@ -58,37 +58,40 @@ describe("ProfilesService", () => {
   });
 
   describe("getProfiles", () => {
-    it("returns all profiles with default pagination", async () => {
-      profileRepository.find.mockResolvedValue([mockProfile]);
+    it("returns the first page with the count of every profile", async () => {
+      profileRepository.findAndCount.mockResolvedValue([[mockProfile], 23]);
 
-      const result = await service.getProfiles();
+      const result = await service.getProfiles({ limit: 10, page: 1 });
 
-      expect(profileRepository.find).toHaveBeenCalledWith({
+      expect(profileRepository.findAndCount).toHaveBeenCalledWith({
+        order: { id: "ASC" },
         skip: 0,
         take: 10,
       });
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe(1);
-      expect(result[0].userId).toBe(42);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].id).toBe(1);
+      expect(result.items[0].userId).toBe(42);
+      expect(result.total).toBe(23);
     });
 
     it("returns profiles with custom limit and page", async () => {
-      profileRepository.find.mockResolvedValue([mockProfile]);
+      profileRepository.findAndCount.mockResolvedValue([[mockProfile], 23]);
 
-      await service.getProfiles(5, 2);
+      await service.getProfiles({ limit: 5, page: 2 });
 
-      expect(profileRepository.find).toHaveBeenCalledWith({
+      expect(profileRepository.findAndCount).toHaveBeenCalledWith({
+        order: { id: "ASC" },
         skip: 5,
         take: 5,
       });
     });
 
-    it("returns empty array when no profiles exist", async () => {
-      profileRepository.find.mockResolvedValue([]);
+    it("returns no items and a total of 0 when no profiles exist", async () => {
+      profileRepository.findAndCount.mockResolvedValue([[], 0]);
 
-      const result = await service.getProfiles();
+      const result = await service.getProfiles({ limit: 10, page: 1 });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ items: [], total: 0 });
     });
   });
 

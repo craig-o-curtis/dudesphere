@@ -107,7 +107,7 @@ describe("MongoErrorFilter", () => {
   // The safety net for a value a DTO or a pipe let through. Mongoose raises
   // both of these itself, before any command reaches Mongo.
   describe("a value Mongoose refuses", () => {
-    const validationError = () => {
+    function validationError() {
       const error = new MongooseError.ValidationError();
       error.addError(
         "message",
@@ -117,9 +117,11 @@ describe("MongoErrorFilter", () => {
         }),
       );
       return error;
-    };
+    }
     // What a query raises when a string is given for a Number path.
-    const castError = () => new MongooseError.CastError("Number", "not-a-number", "userId");
+    function castError() {
+      return new MongooseError.CastError("Number", "not-a-number", "userId");
+    }
 
     it.each([
       ["a ValidationError", validationError],

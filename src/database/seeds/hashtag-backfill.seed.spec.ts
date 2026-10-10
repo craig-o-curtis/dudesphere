@@ -10,13 +10,15 @@ describe("HashtagBackfillService", () => {
 
   // The service reads with find().cursor() and iterates it with `for await`,
   // so the mock cursor has to be async-iterable.
-  const cursorOf = (docs: { _id: string; message: string }[]) => ({
-    async *[Symbol.asyncIterator]() {
-      for (const doc of docs) {
-        yield doc;
-      }
-    },
-  });
+  function cursorOf(docs: { _id: string; message: string }[]) {
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (const doc of docs) {
+          yield doc;
+        }
+      },
+    };
+  }
 
   const abidingModel = {
     find: vi.fn(),
@@ -28,9 +30,9 @@ describe("HashtagBackfillService", () => {
   };
 
   // Loads the collection the run will walk over.
-  const givenAbidings = (docs: { _id: string; message: string }[]) => {
+  function givenAbidings(docs: { _id: string; message: string }[]) {
     abidingModel.find.mockReturnValue({ cursor: () => cursorOf(docs) });
-  };
+  }
 
   beforeEach(async () => {
     vi.resetAllMocks();

@@ -47,6 +47,11 @@ export function configureApp(
       whitelist: true, // ignores any extra properties that are not defined in the DTO
       forbidNonWhitelisted: true, // throws an error if any extra properties are present
       transform: true, // automatically transforms payloads to be objects typed according to their DTO classes
+      // Left off on purpose. It converts with Number() before a field's own
+      // @Transform runs, so "0x10" would pass as 16 and the digits-only rule
+      // would never see the string. It also loosens every request body: a
+      // name sent as 123 would pass @IsString as "123".
+      // transformOptions: { enableImplicitConversion: true },
     }),
   );
 

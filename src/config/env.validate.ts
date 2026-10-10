@@ -1,7 +1,6 @@
-import { plainToInstance, Type } from "class-transformer";
+import { plainToInstance } from "class-transformer";
 import {
   IsIn,
-  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -10,6 +9,8 @@ import {
   Min,
   validateSync,
 } from "class-validator";
+
+import { IntFromDigits } from "../shared/decorators/int-from-digits.decorator.js";
 
 const ENVIRONMENTS = ["development", "staging", "production", "test"] as const;
 
@@ -25,10 +26,10 @@ export class EnvironmentVariables {
   @IsIn(ENVIRONMENTS)
   NODE_ENV: (typeof ENVIRONMENTS)[number] = "development";
 
-  // Env values arrive as strings. @Type converts before @IsInt runs, as the
-  // query DTOs do.
-  @Type(() => Number)
-  @IsInt()
+  // Env values arrive as strings. @IntFromDigits converts before the checks
+  // run, as the query DTOs do. It accepts plain digits only, so PORT=0x10
+  // stops the app at startup and is not read as 16.
+  @IntFromDigits()
   @Min(1)
   @Max(65535)
   PORT: number = 3000;
@@ -37,8 +38,7 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   PG_HOST: string;
 
-  @Type(() => Number)
-  @IsInt()
+  @IntFromDigits()
   @Min(1)
   @Max(65535)
   PG_PORT: number;
@@ -65,8 +65,7 @@ export class EnvironmentVariables {
   JWT_SECRET: string;
 
   // How long a login token lasts, in seconds.
-  @Type(() => Number)
-  @IsInt()
+  @IntFromDigits()
   @Min(1)
   JWT_EXPIRES_IN: number = 3600;
 

@@ -26,8 +26,9 @@ describe("TimeoutInterceptor", () => {
   });
 
   // 20 ms, not the real limit, so the slow case does not slow the suite.
-  const run = (handler: CallHandler) =>
-    firstValueFrom(new TimeoutInterceptor(20).intercept(context, handler));
+  function run(handler: CallHandler) {
+    return firstValueFrom(new TimeoutInterceptor(20).intercept(context, handler));
+  }
 
   it("passes the handler's value through when it answers in time", async () => {
     await expect(run({ handle: () => of("abide") })).resolves.toBe("abide");

@@ -68,14 +68,27 @@ export const AbidingSchema = SchemaFactory.createForClass(Abiding);
 // also serves the soft delete and restore of a user's abidings
 AbidingSchema.index({ userId: 1 });
 AbidingSchema.index({ replyToId: 1 });
+//
+// The four below serve the list routes, one for each filter. Every list sorts
+// newest first with { createdAt: -1, _id: -1 }, and each index ends with those
+// two keys so Mongo reads the page straight off the index. Without them it
+// would sort every matching abiding in memory to return ten.
+//
+// _id is there because createdAt can tie, and a sort with ties has no fixed
+// order: the same abiding could show up on two pages. See findPage in
+// abidings.service.ts.
+//
+// Mongoose builds a new index when the app starts and never drops an old one.
+// DEVELOPMENT.md says how to drop the ones these replaced.
+//
 // get latest abidings for a user
-AbidingSchema.index({ userId: 1, createdAt: -1 });
+AbidingSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 // get latest abidings
-AbidingSchema.index({ createdAt: -1 });
+AbidingSchema.index({ createdAt: -1, _id: -1 });
 // get latest abidings for a hashtag — the query this feature exists to serve
-AbidingSchema.index({ hashtags: 1, createdAt: -1 });
-// get a user's abidings for a hashtag
-AbidingSchema.index({ userId: 1, hashtags: 1 });
+AbidingSchema.index({ hashtags: 1, createdAt: -1, _id: -1 });
+// get a user's latest abidings for a hashtag
+AbidingSchema.index({ userId: 1, hashtags: 1, createdAt: -1, _id: -1 });
 
 // Convert Mongoose Date getters to ISO strings (no JS Date objects in app code)
 AbidingSchema.path("createdAt").get(function (this: AbidingDocument, v: Date) {

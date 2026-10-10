@@ -29,13 +29,13 @@ describe("GET /profiles/me (e2e)", () => {
     await app.close();
   });
 
-  const login = async (): Promise<{ token: string; userId: number }> => {
+  async function login(): Promise<{ token: string; userId: number }> {
     const response = await request(app.getHttpServer())
       .post("/auth")
       .send({ email: process.env.EMAIL, password: process.env.PASSWORD })
       .expect(201);
     return response.body as { token: string; userId: number };
-  };
+  }
 
   it("returns the profile of the user who logged in", async () => {
     const { token, userId } = await login();

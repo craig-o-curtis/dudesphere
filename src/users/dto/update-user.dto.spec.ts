@@ -10,7 +10,9 @@ async function invalidFields(dto: object): Promise<string[]> {
 }
 
 describe("UpdateUserDto", () => {
-  const check = (body: object) => invalidFields(plainToInstance(UpdateUserDto, body));
+  function check(body: object) {
+    return invalidFields(plainToInstance(UpdateUserDto, body));
+  }
 
   it("accepts an empty body: every field is optional", async () => {
     expect(await check({})).toEqual([]);
@@ -34,7 +36,9 @@ describe("UpdateUserDto", () => {
 });
 
 describe("UpdateMyUserDto", () => {
-  const check = (body: object) => invalidFields(plainToInstance(UpdateMyUserDto, body));
+  function check(body: object) {
+    return invalidFields(plainToInstance(UpdateMyUserDto, body));
+  }
 
   it("accepts a new password with the current one", async () => {
     expect(await check({ password: "secret2", currentPassword: "secret1" })).toEqual([]);
