@@ -17,7 +17,6 @@ import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../test/listen-on-loopback.js";
 import { configureApp } from "../app-setup.js";
-import { UsersService } from "../users/users.service.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -41,13 +40,10 @@ describe("AbidingsController id params (over HTTP)", () => {
     deleteAbiding: vi.fn(),
   };
 
-  const usersService = { getUsersByIds: vi.fn() };
-
   const VALID_ID = "6ac543e3d91134719299fe49";
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    usersService.getUsersByIds.mockResolvedValue([{ id: 1, username: "walter" }]);
     abidingService.getAbidingById.mockResolvedValue({ id: VALID_ID, userId: 1, message: "hi" });
     abidingService.patchAbiding.mockResolvedValue({ id: VALID_ID, userId: 1, message: "edited" });
     abidingService.deleteAbiding.mockResolvedValue(undefined);
@@ -56,10 +52,7 @@ describe("AbidingsController id params (over HTTP)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AbidingsController],
-      providers: [
-        { provide: AbidingsService, useValue: abidingService },
-        { provide: UsersService, useValue: usersService },
-      ],
+      providers: [{ provide: AbidingsService, useValue: abidingService }],
     }).compile();
 
     app = moduleFixture.createNestApplication();

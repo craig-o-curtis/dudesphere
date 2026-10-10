@@ -12,19 +12,18 @@ import {
 } from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
-import { UsersService } from "../users/users.service.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
 import { GetAbidingsDto } from "./dto/get-abidings.dto.js";
 import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
+// Every route here reads the request, calls AbidingsService and returns what
+// it gets. The service returns each abiding as an AbidingResponseDto with its
+// author's username already on it.
 @Controller("abidings")
 export class AbidingsController {
-  constructor(
-    private readonly abidingsService: AbidingsService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly abidingsService: AbidingsService) {}
 
   @Public()
   @Get()
@@ -47,20 +46,9 @@ export class AbidingsController {
       endDate,
       hashtags: tags,
     });
-    // The authors of this page only, so at most one id per abiding on it.
-    const authorIds = [...new Set(abidings.items.map((a) => a.userId))];
-    const users = await this.usersService.getUsersByIds(authorIds);
-    const usernames = new Map(users.map((u) => [u.id, u.username]));
-
-    // Mapped to response instances first, wrapped second. toPaginatedResponse
-    // passes its items through, and the serializer needs each one to be a
-    // real AbidingResponseDto — see toResponse below.
-    const items = abidings.items.map((a) =>
-      this.toResponse(a, usernames.get(a.userId) || "Unknown"),
-    );
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
-    return toPaginatedResponse({ items, total: abidings.total }, pageRequest, "/abidings", {
+    return toPaginatedResponse(abidings, pageRequest, "/abidings", {
       userId,
       startDate,
       endDate,
@@ -87,8 +75,7 @@ export class AbidingsController {
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<AbidingResponseDto>> {
     const myAbidings = await this.abidingsService.getAbidingsByUserId(user.userId, query);
-    const items = myAbidings.items.map((a) => this.toResponse(a, user.username));
-    return toPaginatedResponse({ items, total: myAbidings.total }, query, "/abidings/me");
+    return toPaginatedResponse(myAbidings, query, "/abidings/me");
   }
 
   @Public()
@@ -100,9 +87,7 @@ export class AbidingsController {
   public async getAbidingById(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
   ): Promise<AbidingResponseDto> {
-    const abiding = await this.abidingsService.getAbidingById(id.toString());
-    const [author] = await this.usersService.getUsersByIds([abiding.userId]);
-    return this.toResponse(abiding, author?.username || "Unknown");
+    return this.abidingsService.getAbidingById(id.toString());
   }
 
   @Post()
@@ -110,8 +95,7 @@ export class AbidingsController {
     @Body() createAbidingDto: CreateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // The service checks the author still exists and returns the response
-    // with their username on it, so there is nothing to add here.
+    // The service also checks that the author still exists.
     return this.abidingsService.createAbiding(createAbidingDto, user);
   }
 
@@ -122,13 +106,7 @@ export class AbidingsController {
     @Body() updateAbidingDto: UpdateAbidingDto,
     @CurrentUser() user: AuthUser,
   ): Promise<AbidingResponseDto> {
-    const updatedAbiding = await this.abidingsService.patchAbiding(
-      id.toString(),
-      updateAbidingDto,
-      user,
-    );
-    const [author] = await this.usersService.getUsersByIds([updatedAbiding.userId]);
-    return this.toResponse(updatedAbiding, author?.username || "Unknown");
+    return this.abidingsService.patchAbiding(id.toString(), updateAbidingDto, user);
   }
 
   // Author or admin, same rule as PATCH above.
@@ -139,21 +117,5 @@ export class AbidingsController {
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
     await this.abidingsService.deleteAbiding(id.toString(), user);
-  }
-
-  // The one place an abiding becomes a response. Everything the service
-  // returned is passed on, so a field added there reaches the caller with no
-  // change here. Five routes each used to list the fields by hand, and two
-  // fields, imageUrl and updatedAt, were left off all five.
-  //
-  // Only the username is added. It is the author's current one, read from
-  // Postgres, because the abiding itself lives in Mongo.
-  private toResponse(abiding: AbidingResponseDto, username: string): AbidingResponseDto {
-    // The constructor copies every field across. A real instance is needed,
-    // not a copy made with spread: ClassSerializerInterceptor only applies
-    // the DTO's @Expose and @Transform rules to an instance of the class.
-    const response = new AbidingResponseDto(abiding);
-    response.username = username;
-    return response;
   }
 }
