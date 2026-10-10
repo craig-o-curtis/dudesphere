@@ -75,7 +75,8 @@ async getProfiles(pageRequest: PageRequest): Promise<Page<ProfileResponseDto>> {
 ```
 
 A Mongo list does the same with `find(filter).sort().skip().limit()` and
-`countDocuments(filter)`. See `findPage` in `src/abidings/abidings.service.ts`.
+`countDocuments(filter)`. `findMongoPage` in `src/shared/utils/mongo-page.ts`
+runs that pair for every Mongo list; pass it the model, the filter and a sort.
 
 **The response** has the same shape on every list route:
 

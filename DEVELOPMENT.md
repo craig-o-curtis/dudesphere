@@ -201,8 +201,8 @@ Mongo 8 merges up to 200 tags this way. At 201 the plan changes to a plain
 A count is different. `countDocuments({ deletedAt: null })` reads every
 document, because no index holds `deletedAt`, and Mongo cannot answer a
 `null` match from an index alone. Every list request runs one for
-`meta.totalItems`. The comment on `findPage` in
-`src/abidings/abidings.service.ts` says why that is accepted.
+`meta.totalItems`. The comment on `findMongoPage` in
+`src/shared/utils/mongo-page.ts` says why that is accepted.
 
 ## Seeds and Backfills
 

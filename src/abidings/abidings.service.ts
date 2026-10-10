@@ -4,13 +4,14 @@ import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
-import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
+import type { Page, PageRequest } from "../shared/dto/paginated-response.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   extractHashtagDisplays,
   extractHashtags,
   normalizeHashtag,
 } from "../shared/utils/hashtag.js";
+import { findMongoPage } from "../shared/utils/mongo-page.js";
 import { UserRole } from "../users/user.entity.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -253,37 +254,26 @@ export class AbidingsService {
 
   // One page of the abidings a filter matches, newest first, and the count of
   // all of them. Every list method ends here, so they cannot drift apart on
-  // the sort or the limit.
+  // the sort.
   //
   // _id breaks ties on createdAt. Without it, abidings written in the same
   // millisecond have no fixed order and one could appear on two pages. The
   // indexes in abiding.schema.ts end with the same two keys.
   //
-  // The two queries run side by side, not in a transaction. An abiding posted
-  // between them can leave the total one ahead of the page, which a list of
-  // posts can live with.
-  //
-  // The count is the costly half, and that is accepted, not solved. The page
-  // comes off an index, but no index holds deletedAt, so the count reads
-  // every abiding the filter matches: the whole collection when there is no
-  // filter. The response shape needs a total, so it is paid on every request.
-  // The query time limit in src/app.module.ts bounds it. If the collection
-  // grows large, the fix is a stored count or a cursor with no total, not
-  // another index: Mongo cannot count { deletedAt: null } from an index alone.
+  // findMongoPage runs the page and the count. Its comment says what the
+  // count costs. This method adds the two things only abidings know: the
+  // sort, and the response class.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     pageRequest: PageRequest,
   ): Promise<Page<AbidingResponseDto>> {
-    const [abidings, total] = await Promise.all([
-      this.abidingModel
-        .find(filter)
-        .sort({ createdAt: -1, _id: -1 })
-        .skip(toSkip(pageRequest))
-        .limit(pageRequest.limit)
-        .exec(),
-      this.abidingModel.countDocuments(filter).exec(),
-    ]);
-    return { items: abidings.map((abiding) => this.toResponseDto(abiding)), total };
+    const { items, total } = await findMongoPage(
+      this.abidingModel,
+      filter,
+      { createdAt: -1, _id: -1 },
+      pageRequest,
+    );
+    return { items: items.map((abiding) => this.toResponseDto(abiding)), total };
   }
 
   // A real instance, not an object literal. ClassSerializerInterceptor only

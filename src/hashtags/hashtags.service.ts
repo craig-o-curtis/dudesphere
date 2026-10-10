@@ -3,9 +3,10 @@ import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
-import { type Page, type PageRequest, toSkip } from "../shared/dto/paginated-response.js";
+import type { Page, PageRequest } from "../shared/dto/paginated-response.js";
 import { ErrorCode } from "../shared/error-codes.js";
 import { normalizeHashtag } from "../shared/utils/hashtag.js";
+import { findMongoPage } from "../shared/utils/mongo-page.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
 import { Hashtag, HashtagDocument } from "./hashtag.schema.js";
 
@@ -25,23 +26,19 @@ export class HashtagsService {
   // slug is unique, so the sort has no ties and the pages cannot overlap.
   //
   // The count reads every tag, because no index holds deletedAt. That is
-  // accepted: see findPage in src/abidings/abidings.service.ts.
+  // accepted: see findMongoPage in src/shared/utils/mongo-page.ts.
   //
   // deletedAt: null leaves out tags an admin has deleted. It also matches
   // registry rows written before the field existed, which have no deletedAt at
   // all, so those needed no backfill.
   async list(pageRequest: PageRequest): Promise<Page<HashtagResponseDto>> {
-    const filter = { deletedAt: null };
-    const [hashtags, total] = await Promise.all([
-      this.hashtagModel
-        .find(filter)
-        .sort({ slug: 1 })
-        .skip(toSkip(pageRequest))
-        .limit(pageRequest.limit)
-        .exec(),
-      this.hashtagModel.countDocuments(filter).exec(),
-    ]);
-    return { items: hashtags.map((hashtag) => this.toResponseDto(hashtag)), total };
+    const { items, total } = await findMongoPage(
+      this.hashtagModel,
+      { deletedAt: null },
+      { slug: 1 },
+      pageRequest,
+    );
+    return { items: items.map((hashtag) => this.toResponseDto(hashtag)), total };
   }
 
   async getBySlug(slug: string): Promise<HashtagResponseDto | null> {
