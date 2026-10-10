@@ -33,7 +33,7 @@ describe("Passwords (e2e)", () => {
     const email = `e2e-${tag}@example.com`;
 
     const response = await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send({ email, password, username: `e2e-${tag}` });
     const { id } = response.body as { id?: number };
     if (id !== undefined) {
@@ -43,7 +43,7 @@ describe("Passwords (e2e)", () => {
   }
 
   function login(email: string, password: string) {
-    return request(app.getHttpServer()).post("/auth").send({ email, password });
+    return request(app.getHttpServer()).post("/auth/login").send({ email, password });
   }
 
   async function storedPassword(userId: number | undefined): Promise<string> {
@@ -94,7 +94,7 @@ describe("Passwords (e2e)", () => {
     it("never returns the password or its hash", async () => {
       const tag = randomUUID().slice(0, 8);
       const response = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
         .expect(201);
       createdUserIds.push((response.body as { id: number }).id);

@@ -146,10 +146,13 @@ describe("Hashtag delete and restore (e2e)", () => {
       const tag = randomUUID().slice(0, 8);
       const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
       await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({ ...credentials, username: `e2e-${tag}` })
         .expect(201);
-      const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+      const login = await request(app.getHttpServer())
+        .post("/auth/login")
+        .send(credentials)
+        .expect(201);
       authorToken = (login.body as { token: string }).token;
 
       await postWithTag(display);

@@ -35,7 +35,7 @@ describe("Error responses (e2e)", () => {
       password: "secret123",
       username: `e2e-${tag}`,
     };
-    await request(app.getHttpServer()).post("/users").send(credentials).expect(201);
+    await request(app.getHttpServer()).post("/auth/signup").send(credentials).expect(201);
   });
 
   afterAll(async () => {
@@ -47,7 +47,7 @@ describe("Error responses (e2e)", () => {
   // tests live in src/shared/filters.
   it("409 names the taken field and carries its errorCode", async () => {
     const { body } = await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send(credentials)
       .expect(409);
 
@@ -72,7 +72,7 @@ describe("Error responses (e2e)", () => {
 
   it("400 from validation lists each problem in message", async () => {
     const { body } = await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send({ ...credentials, email: "not-an-email", extra: 1 })
       .expect(400);
 

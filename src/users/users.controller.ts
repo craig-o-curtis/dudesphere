@@ -44,8 +44,9 @@ export class UsersController {
     return this.usersService.getUserById(id);
   }
 
-  // Public: registration is how someone gets their first token.
-  @Public()
+  // Admin only. Anyone else signs up through POST /auth/signup, which is
+  // public and calls the same UsersService.createUser.
+  @Roles(UserRole.ADMIN)
   @Post()
   // @HttpCode(201)
   createUser(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -87,7 +88,7 @@ export class UsersController {
   // Must come BEFORE @Delete(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth with email + password.
+  //   1. Frontend calls POST /auth/login with email + password.
   //   2. Backend validates credentials and returns a signed JWT token.
   //   3. Frontend stores the token and sends it on every protected request:
   //        Authorization: Bearer <token>
