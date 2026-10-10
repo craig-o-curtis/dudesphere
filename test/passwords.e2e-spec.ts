@@ -43,7 +43,7 @@ describe("Passwords (e2e)", () => {
   }
 
   function login(email: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/login").send({ email, password });
+    return request(app.getHttpServer()).post("/auth/login").send({ identifier: email, password });
   }
 
   async function storedPassword(userId: number | undefined): Promise<string> {

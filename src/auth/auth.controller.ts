@@ -4,7 +4,7 @@ import { Public } from "../shared/decorators/public.decorator.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { AuthService } from "./auth.service.js";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
-import { LoginUserDto } from "./dto/login-user.dto.js";
+import { LoginDto } from "./dto/login.dto.js";
 import { ResetPasswordDto } from "./dto/reset-password.dto.js";
 
 @Controller("auth")
@@ -21,8 +21,8 @@ export class AuthController {
   // other route needs.
   @Public()
   @Post("login")
-  login(@Body() loginUserDto: LoginUserDto) {
-    return this.authService.login(loginUserDto);
+  login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
   }
 
   @Public()

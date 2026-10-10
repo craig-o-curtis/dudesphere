@@ -165,7 +165,7 @@ Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, de
 | ------ | ---------- | ---------------------------------- |
 | GET    | /users     | List users, paginated (admin only) |
 | GET    | /users/:id | Get user by ID                     |
-| POST   | /users     | Create a user                      |
+| POST   | /users     | Create a user (admin only)         |
 | PATCH  | /users/:id | Update a user                      |
 | DELETE | /users/:id | Delete a user                      |
 
@@ -199,9 +199,12 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| POST   | /auth    | Login       |
+| Method | Endpoint     | Description                   |
+| ------ | ------------ | ----------------------------- |
+| POST   | /auth/signup | Sign up                       |
+| POST   | /auth/login  | Log in with username or email |
+
+Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
 
 ## Database Usage
 

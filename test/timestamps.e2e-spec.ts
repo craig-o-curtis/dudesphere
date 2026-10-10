@@ -67,7 +67,7 @@ describe("Timestamps (e2e)", () => {
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send(credentials)
+      .send({ identifier: credentials.email, password: credentials.password })
       .expect(201);
     token = (login.body as { token: string }).token;
   });

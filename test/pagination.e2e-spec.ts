@@ -101,7 +101,7 @@ describe("Pagination (e2e)", () => {
       authorId = (user.body as { id: number }).id;
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send(credentials)
+        .send({ identifier: credentials.email, password: credentials.password })
         .expect(201);
       authorToken = (login.body as { token: string }).token;
 
@@ -345,7 +345,7 @@ describe("Pagination (e2e)", () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send(credentials)
+        .send({ identifier: credentials.email, password: credentials.password })
         .expect(201);
       const body = user.body as { id: number; profile: { id: number } };
       return {
