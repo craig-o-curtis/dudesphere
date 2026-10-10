@@ -28,6 +28,7 @@ export enum ErrorCode {
   WRONG_PASSWORD = "WRONG_PASSWORD", // 403 Forbidden, current password check on a password change
   NOT_OWNER = "NOT_OWNER", // 403 Forbidden, editing or deleting someone else's row
   ROLE_REQUIRED = "ROLE_REQUIRED", // 403 Forbidden, the route needs a role the caller does not have
+  RATE_LIMITED = "RATE_LIMITED", // 429 Too Many Requests, from AuthThrottlerGuard. Retry-After says how long to wait
   CLOCK_UNAVAILABLE = "CLOCK_UNAVAILABLE", // 503 Service Unavailable, getUtcNow() returned ""
   DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE", // 503 Service Unavailable, Postgres or Mongo cannot be reached
 }

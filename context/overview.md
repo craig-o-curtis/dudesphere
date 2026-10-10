@@ -152,6 +152,23 @@ is what lets login tell the two apart, and cannot hold whitespace.
 Every failed login answers 401 `BAD_CREDENTIALS` with one message, so the
 response does not say which usernames and emails have an account.
 
+### Rate limits
+
+| Route              | Limit           | Counted per                |
+| ------------------ | --------------- | -------------------------- |
+| Every route        | 100 a minute    | IP address                 |
+| `POST /auth/login` | 5 in 15 minutes | identifier and IP together |
+
+A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
+the seconds to wait. Login counts every try, right or wrong. The identifier is
+counted as login reads it, so `Walter` and `walter` share one count. A username
+and an email are counted apart, because the limiter sees only what was typed.
+
+`AuthThrottlerGuard` in `src/auth/guards/` does this, on top of
+`@nestjs/throttler`. The counts are kept in the app's memory: they reset on a
+restart and are not shared between two copies of the app. `THROTTLE_ENABLED=false`
+turns it off, which only the e2e suite does.
+
 ### Users (PostgreSQL)
 
 | Method | Endpoint             | Access | Description                          |
@@ -213,6 +230,7 @@ response does not say which usernames and emails have an account.
 - [x] User CRUD with roles (admin seeded)
 - [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
       by username or email
+- [x] Rate limiting on every route, tighter on login
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)

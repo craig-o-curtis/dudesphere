@@ -56,6 +56,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `JWT_EXPIRES_IN`          | no       | How long a login token lasts, in seconds                                | default `3600`                                    |
 | `JWT_AUDIENCE`            | no       | Who a token is for. Written into each token and checked on each request | default `dudesphere-api`                          |
 | `JWT_ISSUER`              | no       | Who issued a token. Written and checked the same way                    | default `dudesphere`                              |
+| `THROTTLE_ENABLED`        | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself | default `true`                                    |
 | `DUDE_OBSERVE_APP_KEY`    | yes      | Observe project key                                                     | (from the Observe dashboard)                      |
 | `DUDE_OBSERVE_APP_SECRET` | yes      | Observe project secret                                                  | (from the Observe dashboard)                      |
 | `EMAIL`                   | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@example.com`                                  |

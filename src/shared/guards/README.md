@@ -44,4 +44,8 @@ would mean the guard never finds the list, so the key lives in one place.
 (`src/auth/guards/jwt-auth.guard.ts`). The order matters: `JwtAuthGuard` puts
 the user on the request and `RolesGuard` reads it.
 
-Both guards are global, so a route needs no `@UseGuards`.
+A third global guard runs before both: `AuthThrottlerGuard`
+(`src/auth/guards/auth-throttler.guard.ts`), the rate limiter. It goes first so
+that a request with a guessed token is counted before it is turned away.
+
+All three guards are global, so a route needs no `@UseGuards`.
