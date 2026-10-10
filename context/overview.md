@@ -221,3 +221,37 @@ and neither side needs the other's rows to answer its own questions. The
 normalized slug is the only value that crosses between the two stores. No ids
 cross. `src/abidings/user-abidings.service.ts` explains why nothing more
 should be added to the list of things that can leave the stores disagreeing.
+
+**Dude location.** Opt-in, off by default, and coarse on purpose. The
+frontend plan is the "Sphere" section of
+[frontend-architecture.md](./frontend-architecture.md). The backend side:
+
+- It lives in Postgres, on the `profile` row, because the relation is keyed
+  by `user.id` and the soft delete must travel with the user. Three new
+  columns: `locationMode` enum `off`, `anonymous` or `named`, default
+  `off`; `locationCell` varchar(4), nullable; `locationLabel` varchar(100),
+  nullable. One migration, and an index on `locationCell`.
+- `locationCell` is a geohash of length 4, a box of roughly 20 by 40 km. The
+  browser rounds before sending. The API validates that the value is 4
+  base-32 geohash characters and rejects anything longer. The API never
+  receives, stores or logs a latitude or longitude.
+- `PUT /profiles/me/location` takes `{ mode, cell, label }`.
+  `DELETE /profiles/me/location` sets the mode to `off` and nulls both
+  columns. Nothing keeps history.
+- `GET /sphere/cells` is public. It groups live profiles with mode
+  `anonymous` or `named` by `locationCell` and returns `{ cell, count }` for
+  cells with a count of 3 or more. The threshold protects a lone member in a
+  small place. It is one `GROUP BY` with `HAVING count(*) >= 3`, cached for
+  a minute.
+- `GET /dudes/nearby?cell=` needs a token. It returns `named` profiles in
+  that cell and its eight neighbors, paginated like every other list. The
+  neighbor set is nine string literals from a geohash neighbor function, so
+  the query is `WHERE "locationCell" IN (...)`. No PostGIS. The cells are
+  too coarse for real distance, and adding an extension to the Postgres
+  image for nine string compares is not worth it.
+- A soft-deleted user drops out of both queries through the existing
+  `deletedAt` filter. A restore brings the row back as it was.
+
+Cost accepted: "near" means the same or an adjacent cell, not a radius. Two
+dudes 1 km apart on a cell edge are near. Two dudes 50 km apart inside one
+wide cell are also near. That is the price of never holding a precise point.
