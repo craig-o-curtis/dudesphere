@@ -1,6 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { HashtagsController } from "./hashtags.controller.js";
 import { HashtagsService } from "./hashtags.service.js";
 
@@ -19,7 +20,11 @@ describe("HashtagsController", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HashtagsController],
-      providers: [{ provide: HashtagsService, useValue: hashtagsService }],
+      providers: [
+        { provide: HashtagsService, useValue: hashtagsService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     }).compile();
 
     controller = module.get<HashtagsController>(HashtagsController);

@@ -5,12 +5,9 @@ import type { Types as MongooseTypes } from "mongoose";
 import type { AuthUser } from "../auth/auth-user.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../shared/decorators/public.decorator.js";
-import {
-  type PageRequest,
-  type PaginatedResponse,
-  toPaginatedResponse,
-} from "../shared/dto/paginated-response.js";
 import { PaginationQueryDto } from "../shared/dto/pagination-query.dto.js";
+import type { Paginated, PageRequest } from "../shared/pagination/paginated.interface.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -20,16 +17,18 @@ import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
 // Every route here reads the request, calls AbidingsService and returns what
 // it gets. The service returns each abiding as an AbidingResponseDto with its
-// author's username already on it.
+// author's username already on it. A list route also asks PaginationProvider
+// to wrap the page in the response body, with links for this route's path.
 @Controller("abidings")
 export class AbidingsController {
-  constructor(private readonly abidingsService: AbidingsService) {}
+  constructor(
+    private readonly abidingsService: AbidingsService,
+    private readonly paginationProvider: PaginationProvider,
+  ) {}
 
   @Public()
   @Get()
-  public async getAbidings(
-    @Query() query: GetAbidingsDto,
-  ): Promise<PaginatedResponse<AbidingResponseDto>> {
+  public async getAbidings(@Query() query: GetAbidingsDto): Promise<Paginated<AbidingResponseDto>> {
     // Already checked: GetAbidingsDto converts userId to a number and
     // validates the dates, so an unusable value is a 400 before it reaches
     // here.
@@ -48,7 +47,7 @@ export class AbidingsController {
     });
     // The links carry the tags as they were parsed, not as they were sent. A
     // param of only commas was treated as no filter, so its links have none.
-    return toPaginatedResponse(abidings, pageRequest, "/abidings", {
+    return this.paginationProvider.toResponse(abidings, pageRequest, "/abidings", {
       userId,
       startDate,
       endDate,
@@ -73,9 +72,9 @@ export class AbidingsController {
   public async getMyAbidings(
     @CurrentUser() user: AuthUser,
     @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResponse<AbidingResponseDto>> {
+  ): Promise<Paginated<AbidingResponseDto>> {
     const myAbidings = await this.abidingsService.getAbidingsByUserId(user.userId, query);
-    return toPaginatedResponse(myAbidings, query, "/abidings/me");
+    return this.paginationProvider.toResponse(myAbidings, query, "/abidings/me");
   }
 
   @Public()

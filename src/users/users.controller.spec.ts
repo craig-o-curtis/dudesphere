@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "./user.entity.js";
 import { UsersController } from "./users.controller.js";
 import { UsersService } from "./users.service.js";
@@ -26,7 +27,11 @@ describe("UsersController", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [{ provide: UsersService, useValue: usersService }],
+      providers: [
+        { provide: UsersService, useValue: usersService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: vi.fn(() => true) })

@@ -18,6 +18,7 @@ import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
+import { PaginationProvider } from "../../shared/pagination/pagination.provider.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
 import { PG_INT_MAX } from "./id-param.dto.js";
@@ -43,7 +44,11 @@ describe("IdParamDto (over HTTP)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [{ provide: UsersService, useValue: usersService }],
+      providers: [
+        { provide: UsersService, useValue: usersService },
+        // The real one: it has no dependencies, and it builds the links these tests read.
+        PaginationProvider,
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();

@@ -26,7 +26,8 @@ import { UserResponseDto } from "../../users/dto/user-response.dto.js";
 import { UserRole } from "../../users/user.entity.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
-import type { PaginatedResponse } from "./paginated-response.js";
+import type { Paginated } from "./paginated.interface.js";
+import { PaginationProvider } from "./pagination.provider.js";
 
 // No APP_GUARD is registered, because AppModule is not imported, so the
 // admin-only GET /users is reachable without a token.
@@ -44,6 +45,8 @@ describe("a paginated response (over HTTP)", () => {
       providers: [
         { provide: UsersService, useValue: usersService },
         { provide: AbidingsService, useValue: abidingsService },
+        // The real one: it is the thing under test here.
+        PaginationProvider,
       ],
     }).compile();
 
@@ -74,7 +77,7 @@ describe("a paginated response (over HTTP)", () => {
     });
 
     const response = await request(app.getHttpServer()).get("/users").expect(200);
-    const body = response.body as PaginatedResponse<Record<string, unknown>>;
+    const body = response.body as Paginated<Record<string, unknown>>;
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toMatchObject({ id: 1, username: "walter" });
@@ -85,7 +88,7 @@ describe("a paginated response (over HTTP)", () => {
   // AbidingResponseDto turns a missing replyToId into null with @Transform.
   // That only happens if the item is still a class instance when it is
   // serialized. The service returns instances, and the controller and
-  // toPaginatedResponse must pass them on without copying them.
+  // PaginationProvider.toResponse must pass them on without copying them.
   it("applies @Transform to the items inside data", async () => {
     abidingsService.getAbidings.mockResolvedValue({
       items: [
@@ -95,7 +98,7 @@ describe("a paginated response (over HTTP)", () => {
     });
 
     const response = await request(app.getHttpServer()).get("/abidings").expect(200);
-    const body = response.body as PaginatedResponse<Record<string, unknown>>;
+    const body = response.body as Paginated<Record<string, unknown>>;
 
     expect(body.data[0]).toMatchObject({
       id: "a1",
@@ -129,7 +132,7 @@ describe("a paginated response (over HTTP)", () => {
     usersService.getUsers.mockResolvedValue({ items: [], total: 12 });
 
     const response = await request(app.getHttpServer()).get("/users?limit=5&page=2").expect(200);
-    const body = response.body as PaginatedResponse<unknown>;
+    const body = response.body as Paginated<unknown>;
 
     expect(body.meta).toEqual({ itemsPerPage: 5, totalItems: 12, currentPage: 2, totalPages: 3 });
     expect(body.links.next).toBe("/users?limit=5&page=3");
