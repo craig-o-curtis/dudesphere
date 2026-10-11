@@ -146,6 +146,25 @@ describe("Rate limiting (e2e)", () => {
     it("still lets another email through from the same address", async () => {
       await forgot(`e2e-floodother-${tag}@example.com`).expect(202);
     });
+
+    // The count by IP address runs beside the count by email. Without it, a
+    // caller who named a new email each time would never be refused. The
+    // tests above already used some of this minute's 100, so the refusal
+    // comes at the 101st request here or sooner.
+    it("holds one address to 100 a minute, however many emails it names", async () => {
+      let sent = 1;
+      let response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
+      while (response.status === 202 && sent < 101) {
+        sent += 1;
+        response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
+      }
+
+      expect(response.status).toBe(429);
+      expect(response.body).toEqual(refused);
+      const retryAfter = Number(response.headers["retry-after"]);
+      expect(retryAfter).toBeGreaterThan(0);
+      expect(retryAfter).toBeLessThanOrEqual(60);
+    });
   });
 
   describe("a route with no limit of its own", () => {

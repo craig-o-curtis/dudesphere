@@ -205,6 +205,16 @@ the seconds to wait. Login counts every try, right or wrong. The identifier is
 counted as login reads it, so `Walter` and `walter` share one count. A username
 and an email are counted apart, because the limiter sees only what was typed.
 
+The 100 a minute is counted for each route by itself. It runs on login and
+forgot-password too, beside their tighter counts, so an address that names a
+new account on every try is still stopped. Those two routes send a second set
+of headers for the tighter count, such as `X-RateLimit-Remaining-account`.
+
+The limiter counts the caller's IP address as Express reports it. Behind a
+reverse proxy that is the proxy's address, so every caller shares one count
+until Express is told to trust the proxy (`trust proxy`). Set that before a
+deploy behind one.
+
 `AuthThrottlerGuard` in `src/auth/guards/` does this, on top of
 `@nestjs/throttler`. The counts are kept in the app's memory: they reset on a
 restart and are not shared between two copies of the app. `THROTTLE_ENABLED=false`

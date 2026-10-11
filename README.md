@@ -210,7 +210,7 @@ Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your u
 
 Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.
 
-Login allows 5 tries in 15 minutes for one account. After that it answers 429 with a `Retry-After` header.
+Login allows 5 tries in 15 minutes for one account from one IP address. After that it answers 429 with a `Retry-After` header. Every route, login included, also allows 100 requests a minute from one IP address.
 
 ## Database Usage
 

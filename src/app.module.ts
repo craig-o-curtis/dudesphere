@@ -10,6 +10,7 @@ import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ACCOUNT_THROTTLER } from "./auth/decorators/throttle-by-account.decorator.js";
 import { AuthThrottlerGuard } from "./auth/guards/auth-throttler.guard.js";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import appConfig from "./config/app.config.js";
@@ -39,16 +40,23 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       // itself, as AuthModule does with ConfigModule.forFeature.
       load: [appConfig, postgresConfig, mongoConfig, observeConfig, throttleConfig],
     }),
-    // The limit every route gets: 100 requests a minute from one IP address.
-    // A route that checks a password or sends an email sets a tighter one with
-    // @Throttle(), as AuthController does. The counts are kept in this
-    // process's memory, so they reset on a restart and are not shared between
-    // two copies of the app.
+    // Two counts. "default" is the limit every route gets: 100 requests a
+    // minute from one IP address. The second is tighter and counts by account
+    // and IP address together. It runs only on a route marked
+    // @ThrottleByAccount, as login and forgot-password are in AuthController,
+    // and AuthThrottlerGuard skips it everywhere else. Its 5 in 15 minutes is
+    // the fallback for a marked route that sets no limit of its own.
+    //
+    // The counts are kept in this process's memory, so they reset on a
+    // restart and are not shared between two copies of the app.
     ThrottlerModule.forRootAsync({
       inject: [throttleConfig.KEY],
       useFactory: (throttle: ConfigType<typeof throttleConfig>) => ({
         skipIf: () => !throttle.enabled,
-        throttlers: [{ ttl: minutes(1), limit: 100 }],
+        throttlers: [
+          { name: "default", ttl: minutes(1), limit: 100 },
+          { name: ACCOUNT_THROTTLER, ttl: minutes(15), limit: 5 },
+        ],
       }),
     }),
     ObserveModule.forRootAsync({
