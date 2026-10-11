@@ -47,4 +47,12 @@ describe("BcryptProvider", () => {
   it("answers false, without throwing, for a stored value that is not a hash", async () => {
     expect(await provider.comparePassword(password, password)).toBe(false);
   });
+
+  // bcrypt alone answers true here: it reads 72 bytes and ignores the "b".
+  it("does not match a password over 72 bytes whose first 72 bytes are right", async () => {
+    const atLimit = "a".repeat(72);
+    const stored = await provider.hashPassword(atLimit);
+
+    expect(await provider.comparePassword(`${atLimit}b`, stored)).toBe(false);
+  });
 });
