@@ -375,7 +375,7 @@ The answer to a login holds `token`.
 | Answer              | What it means                                         | What to do                                       |
 | ------------------- | ----------------------------------------------------- | ------------------------------------------------ |
 | 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one      | Set the Auth tab to Bearer and paste a token     |
-| 401 `TOKEN_INVALID` | The token has expired, or `JWT_SECRET` changed since  | Run `pnpm dev:token` again                       |
+| 401 `TOKEN_INVALID` | Expired, or its account or password changed since     | Run `pnpm dev:token` again                       |
 | 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's   | Use `pnpm dev:token` with no name, for the admin |
 | 403 `NOT_OWNER`     | The thing exists and belongs to someone else          | Use that member's token, or the admin's          |
 | 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes | Wait for the time in the `Retry-After` header    |
@@ -416,8 +416,9 @@ pnpm migration:run
 pnpm seed:run
 ```
 
-The seed matters. `authorization.e2e-spec.ts` and `profile-me.e2e-spec.ts` log
-in as the seeded admin, with `EMAIL` and `PASSWORD` from `.env`.
+The seed matters. `profile-me.e2e-spec.ts` logs in as the seeded admin, with
+`EMAIL` and `PASSWORD` from `.env`. Every other suite makes its own users,
+admins included, through `tokenFor` and `signedInAs` in `test/auth-helpers.ts`.
 
 ### How the cleanup works
 
@@ -463,11 +464,12 @@ these rules leaves rows behind on every run.
 - **Give every user an `e2e-` email at `example.com` and an `e2e-` username.**
   Sign up through `signUp` or `signUpBody` in `test/sign-up.ts`, which does
   both and gives each user a display name no other run has used.
-- **Post abidings as a user you registered.** `POST /abidings` takes the author
-  from the token and answers 404 when that user is deleted or does not exist.
-  So a forged token can only post when its `sub` is the id of a real user, and
-  that user must be an e2e one. This check is what keeps every abiding tied to
-  a `user` row the cleanup can find.
+- **Use tokens that belong to a user you registered.** The guard looks the
+  user up on every request and answers 401 when there is none, so a token
+  signed for a made-up id is refused, and so is one that only claims a role.
+  `tokenFor` and `signedInAs` in `test/auth-helpers.ts` sign up a real `e2e-`
+  member, as an admin when asked. This is also what keeps every abiding tied
+  to a `user` row the cleanup can find.
 - **Build hashtags as `e2e` plus 12 hex characters.** Copy `unusedSlug` in
   `hashtags.e2e-spec.ts`. A slug cannot hold a hyphen, so there is no `e2e-`
   prefix to match on. The cleanup matches the whole shape so that it cannot

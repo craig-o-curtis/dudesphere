@@ -161,8 +161,21 @@ full shape.
 | POST   | `/auth/forgot-password` | Public | Email a password reset link. Always 202 |
 | POST   | `/auth/reset-password`  | Public | Set a new password with the link. 204   |
 
-There is no logout route yet. A login token is a signed JWT the server does not
-store, so there is nothing for the server to end. Logout comes with refresh
+A login token holds the member's id and username, and nothing else. On every
+request the server reads the member from the database, so the role is always
+the current one. A client that needs the role asks `GET /users/me`.
+
+A token stops working at once, with 401 `TOKEN_INVALID`, when:
+
+- the account is closed, by the member or by an admin;
+- the password is changed or reset after the token was signed. A member who
+  changes their own password logs in again with the new one.
+
+A member who is no longer an admin gets 403 on admin routes from the next
+request, with the same token.
+
+There is no logout route yet. The server does not store a login token, so it
+cannot end one token and leave the member's others. Logout comes with refresh
 tokens.
 
 The sign-up body is
@@ -203,8 +216,8 @@ response does not say which usernames and emails have an account.
 `MAIL_*` defaults send to the Mailpit container, which shows every email at
 http://localhost:8025 and delivers none.
 
-A reset does not end a login token that is already out. It stays good until it
-expires, an hour by default. That closes when refresh tokens arrive.
+A reset ends every login token signed before it, the same as a password change
+does.
 
 ### Rate limits
 
