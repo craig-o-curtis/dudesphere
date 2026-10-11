@@ -42,16 +42,16 @@ more file to keep in step with the code.
 
 ## In this folder
 
-| Class                          | Extends                        | Status | Error code                                     |
-| ------------------------------ | ------------------------------ | ------ | ---------------------------------------------- |
-| `ValueTakenException`          | `ConflictException`            | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `VALUE_TAKEN` |
-| `NotOwnerException`            | `ForbiddenException`           | 403    | `NOT_OWNER`                                    |
-| `TokenMissingException`        | `UnauthorizedException`        | 401    | `TOKEN_MISSING`                                |
-| `DatabaseUnavailableException` | `ServiceUnavailableException`  | 503    | `DATABASE_UNAVAILABLE`                         |
-| `InvalidValueException`        | `BadRequestException`          | 400    | none                                           |
-| `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                           |
-| `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                           |
-| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                          |
+| Class                          | Extends                        | Status | Error code                                                           |
+| ------------------------------ | ------------------------------ | ------ | -------------------------------------------------------------------- |
+| `ValueTakenException`          | `ConflictException`            | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `DISPLAY_NAME_TAKEN`, `VALUE_TAKEN` |
+| `NotOwnerException`            | `ForbiddenException`           | 403    | `NOT_OWNER`                                                          |
+| `TokenMissingException`        | `UnauthorizedException`        | 401    | `TOKEN_MISSING`                                                      |
+| `DatabaseUnavailableException` | `ServiceUnavailableException`  | 503    | `DATABASE_UNAVAILABLE`                                               |
+| `InvalidValueException`        | `BadRequestException`          | 400    | none                                                                 |
+| `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                                                 |
+| `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                                                 |
+| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                                                |
 
 Who throws each one:
 
