@@ -84,10 +84,19 @@ describe("Error responses (e2e)", () => {
   });
 
   it("404 names the resource", async () => {
-    // GET /users/:id is public, so no token is needed.
+    // GET /users/:id needs a token, so log in first.
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ identifier: credentials.email, password: credentials.password })
+      .expect(201);
+    const { token } = login.body as { token: string };
+
     // 2147483647 is the largest id the DTO accepts, so it passes validation
     // and reaches the service, which has no such row.
-    const { body } = await request(app.getHttpServer()).get("/users/2147483647").expect(404);
+    const { body } = await request(app.getHttpServer())
+      .get("/users/2147483647")
+      .set({ authorization: `Bearer ${token}` })
+      .expect(404);
 
     expect(body).toEqual({
       statusCode: 404,

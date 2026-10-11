@@ -222,26 +222,26 @@ turns it off, which only the e2e suite does.
 
 ### Users (PostgreSQL)
 
-| Method | Endpoint             | Access | Description                          |
-| ------ | -------------------- | ------ | ------------------------------------ |
-| POST   | `/users`             | Admin  | Create a user and a profile          |
-| GET    | `/users`             | Admin  | List users, paginated, in id order   |
-| GET    | `/users/me`          | Token  | The caller's own user                |
-| GET    | `/users/:id`         | Public | One user                             |
-| PATCH  | `/users/me`          | Token  | Update the caller's own user         |
-| PATCH  | `/users/:id`         | Admin  | Update any user                      |
-| DELETE | `/users/me`          | Token  | Soft-delete the caller's own account |
-| DELETE | `/users/:id`         | Admin  | Soft-delete any user                 |
-| POST   | `/users/:id/restore` | Admin  | Restore a soft-deleted user          |
+| Method | Endpoint             | Access        | Description                                 |
+| ------ | -------------------- | ------------- | ------------------------------------------- |
+| POST   | `/users`             | Admin         | Create a user and a profile                 |
+| GET    | `/users`             | Admin         | List users, paginated, in id order          |
+| GET    | `/users/me`          | Token         | The caller's own user                       |
+| GET    | `/users/:id`         | Self or admin | One user. It carries the email and the role |
+| PATCH  | `/users/me`          | Token         | Update the caller's own user                |
+| PATCH  | `/users/:id`         | Admin         | Update any user                             |
+| DELETE | `/users/me`          | Token         | Soft-delete the caller's own account        |
+| DELETE | `/users/:id`         | Admin         | Soft-delete any user                        |
+| POST   | `/users/:id/restore` | Admin         | Restore a soft-deleted user                 |
 
 ### Profiles (PostgreSQL)
 
 | Method | Endpoint             | Access         | Description                 |
 | ------ | -------------------- | -------------- | --------------------------- |
-| GET    | `/profiles`          | Public         | List profiles, paginated    |
+| GET    | `/profiles`          | Token          | List profiles, paginated    |
 | GET    | `/profiles/me`       | Token          | The caller's own profile    |
-| GET    | `/profiles/user/:id` | Public         | The profile of one user     |
-| GET    | `/profiles/:id`      | Public         | One profile                 |
+| GET    | `/profiles/user/:id` | Token          | The profile of one user     |
+| GET    | `/profiles/:id`      | Token          | One profile                 |
 | PATCH  | `/profiles/me`       | Token          | Update the caller's profile |
 | PATCH  | `/profiles/:id`      | Owner or admin | Update a profile            |
 

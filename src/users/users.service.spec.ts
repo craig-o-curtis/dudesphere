@@ -4,11 +4,13 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { User } from "./user.entity.js";
+import { User, UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
 describe("UsersService", () => {
@@ -111,6 +113,60 @@ describe("UsersService", () => {
       usersRepository.findAndCount.mockResolvedValue([[], 0]);
 
       expect(await service.getUsers({ limit: 10, page: 1 })).toEqual({ items: [], total: 0 });
+    });
+  });
+
+  // GET /users/:id. The answer carries the email and the role, so only that
+  // user and an admin may read it.
+  describe("getUserForCaller", () => {
+    const storedUser = { id: 4, username: "walter", email: "w@x.com", role: UserRole.USER };
+
+    const walter: AuthUser = { userId: 4, username: "walter", role: UserRole.USER };
+    const donny: AuthUser = { userId: 5, username: "donny", role: UserRole.USER };
+    const admin: AuthUser = { userId: 1, username: "admin", role: UserRole.ADMIN };
+
+    it("returns a user to that user", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserForCaller(4, walter);
+
+      expect(result).toMatchObject({ id: 4, email: "w@x.com", role: UserRole.USER });
+    });
+
+    it("returns any user to an admin", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserForCaller(4, admin);
+
+      expect(result).toMatchObject({ id: 4, email: "w@x.com", role: UserRole.USER });
+    });
+
+    it("throws 403 NOT_OWNER when a member asks for another member", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const attempt = service.getUserForCaller(4, donny);
+
+      await expect(attempt).rejects.toBeInstanceOf(NotOwnerException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
+    });
+
+    // The role in the token decides, not the role of the user being read:
+    // a member may not read an admin's record either.
+    it("throws 403 when a member asks for an admin", async () => {
+      usersRepository.findOne.mockResolvedValue({ ...storedUser, id: 1, role: UserRole.ADMIN });
+
+      await expect(service.getUserForCaller(1, donny)).rejects.toBeInstanceOf(NotOwnerException);
+    });
+
+    // 404 before 403, as everywhere else NotOwnerException is thrown: a
+    // missing user is "not found" for every caller.
+    it.each([
+      ["a member who would not own it", donny],
+      ["an admin", admin],
+    ])("throws 404 for a missing user, asked for by %s", async (_who, caller) => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getUserForCaller(999, caller)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

@@ -92,7 +92,6 @@ describe("Authorization (e2e)", () => {
       ["/", 200],
       ["/abidings", 200],
       ["/hashtags", 200],
-      ["/profiles", 200],
     ] as const)("GET %s is %i", async (path, status) => {
       await request(app.getHttpServer()).get(path).expect(status);
     });
@@ -128,8 +127,12 @@ describe("Authorization (e2e)", () => {
   describe("401 without a token", () => {
     it.each([
       ["get", "/users/me"],
+      ["get", "/users/1"],
       ["get", "/abidings/me"],
+      ["get", "/profiles"],
       ["get", "/profiles/me"],
+      ["get", "/profiles/1"],
+      ["get", "/profiles/user/1"],
       ["post", "/abidings"],
       ["get", "/users"],
       ["post", "/users"],
@@ -237,10 +240,57 @@ describe("Authorization (e2e)", () => {
     });
   });
 
+  // The record carries the email and the role. Before this rule any signed-in
+  // caller could read anyone's.
+  describe("a user record can only be read by that user or an admin", () => {
+    it("200 for the user themselves, with their own email", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${owner.userId}`)
+        .set(bearer(owner.token))
+        .expect(200);
+
+      expect(body).toMatchObject({ id: owner.userId, role: UserRole.USER });
+      expect((body as { email: string }).email).toMatch(/^e2e-/);
+    });
+
+    it("403 for another member, with nothing of the user in the body", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${owner.userId}`)
+        .set(bearer(stranger.token))
+        .expect(403);
+
+      expect(body).toEqual({
+        statusCode: 403,
+        message: "Not authorized to read this user",
+        error: "Forbidden",
+        errorCode: "NOT_OWNER",
+      });
+    });
+
+    it("200 for an admin reading someone else", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${stranger.userId}`)
+        .set(bearer(adminToken))
+        .expect(200);
+
+      expect(body).toMatchObject({ id: stranger.userId });
+    });
+
+    // 404 before 403, as for abidings and profiles.
+    it("404 for a user that does not exist, even for a member", async () => {
+      await request(app.getHttpServer())
+        .get("/users/2147483647")
+        .set(bearer(stranger.token))
+        .expect(404);
+    });
+  });
+
   describe("a profile can only be changed by its owner or an admin", () => {
     it("403 for a stranger", async () => {
+      // Reading someone else's profile is allowed for any signed-in caller.
       const profile = await request(app.getHttpServer())
         .get(`/profiles/user/${owner.userId}`)
+        .set(bearer(stranger.token))
         .expect(200);
       const { id } = profile.body as { id: number };
 
@@ -254,6 +304,7 @@ describe("Authorization (e2e)", () => {
     it("200 for the owner", async () => {
       const profile = await request(app.getHttpServer())
         .get(`/profiles/user/${owner.userId}`)
+        .set(bearer(owner.token))
         .expect(200);
       const { id } = profile.body as { id: number };
 

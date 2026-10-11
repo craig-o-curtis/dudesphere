@@ -4,7 +4,7 @@ import { ErrorCode } from "../error-codes.js";
 
 /**
  * The caller is signed in and the thing exists, but it is not theirs to
- * change. A 403 with NOT_OWNER.
+ * read or change. A 403 with NOT_OWNER.
  *
  * The message says what they tried to do, such as "Not authorized to edit
  * this abiding", so each place that throws this passes its own.

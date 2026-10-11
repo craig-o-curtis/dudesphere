@@ -59,8 +59,8 @@ Who throws each one:
   or username in use, and both database filters, when a unique index refuses
   a write. Pass `"email"` or `"username"` when you know the field. Pass no
   field when you do not, and the answer is the general `VALUE_TAKEN`.
-- `NotOwnerException`: `AbidingsService` and `ProfilesService`, when the thing
-  exists and is someone else's. Each passes its own message.
+- `NotOwnerException`: `AbidingsService`, `ProfilesService` and `UsersService`,
+  when the thing exists and is someone else's. Each passes its own message.
 - `TokenMissingException`: `JwtAuthGuard` and `RolesGuard`.
 - `DatabaseUnavailableException`: all three exception filters.
 - `InvalidValueException`, `DatabaseFaultException`: both database filters.
