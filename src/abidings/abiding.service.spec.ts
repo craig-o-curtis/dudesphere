@@ -442,8 +442,9 @@ describe("AbidingsService", () => {
       expect(result).toBeInstanceOf(AbidingResponseDto);
     });
 
-    // A token outlives its user: it stays valid until it expires. Without
-    // this, a deleted user could keep posting, and the abidings would be live.
+    // JwtAuthGuard refuses a deleted user's token, but an account can be
+    // closed between the guard and the write. Without this, that request
+    // would post an abiding with an author nobody can find.
     it("writes nothing when the caller's user is deleted or missing", async () => {
       profilesService.getProfileByUserId.mockRejectedValue(
         new NotFoundException("Profile for user #1 not found"),

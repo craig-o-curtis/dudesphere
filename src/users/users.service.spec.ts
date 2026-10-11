@@ -219,7 +219,7 @@ describe("UsersService", () => {
       await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
 
-    // The role in the token decides, not the role of the user being read:
+    // The caller's own role decides, not the role of the user being read:
     // a member may not read an admin's record either.
     it("throws 403 when a member asks for an admin", async () => {
       usersRepository.findOne.mockResolvedValue({ ...storedUser, id: 1, role: UserRole.ADMIN });

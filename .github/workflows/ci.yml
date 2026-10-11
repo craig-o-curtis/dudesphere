@@ -131,8 +131,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Create the schema
         run: pnpm migration:run
-      # profile-me and authorization both log in, and the admin-only cases need
-      # a real admin row.
+      # profile-me logs in as the seeded admin. The other suites make their
+      # own users.
       - name: Seed the admin user
         run: pnpm seed:run
       - run: pnpm test:e2e
