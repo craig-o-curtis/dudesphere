@@ -11,6 +11,7 @@ import { AppModule } from "./../src/app.module.js";
 import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp } from "./sign-up.js";
 
 // Needs the databases running. Each run registers one throwaway user, two
 // abidings and one hashtag, which ends the run live again after being deleted
@@ -142,16 +143,10 @@ describe("Hashtag delete and restore (e2e)", () => {
 
     beforeAll(async () => {
       // A real user, because POST /abidings records the caller as the author.
-      // randomUUID, not Date.now(), which the gmt lint rules ban.
-      const tag = randomUUID().slice(0, 8);
-      const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-      await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ ...credentials, username: `e2e-${tag}` })
-        .expect(201);
+      const { sent } = await signUp(app);
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send({ identifier: credentials.email, password: credentials.password })
+        .send({ identifier: sent.email, password: sent.password })
         .expect(201);
       authorToken = (login.body as { token: string }).token;
 

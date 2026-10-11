@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { INestApplication } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -10,6 +8,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp, signUpBody } from "./sign-up.js";
 
 // The only place the guards are proved over real HTTP. A unit controller spec
 // cannot do it: both guards are APP_GUARDs registered in AppModule, and
@@ -30,19 +29,11 @@ describe("Authorization (e2e)", () => {
   let ownersAbidingId: string;
 
   async function registerAndLogin(): Promise<{ token: string; userId: number }> {
-    // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
-    // keep the username under its 24-character limit.
-    const tag = randomUUID().slice(0, 8);
-    const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-
-    await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...credentials, username: `e2e-${tag}` })
-      .expect(201);
+    const { sent } = await signUp(app);
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
@@ -116,11 +107,7 @@ describe("Authorization (e2e)", () => {
         .send({ identifier: "nobody@example.com", password: "wrong" })
         .expect(401); // reached the handler, which rejected the credentials
 
-      const tag = randomUUID().slice(0, 8);
-      await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
-        .expect(201);
+      await signUp(app);
     });
   });
 
@@ -173,11 +160,10 @@ describe("Authorization (e2e)", () => {
     // Creating a user directly is for admins. Everyone else signs up through
     // POST /auth/signup.
     it("POST /users", async () => {
-      const tag = randomUUID().slice(0, 8);
       await request(app.getHttpServer())
         .post("/users")
         .set(bearer(owner.token))
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .send(signUpBody())
         .expect(403);
     });
 
@@ -186,14 +172,14 @@ describe("Authorization (e2e)", () => {
     });
 
     it("lets an admin create a user with POST /users", async () => {
-      const tag = randomUUID().slice(0, 8);
+      const sent = signUpBody();
       const { body } = await request(app.getHttpServer())
         .post("/users")
         .set(bearer(adminToken))
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .send(sent)
         .expect(201);
 
-      expect(body).toMatchObject({ username: `e2e-${tag}`, role: UserRole.USER });
+      expect(body).toMatchObject({ username: sent.username, role: UserRole.USER });
     });
   });
 
