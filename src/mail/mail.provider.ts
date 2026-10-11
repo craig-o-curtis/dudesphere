@@ -20,6 +20,10 @@ export interface MailMessage {
  * test needs a mail server.
  */
 export abstract class MailProvider {
-  /** Resolves when the mail server has accepted the message. Rejects if it could not be sent. */
+  /**
+   * Resolves when the mail server has accepted the message. Rejects with a
+   * 503 MAIL_UNAVAILABLE if it could not be sent. The mail client's own error
+   * is that exception's cause, and never the rejection itself.
+   */
   abstract send(message: MailMessage): Promise<void>;
 }

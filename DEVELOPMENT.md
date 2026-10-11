@@ -62,7 +62,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself | default `true`                                    |
 | `MAIL_HOST`                 | no       | SMTP server for outgoing email                                          | default `localhost` (Mailpit)                     |
 | `MAIL_PORT`                 | no       | SMTP port. `465` means TLS from the start                               | default `1025` (Mailpit)                          |
-| `MAIL_USER`                 | no       | SMTP login. Mailpit needs none                                          | (empty)                                           |
+| `MAIL_USER`                 | no       | SMTP login. Mailpit needs none. With one set, the server must use TLS   | (empty)                                           |
 | `MAIL_PASSWORD`             | no       | SMTP password                                                           | (empty)                                           |
 | `MAIL_FROM`                 | no       | Who every email is from                                                 | default `Dudesphere <no-reply@dudesphere.local>`  |
 | `FRONTEND_URL`              | no       | Where the web app is served. The reset email links to it                | default `http://localhost:3000`                   |

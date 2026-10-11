@@ -1,7 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import nodemailer, { type Transporter } from "nodemailer";
 
+import { ErrorCode } from "../shared/error-codes.js";
 import mailConfig from "./config/mail.config.js";
 import { MailProvider, type MailMessage } from "./mail.provider.js";
 
@@ -29,6 +30,11 @@ export class SmtpMailProvider implements MailProvider {
       host: mail.host,
       port: mail.port,
       secure: mail.port === IMPLICIT_TLS_PORT,
+      // With a login set, the server must take STARTTLS, or nothing is sent.
+      // Without this, a server or a box in between that does not offer it
+      // would get the login and the email in plain text. Mailpit has no
+      // login and no TLS, so local mail is not affected.
+      requireTLS: Boolean(mail.user),
       // Mailpit takes mail with no login, so both variables are optional.
       ...(mail.user ? { auth: { user: mail.user, pass: mail.password ?? "" } } : {}),
       connectionTimeout: SMTP_TIMEOUT_MS,
@@ -37,7 +43,19 @@ export class SmtpMailProvider implements MailProvider {
     });
   }
 
+  // Nodemailer's own error never leaves this class. When the mail server
+  // does not answer, that error carries a socket code such as ETIMEDOUT, and
+  // AllExceptionsFilter reads a bare error with such a code as a database
+  // outage. So every failure is wrapped in a 503 of mail's own, with the
+  // original as its cause for the log.
   async send(message: MailMessage): Promise<void> {
-    await this.transporter.sendMail({ from: this.mail.from, ...message });
+    try {
+      await this.transporter.sendMail({ from: this.mail.from, ...message });
+    } catch (error) {
+      throw new ServiceUnavailableException("Mail could not be sent", {
+        cause: error,
+        errorCode: ErrorCode.MAIL_UNAVAILABLE,
+      });
+    }
   }
 }
