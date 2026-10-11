@@ -76,6 +76,9 @@ The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → Us
 
 - **Cycles.** A new import that closes a cycle is a hard finding (`arch-avoid-circular-deps`). Don't accept `forwardRef` as the fix; it hides the cycle.
 - **Combining services.** Code that combines several services' results may live in the controller, because `arch-single-responsibility` allows orchestration there. Rules about one entity belong in that entity's service.
+- **The seed starts the whole app through tsx.** `pnpm seed:run` boots all of `AppModule` with tsx, and the e2e job in CI runs it first, so a provider that cannot be built there stops that job. `pnpm test`, `pnpm build` and `pnpm test:e2e` do not catch it. Two shapes fail:
+  - **A gap in a constructor.** tsx does not emit constructor types, so a parameter injected by type alone is invisible there. If it sits before a parameter with `@Inject` or `@InjectRepository`, Nest sees a gap and throws `UndefinedDependencyException`. Flag that shape: every parameter before the last decorated one needs its own `@Inject(Token)`, as in `PasswordResetService`.
+  - **A class that extends a library class.** The subclass inherits the library's constructor types, and under tsx a class from `@nestjs/core` named there, such as `Reflector`, is a second copy that the app does not provide. Flag a guard or provider that extends a library class and declares no constructor of its own: it must repeat the constructor and name each token, as `AuthThrottlerGuard` does.
 - **Reaching into another feature's table.** `TypeOrmModule.forFeature([Other])` in a different feature skips that feature's service rules, soft delete included. A known case is `ProfilesModule` registering `User` for its seed.
 
 ## Auth and guards

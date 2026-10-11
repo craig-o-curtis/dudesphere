@@ -1,6 +1,12 @@
-import { ExecutionContext, HttpException, HttpStatus, Injectable } from "@nestjs/common";
-import { ThrottlerGuard } from "@nestjs/throttler";
-import type { ThrottlerLimitDetail, ThrottlerRequest } from "@nestjs/throttler";
+import { ExecutionContext, HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { InjectThrottlerOptions, InjectThrottlerStorage, ThrottlerGuard } from "@nestjs/throttler";
+import type {
+  ThrottlerLimitDetail,
+  ThrottlerModuleOptions,
+  ThrottlerRequest,
+  ThrottlerStorage,
+} from "@nestjs/throttler";
 
 import { THROTTLE_ACCOUNT_FIELD_KEY } from "../../shared/auth-metadata.js";
 import { ErrorCode } from "../../shared/error-codes.js";
@@ -19,6 +25,21 @@ interface RequestWithBody {
 // sign-in").
 @Injectable()
 export class AuthThrottlerGuard extends ThrottlerGuard {
+  // The same three parameters ThrottlerGuard takes, passed straight on. They
+  // are repeated here only to name the Reflector token outright. `pnpm
+  // seed:run` starts the whole app through tsx. There the Reflector class
+  // ThrottlerGuard asks for is not the one the app provides, because tsx
+  // loads @nestjs/core a second time for a package that uses require(). Nest
+  // then cannot find it and the seed stops. This one comes from the app's
+  // own import, so it is found.
+  constructor(
+    @InjectThrottlerOptions() options: ThrottlerModuleOptions,
+    @InjectThrottlerStorage() storageService: ThrottlerStorage,
+    @Inject(Reflector) reflector: Reflector,
+  ) {
+    super(options, storageService, reflector);
+  }
+
   // ThrottlerGuard calls this once for each count AppModule sets up.
   //
   // The "default" count goes straight through. It is by IP address, on every

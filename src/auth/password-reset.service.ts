@@ -41,7 +41,13 @@ export class PasswordResetService {
   constructor(
     @InjectRepository(PasswordResetToken)
     private readonly pwResetTokenRepository: Repository<PasswordResetToken>,
+    // @Inject names these two tokens outright. `pnpm seed:run` starts the
+    // whole app through tsx, which does not emit the constructor types Nest
+    // otherwise reads. With @Inject on the first and last parameters only,
+    // Nest sees two gaps between them there and refuses to start.
+    @Inject(UsersService)
     private readonly usersService: UsersService,
+    @Inject(MailProvider)
     private readonly mailProvider: MailProvider,
     // authConfig.KEY is not a secret. It is the name Nest gives the "auth"
     // config object, used here to ask for it. This service reads two values
