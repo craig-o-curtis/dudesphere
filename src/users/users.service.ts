@@ -64,6 +64,29 @@ export class UsersService {
     return this.toResponseDto(user, user.profile);
   }
 
+  // For JwtAuthGuard, which calls this on every signed-in request. `id` is
+  // the user id from a token that has already passed verification.
+  //
+  // Returns who that user is now, or null when there is no such user. A
+  // soft-deleted user is not found, so closing an account ends its tokens at
+  // once. The username and the role are the current ones, so a demoted admin
+  // is a plain user on their very next request.
+  //
+  // Selects three columns and joins nothing: this runs far more often than
+  // any other query in the app.
+  async getUserForToken(id: number, _issuedAt: number): Promise<AuthUser | null> {
+    const user = await this.usersRepository
+      .createQueryBuilder("user")
+      .select(["user.id", "user.username", "user.role"])
+      .where("user.id = :id", { id })
+      // The query builder already leaves soft-deleted rows out. Said here as
+      // well, because this line is the reason a closed account's token stops.
+      .andWhere("user.deletedAt IS NULL")
+      .getOne();
+
+    return user ? { userId: user.id, username: user.username, role: user.role } : null;
+  }
+
   // For GET /users/:id. `caller` is who is asking: an admin reads any user,
   // and everyone else reads only their own. The answer carries the email and
   // the role, so another member's is not theirs to read.

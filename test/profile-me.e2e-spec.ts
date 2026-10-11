@@ -49,16 +49,15 @@ describe("GET /profiles/me (e2e)", () => {
   });
 
   // The user comes from the token, not from a fixed id. A token for a user
-  // with no profile must not fall back to someone else's.
-  it("returns 404 for a token whose user has no profile", async () => {
-    const token = await app
-      .get(JwtService)
-      .signAsync({ sub: 2_000_000_000, username: "nobody", role: "user" });
+  // who does not exist must not fall back to someone else's profile. The
+  // guard looks the user up, finds nobody, and refuses the token.
+  it("returns 401 for a token whose user does not exist", async () => {
+    const token = await app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "nobody" });
 
     await request(app.getHttpServer())
       .get("/profiles/me")
       .set("Authorization", `Bearer ${token}`)
-      .expect(404);
+      .expect(401);
   });
 
   it("returns 401 without a token", async () => {

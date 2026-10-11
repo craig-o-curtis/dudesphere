@@ -30,11 +30,21 @@ describe("UsersService", () => {
     transaction: vi.fn((callback: (m: typeof manager) => unknown) => callback(manager)),
   };
 
+  // One query builder stands for every createQueryBuilder() call. Each step
+  // returns it, as TypeORM's does, and getOne() is what a test sets.
+  const queryBuilder = {
+    select: vi.fn(),
+    where: vi.fn(),
+    andWhere: vi.fn(),
+    getOne: vi.fn(),
+  };
+
   const usersRepository = {
     find: vi.fn(),
     findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
+    createQueryBuilder: vi.fn(),
   };
 
   const profilesService = {
@@ -63,6 +73,10 @@ describe("UsersService", () => {
     hashingProvider.hashPassword.mockImplementation((plain: string) =>
       Promise.resolve(`hashed(${plain})`),
     );
+    queryBuilder.select.mockReturnValue(queryBuilder);
+    queryBuilder.where.mockReturnValue(queryBuilder);
+    queryBuilder.andWhere.mockReturnValue(queryBuilder);
+    usersRepository.createQueryBuilder.mockReturnValue(queryBuilder);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -114,6 +128,45 @@ describe("UsersService", () => {
       usersRepository.findAndCount.mockResolvedValue([[], 0]);
 
       expect(await service.getUsers({ limit: 10, page: 1 })).toEqual({ items: [], total: 0 });
+    });
+  });
+
+  // What JwtAuthGuard calls on every signed-in request. The SQL itself is
+  // proved against the real database, in test/authorization.e2e-spec.ts and
+  // test/delete-me.e2e-spec.ts. These cases cover what the method does with
+  // the answer.
+  describe("getUserForToken", () => {
+    it("returns who the user is now, in the shape the guards read", async () => {
+      queryBuilder.getOne.mockResolvedValue({ id: 25, username: "walter", role: UserRole.ADMIN });
+
+      const user = await service.getUserForToken(25, 1_800_000_000);
+
+      expect(user).toEqual({ userId: 25, username: "walter", role: UserRole.ADMIN });
+      expect(queryBuilder.where).toHaveBeenCalledWith("user.id = :id", { id: 25 });
+    });
+
+    // Three columns and no join, because this runs on every request.
+    it("reads only the id, the username and the role", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.select).toHaveBeenCalledWith(["user.id", "user.username", "user.role"]);
+    });
+
+    it("leaves soft-deleted users out", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith("user.deletedAt IS NULL");
+    });
+
+    // Null, not a 404. The guard turns it into a 401.
+    it("returns null when there is no such user", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(service.getUserForToken(2_000_000_000, 1_800_000_000)).resolves.toBeNull();
     });
   });
 

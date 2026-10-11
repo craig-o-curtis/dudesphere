@@ -65,10 +65,11 @@ describe("createDevToken", () => {
 
       expect(signAsync).toHaveBeenCalledTimes(1);
       expect(signAsync.mock.calls[0][0]).toEqual(jwtPayloadFor(walter));
+      // No role. JwtAuthGuard reads it from the database on each request,
+      // so a 30-day token cannot keep a role its member has lost.
       expect(signAsync.mock.calls[0][0]).toEqual({
         sub: 25,
         username: "walter",
-        role: UserRole.USER,
       });
     });
 

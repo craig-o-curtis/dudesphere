@@ -43,28 +43,37 @@ describe("DELETE /users/me (e2e)", () => {
       .set("Authorization", `Bearer ${token}`)
       .expect(204);
 
-    // The account and its profile are gone, and the user can't log back in.
+    // The account is closed, so its token is refused at once: the guard
+    // looks the user up on every request and no longer finds one. The user
+    // can't log back in either.
     await request(app.getHttpServer())
       .get("/profiles/me")
       .set("Authorization", `Bearer ${token}`)
-      .expect(404);
+      .expect(401);
     await request(app.getHttpServer())
       .post("/auth/login")
       .send({ identifier: sent.email, password: sent.password })
       .expect(401);
 
-    // The token is still valid until it expires, but it can no longer post.
+    // It has an hour left before it expires, and it still cannot post.
     await request(app.getHttpServer())
       .post("/abidings")
       .set("Authorization", `Bearer ${token}`)
       .send({ message: "posted after deleting my account" })
-      .expect(404);
+      .expect(401);
 
-    // A second delete with the same token finds nothing to delete.
+    // Nor delete the account a second time.
     await request(app.getHttpServer())
       .delete("/users/me")
       .set("Authorization", `Bearer ${token}`)
-      .expect(404);
+      .expect(401);
+
+    // It was not only the routes that read the user. A list that looks
+    // nobody up is closed to it too.
+    await request(app.getHttpServer())
+      .get("/profiles")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(401);
   });
 
   it("returns 401 without a token", async () => {
