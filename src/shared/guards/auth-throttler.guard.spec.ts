@@ -28,10 +28,10 @@ class GuardUnderTest extends AuthThrottlerGuard {
 
 // Stand-ins for two routes: one that names its account field, one that does not.
 class Routes {
-  @ThrottleByAccount("identifier")
+  @ThrottleByAccount("identifier", { limit: 5, ttl: 900_000 })
   login(this: void) {}
 
-  @ThrottleByAccount("email")
+  @ThrottleByAccount("email", { limit: 3, ttl: 900_000 })
   forgotPassword(this: void) {}
 
   anyOtherRoute(this: void) {}
