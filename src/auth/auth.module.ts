@@ -10,6 +10,8 @@ import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset.service.js";
+import { TokenService } from "./token.service.js";
+import { TokensController } from "./tokens.controller.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
 // that injects authConfig.KEY has to import it. There are two: AuthModule,
@@ -31,8 +33,8 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
 const JWT_ALGORITHM = "HS256";
 
 @Module({
-  controllers: [AuthController],
-  providers: [AuthService, PasswordResetService],
+  controllers: [AuthController, TokensController],
+  providers: [AuthService, PasswordResetService, TokenService],
   imports: [
     UsersModule,
     // For PasswordResetService: the mail it sends and the table it keeps.

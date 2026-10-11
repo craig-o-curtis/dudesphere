@@ -7,7 +7,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import { bearer } from "./auth-helpers.js";
+import { bearer, signIn } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, signUpBody, type SignUpBody } from "./sign-up.js";
 
@@ -41,12 +41,8 @@ describe("Display names (e2e)", () => {
     return request(app.getHttpServer()).post("/auth/signup").send(body);
   }
 
-  async function logIn(sent: SignUpBody): Promise<{ token: string; userId: number }> {
-    const { body } = await request(app.getHttpServer())
-      .post("/auth/login")
-      .send({ identifier: sent.email, password: sent.password })
-      .expect(201);
-    return body as { token: string; userId: number };
+  function logIn(sent: SignUpBody): Promise<{ token: string; userId: number }> {
+    return signIn(app, sent.email, sent.password);
   }
 
   beforeAll(async () => {
@@ -134,7 +130,7 @@ describe("Display names (e2e)", () => {
       await postSignUp(sent).expect(409);
 
       await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/auth/token")
         .send({ identifier: sent.email, password: sent.password })
         .expect(401);
     });

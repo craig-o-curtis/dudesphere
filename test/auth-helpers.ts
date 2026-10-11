@@ -19,15 +19,43 @@ export function bearer(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-/** A member the suite created, and the token their login returned. */
+/** A signed-in member: their access token, and their user id. */
 export interface SignedInUser {
   token: string;
   userId: number;
 }
 
 /**
- * Signs up a new `e2e-` member with the given role, logs them in and returns
- * the token. test/global-setup.ts deletes the member when the run ends.
+ * Signs a member in through POST /auth/token and returns their access token
+ * and their id. The sign-in answer carries no id, so this asks GET /users/me
+ * with the new token, as a client would.
+ */
+export async function signIn(
+  app: INestApplication<App>,
+  identifier: string,
+  password: string,
+): Promise<SignedInUser> {
+  const token = await accessTokenFor(app, identifier, password);
+  const me = await request(app.getHttpServer()).get("/users/me").set(bearer(token)).expect(200);
+  return { token, userId: (me.body as { id: number }).id };
+}
+
+/** Signs a member in through POST /auth/token and returns the access token alone. */
+export async function accessTokenFor(
+  app: INestApplication<App>,
+  identifier: string,
+  password: string,
+): Promise<string> {
+  const response = await request(app.getHttpServer())
+    .post("/auth/token")
+    .send({ identifier, password })
+    .expect(200);
+  return (response.body as { accessToken: string }).accessToken;
+}
+
+/**
+ * Signs up a new `e2e-` member with the given role, signs them in and returns
+ * the access token. test/global-setup.ts deletes the member when the run ends.
  *
  * No route can make an admin, on purpose, so an admin is made the way the
  * seed makes one: the role is written to the row. The login comes after
@@ -43,12 +71,7 @@ export async function signedInAs(
     await setRole(app, user.id, role);
   }
 
-  const login = await request(app.getHttpServer())
-    .post("/auth/login")
-    .send({ identifier: sent.email, password: sent.password })
-    .expect(201);
-  const { token, userId } = login.body as SignedInUser;
-  return { token, userId };
+  return { token: await accessTokenFor(app, sent.email, sent.password), userId: user.id };
 }
 
 /** Writes a member's role straight to the database, as nothing in the API can. */

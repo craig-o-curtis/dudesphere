@@ -36,7 +36,7 @@ describe("Passwords (e2e)", () => {
   }
 
   function login(email: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/login").send({ identifier: email, password });
+    return request(app.getHttpServer()).post("/auth/token").send({ identifier: email, password });
   }
 
   async function storedPassword(userId: number | undefined): Promise<string> {
@@ -100,8 +100,8 @@ describe("Passwords (e2e)", () => {
     it("accepts the right password and rejects a wrong one", async () => {
       const { email } = await register("secret123");
 
-      const ok = await login(email, "secret123").expect(201);
-      expect(ok.body).toHaveProperty("token");
+      const ok = await login(email, "secret123").expect(200);
+      expect(ok.body).toHaveProperty("accessToken");
 
       await login(email, "secret124").expect(401);
     });
@@ -130,7 +130,7 @@ describe("Passwords (e2e)", () => {
       const { email, status } = await register(password);
 
       expect(status).toBe(201);
-      await login(email, password).expect(201);
+      await login(email, password).expect(200);
     });
 
     it("rejects 73 bytes with a 400", async () => {
@@ -150,8 +150,8 @@ describe("Passwords (e2e)", () => {
   describe("changing your own password", () => {
     async function signUp() {
       const { email } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(201);
-      return { email, token: (body as { token: string }).token };
+      const { body } = await login(email, "secret123").expect(200);
+      return { email, token: (body as { accessToken: string }).accessToken };
     }
 
     function changePassword(token: string, body: object) {
@@ -163,7 +163,7 @@ describe("Passwords (e2e)", () => {
 
       await changePassword(token, { password: "secret456" }).expect(400);
 
-      await login(email, "secret123").expect(201);
+      await login(email, "secret123").expect(200);
     });
 
     it("is refused with a 403 when the current password is wrong", async () => {
@@ -173,7 +173,7 @@ describe("Passwords (e2e)", () => {
         403,
       );
 
-      await login(email, "secret123").expect(201);
+      await login(email, "secret123").expect(200);
       await login(email, "secret456").expect(401);
     });
 
@@ -187,7 +187,7 @@ describe("Passwords (e2e)", () => {
 
       expect(response.body).not.toHaveProperty("password");
       expect(response.body).not.toHaveProperty("currentPassword");
-      await login(email, "secret456").expect(201);
+      await login(email, "secret456").expect(200);
       await login(email, "secret123").expect(401);
     });
 
@@ -210,10 +210,10 @@ describe("Passwords (e2e)", () => {
       expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
 
       // The member logs in again with the new password, and that token works.
-      const { body } = await login(email, "secret456").expect(201);
+      const { body } = await login(email, "secret456").expect(200);
       await request(app.getHttpServer())
         .get("/users/me")
-        .set(bearer((body as { token: string }).token))
+        .set(bearer((body as { accessToken: string }).accessToken))
         .expect(200);
     });
 
@@ -240,9 +240,11 @@ describe("Passwords (e2e)", () => {
   describe("the login token", () => {
     it("carries an audience, an issuer and an expiry", async () => {
       const { email } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(201);
+      const { body } = await login(email, "secret123").expect(200);
 
-      const claims: Record<string, unknown> = jwt.decode((body as { token: string }).token);
+      const claims: Record<string, unknown> = jwt.decode(
+        (body as { accessToken: string }).accessToken,
+      );
 
       expect(claims.aud).toBe("dudesphere-api");
       expect(claims.iss).toBe("dudesphere");
@@ -252,7 +254,7 @@ describe("Passwords (e2e)", () => {
     // Signed with this app's own secret, so only the audience is wrong.
     it("is rejected when it was issued for another audience", async () => {
       const { email, userId } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(201);
+      const { body } = await login(email, "secret123").expect(200);
       const forged = await jwt.signAsync(
         { sub: userId, username: "e2e-forged", role: "user" },
         { audience: "some-other-app" },
@@ -260,7 +262,7 @@ describe("Passwords (e2e)", () => {
 
       await request(app.getHttpServer())
         .get("/users/me")
-        .set(bearer((body as { token: string }).token))
+        .set(bearer((body as { accessToken: string }).accessToken))
         .expect(200);
       await request(app.getHttpServer()).get("/users/me").set(bearer(forged)).expect(401);
     });

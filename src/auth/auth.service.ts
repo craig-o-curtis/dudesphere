@@ -1,25 +1,24 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 
 import { ErrorCode } from "../shared/error-codes.js";
-import { jwtPayloadFor } from "../shared/guards/auth-user.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
+import { UserResponseDto } from "../users/dto/user-response.dto.js";
 import { UsersService } from "../users/users.service.js";
 import { LoginDto } from "./dto/login.dto.js";
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   async signup(signupDto: CreateUserDto) {
     // prevent dupes happens inside the usersService.createUser method
     return await this.usersService.createUser(signupDto);
   }
 
-  async login(loginDto: LoginDto) {
+  // The first half of signing in: is this the member, and is that their
+  // password? Returns the member, or throws a 401. TokensController hands the
+  // member to TokenService, which makes the tokens.
+  async verifyCredentials(loginDto: LoginDto): Promise<UserResponseDto> {
     const user = await this.usersService.getUserByCredentials(
       loginDto.identifier,
       loginDto.password,
@@ -33,8 +32,6 @@ export class AuthService {
       });
     }
 
-    const token = await this.jwtService.signAsync(jwtPayloadFor(user));
-
-    return { token, userId: user.id, name: user.username };
+    return user;
   }
 }

@@ -7,7 +7,7 @@ import { PasswordResetService } from "./password-reset.service.js";
 describe("AuthController", () => {
   let controller: AuthController;
 
-  const authService = { signup: vi.fn(), login: vi.fn() };
+  const authService = { signup: vi.fn() };
   const passwordResetService = { requestEmail: vi.fn(), reset: vi.fn() };
 
   beforeEach(async () => {
@@ -41,17 +41,6 @@ describe("AuthController", () => {
 
       await expect(controller.signup(body)).resolves.toBe(created);
       expect(authService.signup).toHaveBeenCalledWith(body);
-    });
-  });
-
-  describe("login", () => {
-    it("passes the body to AuthService and returns what it returns", async () => {
-      const body = { identifier: "walter", password: "secret1" };
-      const loggedIn = { token: "a.b.c", userId: 4, name: "walter" };
-      authService.login.mockResolvedValue(loggedIn);
-
-      await expect(controller.login(body)).resolves.toBe(loggedIn);
-      expect(authService.login).toHaveBeenCalledWith(body);
     });
   });
 

@@ -33,10 +33,10 @@ describe("DELETE /users/me (e2e)", () => {
     const { sent } = await signUp(app);
 
     const login = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: sent.email, password: sent.password })
-      .expect(201);
-    const { token } = login.body as { token: string };
+      .expect(200);
+    const { accessToken: token } = login.body as { accessToken: string };
 
     await request(app.getHttpServer())
       .delete("/users/me")
@@ -51,7 +51,7 @@ describe("DELETE /users/me (e2e)", () => {
       .set("Authorization", `Bearer ${token}`)
       .expect(401);
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: sent.email, password: sent.password })
       .expect(401);
 
