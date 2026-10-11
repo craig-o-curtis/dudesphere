@@ -7,8 +7,8 @@ export class UserResponseDto {
   id: number;
   username: string;
   email: string;
-  // UserRole, not string, so the value that reaches the signed token through
-  // AuthService.login is the same type RolesGuard compares against.
+  // UserRole, not string: the same type RolesGuard compares against, so a
+  // typo in a role cannot get past the type checker.
   role: UserRole;
   createdAt: string;
   updatedAt: string;

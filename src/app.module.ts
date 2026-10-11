@@ -44,8 +44,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // Two counts. "default" is the limit every route gets: 100 requests a
     // minute from one IP address. The second is tighter and counts by account
     // and IP address together. It runs only on a route marked
-    // @ThrottleByAccount, as login and forgot-password are in AuthController,
-    // and AuthThrottlerGuard skips it everywhere else. @ThrottleByAccount
+    // @ThrottleByAccount, as sign-in is in TokensController and
+    // forgot-password is in AuthController, and AuthThrottlerGuard skips it
+    // everywhere else. @ThrottleByAccount
     // always sets the route's own limit, so the 5 in 15 minutes here is only
     // the value ThrottlerModule needs in order to register the count.
     //

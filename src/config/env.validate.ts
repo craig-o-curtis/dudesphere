@@ -62,7 +62,7 @@ export class EnvironmentVariables {
   })
   MONGO_URI: string = "mongodb://localhost:27017/dude-abidings";
 
-  // The key that signs every login token. Whoever holds it can sign a token
+  // The key that signs every access token. Whoever holds it can sign a token
   // for any member, so it must be too long to guess. Anyone with one real
   // token can try keys against it on their own machine, as fast as they like,
   // and a short or common key falls to that. 32 characters is the key size
@@ -157,8 +157,9 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   DUDE_OBSERVE_APP_SECRET: string;
 
-  // The seeded admin's login. Only `pnpm seed:run` and the e2e suite need
-  // these, so the app starts without them.
+  // The seeded admin's login. `pnpm seed:run` reads both, and
+  // `pnpm dev:token` reads EMAIL. Nothing else does, so the app starts
+  // without them.
   @IsOptional()
   @IsString()
   EMAIL?: string;

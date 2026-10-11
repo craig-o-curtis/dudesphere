@@ -170,6 +170,8 @@ before a row that belongs to someone else answers 403. See
 - `test/route-access.e2e-spec.ts` reads every route from the controllers and
   checks, over HTTP: 401 with no token on every route that is not public, and
   403 with the wrong role on every route limited to a role.
+- `test/tokens.e2e-spec.ts` proves the session check: an access token stops
+  on the next request once its session is signed out, reused, or past its end.
 - `test/authorization.e2e-spec.ts` sends tokens someone has tampered with: a
   role written into the payload, another member's id, no signature, the wrong
   algorithm. It also demotes an admin and checks the same token gets 403.

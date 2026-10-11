@@ -16,8 +16,8 @@ import { TokensController } from "./tokens.controller.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
 // that injects authConfig.KEY has to import it. There are two: AuthModule,
-// for PasswordResetService, and JwtModule, for the factory below. Both import
-// this one constant.
+// for PasswordResetService and TokenService, and JwtModule, for the factory
+// below. Both import this one constant.
 //
 // Not authConfig.asProvider(). That returns a ready-made set of registerAsync
 // options: this same import and inject, plus a factory that hands the config
@@ -54,7 +54,7 @@ const JWT_ALGORITHM = "HS256";
       // which checks every variable before any module loads.
       imports: [authConfigModule],
       inject: [authConfig.KEY],
-      // Set once here for signing and verifying. AuthService and JwtAuthGuard
+      // Set once here for signing and verifying. TokenService and JwtAuthGuard
       // then call signAsync and verifyAsync with no options of their own, and
       // the guard rejects a token with the wrong audience, issuer or
       // algorithm. A call that does pass options has them laid over these, so

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-// Lets a password change end the login tokens that are already out.
+// Lets a password change end the access tokens that are already out.
 //
 // Adds a nullable "passwordChangedAt" column to "user". It holds the moment
 // the password was last changed or reset. UsersService.updateUser sets it,
