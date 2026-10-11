@@ -95,11 +95,14 @@ describe("Pagination (e2e)", () => {
       const tag = randomUUID().slice(0, 8);
       const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
       const user = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({ ...credentials, username: `e2e-${tag}` })
         .expect(201);
       authorId = (user.body as { id: number }).id;
-      const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+      const login = await request(app.getHttpServer())
+        .post("/auth/login")
+        .send({ identifier: credentials.email, password: credentials.password })
+        .expect(201);
       authorToken = (login.body as { token: string }).token;
 
       // One at a time, so "posted later" and "newer" mean the same thing.
@@ -337,10 +340,13 @@ describe("Pagination (e2e)", () => {
       const tag = randomUUID().slice(0, 8);
       const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
       const user = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({ ...credentials, username: `e2e-${tag}` })
         .expect(201);
-      const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+      const login = await request(app.getHttpServer())
+        .post("/auth/login")
+        .send({ identifier: credentials.email, password: credentials.password })
+        .expect(201);
       const body = user.body as { id: number; profile: { id: number } };
       return {
         id: body.id,

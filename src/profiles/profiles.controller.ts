@@ -20,9 +20,11 @@ export class ProfilesController {
 
   @Public()
   @Get()
-  async getProfiles(@Query() query: PaginationQueryDto): Promise<Paginated<ProfileResponseDto>> {
-    const profiles = await this.profilesService.getProfiles(query);
-    return this.paginationProvider.toResponse(profiles, query, "/profiles");
+  async getProfiles(
+    @Query() pageRequest: PaginationQueryDto,
+  ): Promise<Paginated<ProfileResponseDto>> {
+    const profiles = await this.profilesService.getProfiles(pageRequest);
+    return this.paginationProvider.toResponse(profiles, pageRequest, "/profiles");
   }
 
   // The profile of the logged-in user. The user id comes from the JWT token
@@ -31,7 +33,7 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth with email + password.
+  //   1. Frontend calls POST /auth/login with a username or email, and a password.
   //   2. Backend validates credentials and returns a signed JWT token.
   //   3. Frontend stores the token and sends it on every protected request:
   //        Authorization: Bearer <token>

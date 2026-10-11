@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
   Min,
@@ -79,6 +80,49 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   JWT_ISSUER: string = "dudesphere";
+
+  // Rate limiting. On unless this is "false". The e2e suite turns it off,
+  // because its files sign up and log in from one address far faster than a
+  // person would. See src/auth/guards/auth-throttler.guard.ts.
+  @IsIn(["true", "false"])
+  THROTTLE_ENABLED: "true" | "false" = "true";
+
+  // Outgoing email, sent over SMTP. The defaults point at the Mailpit
+  // container in docker-compose.yml, which keeps every message and delivers
+  // none, so the app sends no real mail until these are changed.
+  @IsString()
+  @IsNotEmpty()
+  MAIL_HOST: string = "localhost";
+
+  @IntFromDigits()
+  @Min(1)
+  @Max(65535)
+  MAIL_PORT: number = 1025;
+
+  // The SMTP login. Mailpit needs none, so both are optional.
+  @IsOptional()
+  @IsString()
+  MAIL_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  MAIL_PASSWORD?: string;
+
+  // Who every email is from: an address, or "Name <address>".
+  @IsString()
+  @IsNotEmpty()
+  MAIL_FROM: string = "Dudesphere <no-reply@dudesphere.local>";
+
+  // Where the web app is served. The password reset email links to
+  // /reset-password on it. require_tld is off so localhost passes.
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
+  FRONTEND_URL: string = "http://localhost:3000";
+
+  // How long a password reset link works, in seconds. At least a minute, so
+  // a typo cannot make every link dead on arrival.
+  @IntFromDigits()
+  @Min(60)
+  PASSWORD_RESET_EXPIRES_IN: number = 1800;
 
   @IsString()
   @IsNotEmpty()

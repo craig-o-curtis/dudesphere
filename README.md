@@ -165,7 +165,7 @@ Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1, de
 | ------ | ---------- | ---------------------------------- |
 | GET    | /users     | List users, paginated (admin only) |
 | GET    | /users/:id | Get user by ID                     |
-| POST   | /users     | Create a user                      |
+| POST   | /users     | Create a user (admin only)         |
 | PATCH  | /users/:id | Update a user                      |
 | DELETE | /users/:id | Delete a user                      |
 
@@ -199,9 +199,18 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| POST   | /auth    | Login       |
+| Method | Endpoint              | Description                      |
+| ------ | --------------------- | -------------------------------- |
+| POST   | /auth/signup          | Sign up                          |
+| POST   | /auth/login           | Log in with username or email    |
+| POST   | /auth/forgot-password | Email a password reset link      |
+| POST   | /auth/reset-password  | Set a new password with the link |
+
+Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
+
+Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.
+
+Login allows 5 tries in 15 minutes for one account from one IP address. After that it answers 429 with a `Retry-After` header. Every route, login included, also allows 100 requests a minute from one IP address.
 
 ## Database Usage
 

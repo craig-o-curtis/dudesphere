@@ -72,15 +72,18 @@ Prefer `relations: { x: true }` on the query that needs it. Flag `eager: true` u
 
 ## Module boundaries
 
-The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → UsersModule` and `AuthModule → UsersModule`.
+The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → UsersModule`, `AuthModule → UsersModule` and `AuthModule → MailModule`.
 
 - **Cycles.** A new import that closes a cycle is a hard finding (`arch-avoid-circular-deps`). Don't accept `forwardRef` as the fix; it hides the cycle.
 - **Combining services.** Code that combines several services' results may live in the controller, because `arch-single-responsibility` allows orchestration there. Rules about one entity belong in that entity's service.
+- **The seed starts the whole app through tsx.** `pnpm seed:run` boots all of `AppModule` with tsx, and the e2e job in CI runs it first, so a provider that cannot be built there stops that job. `pnpm test`, `pnpm build` and `pnpm test:e2e` do not catch it. Two shapes fail:
+  - **A gap in a constructor.** tsx does not emit constructor types, so a parameter injected by type alone is invisible there. If it sits before a parameter with `@Inject` or `@InjectRepository`, Nest sees a gap and throws `UndefinedDependencyException`. Flag that shape: every parameter before the last decorated one needs its own `@Inject(Token)`, as in `PasswordResetService`.
+  - **A class that extends a library class.** The subclass inherits the library's constructor types, and under tsx a class from `@nestjs/core` named there, such as `Reflector`, is a second copy that the app does not provide. Flag a guard or provider that extends a library class and declares no constructor of its own: it must repeat the constructor and name each token, as `AuthThrottlerGuard` does.
 - **Reaching into another feature's table.** `TypeOrmModule.forFeature([Other])` in a different feature skips that feature's service rules, soft delete included. A known case is `ProfilesModule` registering `User` for its seed.
 
 ## Auth and guards
 
-Login (`POST /auth`) checks the email and password and returns a signed JWT. `JwtAuthGuard` verifies it and puts `{ userId, username, role }` on the request. Read it with `@CurrentUser()`.
+Login (`POST /auth/login`) checks the username or email and the password, and returns a signed JWT. `JwtAuthGuard` verifies it and puts `{ userId, username, role }` on the request. Read it with `@CurrentUser()`.
 
 - **"Mine" comes from the token.** A route for the caller's own data (for example `GET /profiles/me`) takes the user id from `@CurrentUser()`, never from the URL or the body.
 - **Don't import `AuthModule` into a feature.** `AuthModule → UsersModule → ProfilesModule`, so that import closes a cycle. The guard needs only `JwtService`, which is registered globally. Use `@UseGuards(JwtAuthGuard)` directly.

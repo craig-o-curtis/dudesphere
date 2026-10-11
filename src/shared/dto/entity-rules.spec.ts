@@ -2,6 +2,7 @@ import { plainToInstance } from "class-transformer";
 import { getMetadataStorage, validate } from "class-validator";
 import { getMetadataArgsStorage } from "typeorm";
 
+import { columnLimits } from "../../../test/column-limits.js";
 import { UpdateProfileDto } from "../../profiles/dto/update-profile-dto.js";
 import { Profile } from "../../profiles/profile.entity.js";
 import { UpdateUserDto } from "../../users/dto/update-user.dto.js";
@@ -62,14 +63,15 @@ describe.each(pairs)("%s follows its entity", (_name, dto, entity) => {
     }
   });
 
-  it("rejects a value longer than its varchar column, however the length is counted", async () => {
-    const sized = sharedColumns(dto, entity).filter(
-      (column) => column.options.type === "varchar" && column.options.length !== undefined,
-    );
+  it("rejects a value longer than its column, however the length is counted", async () => {
+    // A varchar's length, or the char_length check that stands in for one on
+    // a citext column. See test/column-limits.ts.
+    const limits = columnLimits(entity);
+    const sized = sharedColumns(dto, entity).filter((column) => limits.has(column.propertyName));
 
     for (const column of sized) {
       const field = column.propertyName;
-      const limit = Number(column.options.length);
+      const limit = limits.get(field)!;
       const tooLong = {
         plain: "a".repeat(limit + 1),
         // Short to @MaxLength, too long to Postgres. See max-code-points.decorator.ts.
@@ -86,7 +88,7 @@ describe.each(pairs)("%s follows its entity", (_name, dto, entity) => {
   it("rejects a NUL character in every string column", async () => {
     const strings = sharedColumns(dto, entity).filter(
       (column) =>
-        (column.options.type === "varchar" || column.options.type === "text") &&
+        ["varchar", "text", "citext"].includes(String(column.options.type)) &&
         !HASHED_FIELDS.has(column.propertyName),
     );
 

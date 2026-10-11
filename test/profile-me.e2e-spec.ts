@@ -31,8 +31,8 @@ describe("GET /profiles/me (e2e)", () => {
 
   async function login(): Promise<{ token: string; userId: number }> {
     const response = await request(app.getHttpServer())
-      .post("/auth")
-      .send({ email: process.env.EMAIL, password: process.env.PASSWORD })
+      .post("/auth/login")
+      .send({ identifier: process.env.EMAIL, password: process.env.PASSWORD })
       .expect(201);
     return response.body as { token: string; userId: number };
   }
@@ -74,8 +74,8 @@ describe("GET /profiles/me (e2e)", () => {
 
   it("returns 401 when the password is wrong", async () => {
     await request(app.getHttpServer())
-      .post("/auth")
-      .send({ email: process.env.EMAIL, password: "not-the-password" })
+      .post("/auth/login")
+      .send({ identifier: process.env.EMAIL, password: "not-the-password" })
       .expect(401);
   });
 });

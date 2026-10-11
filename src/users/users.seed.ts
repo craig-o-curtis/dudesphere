@@ -31,7 +31,7 @@ export class UsersSeedService {
     // The seed writes to the table directly, so it hashes for itself. Every
     // run stores a fresh hash of PASSWORD, which resets the admin's password
     // to the value in .env.
-    const passwordHash = await this.hashingProvider.hash(adminPassword);
+    const passwordHash = await this.hashingProvider.hashPassword(adminPassword);
 
     let admin = await this.usersRepository.findOne({
       where: { email: adminEmail },

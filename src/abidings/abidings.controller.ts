@@ -61,7 +61,7 @@ export class AbidingsController {
   // id — see UsersController's deleteMe, which has the same ordering reason.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth with email + password.
+  //   1. Frontend calls POST /auth/login with a username or email, and a password.
   //   2. Backend validates credentials and returns a signed JWT token.
   //   3. Frontend stores the token and sends it on every protected request:
   //        Authorization: Bearer <token>

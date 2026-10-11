@@ -14,6 +14,7 @@ import { DatabaseFaultException } from "./database-fault.exception.js";
 import { DatabaseUnavailableException } from "./database-unavailable.exception.js";
 import { InvalidValueException } from "./invalid-value.exception.js";
 import { NotOwnerException } from "./not-owner.exception.js";
+import { ResetTokenInvalidException } from "./reset-token-invalid.exception.js";
 import { TimeLimitExceededException } from "./time-limit-exceeded.exception.js";
 import { TokenMissingException } from "./token-missing.exception.js";
 import { ValueTakenException } from "./value-taken.exception.js";
@@ -163,6 +164,21 @@ describe("the app's own exception classes", () => {
         status: 500,
         body: { statusCode: 500, message: "Internal server error" },
         cause,
+      },
+    ],
+    [
+      "ResetTokenInvalidException",
+      () => new ResetTokenInvalidException(),
+      {
+        parent: BadRequestException,
+        status: 400,
+        body: {
+          statusCode: 400,
+          message: "Invalid or expired link",
+          error: "Bad Request",
+          errorCode: "RESET_TOKEN_INVALID",
+        },
+        errorCode: "RESET_TOKEN_INVALID",
       },
     ],
   ];

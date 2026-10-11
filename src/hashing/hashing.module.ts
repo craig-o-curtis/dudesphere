@@ -8,6 +8,10 @@ import { HashingProvider } from "./hashing.provider.js";
 // hasher inside AuthModule would close a cycle. Any module that needs to hash
 // imports this one.
 @Module({
+  // Nest resolves the token HashingProvider to BcryptProvider at runtime.
+  // provide = the injection token (the abstract class).
+  // useClass = the concrete class Nest instantiates behind it.
+  // A service asks for HashingProvider; nothing in the app knows it is bcrypt.
   providers: [{ provide: HashingProvider, useClass: BcryptProvider }],
   exports: [HashingProvider],
 })

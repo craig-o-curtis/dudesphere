@@ -32,10 +32,10 @@ export class HashtagsController {
   @Public()
   @Get()
   public async getHashtags(
-    @Query() query: PaginationQueryDto,
+    @Query() pageRequest: PaginationQueryDto,
   ): Promise<Paginated<HashtagResponseDto>> {
-    const hashtags = await this.hashtagsService.list(query);
-    return this.paginationProvider.toResponse(hashtags, query, "/hashtags");
+    const hashtags = await this.hashtagsService.list(pageRequest);
+    return this.paginationProvider.toResponse(hashtags, pageRequest, "/hashtags");
   }
 
   @Public()

@@ -27,6 +27,9 @@ This starts:
 - **MongoDB 8** on port 27017
 - **pgAdmin** on http://localhost:5050
 - **Mongo Express** on http://localhost:8081
+- **Mailpit** on http://localhost:8025, a mail catcher. The app sends its email
+  here by default, and Mailpit delivers none of it. Open the page to read a
+  password reset email and copy its link.
 
 ### 3. Start NestJS App
 
@@ -42,26 +45,34 @@ Copy `.env.example` to `.env` and fill in your values.
 
 The app checks every variable when it starts, in `src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
 
-| Variable                  | Required | Description                                                             | Example or default                                |
-| ------------------------- | -------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
-| `NODE_ENV`                | no       | `development`, `staging`, `production` or `test`                        | default `development`                             |
-| `PORT`                    | no       | Port the app listens on                                                 | default `3000`                                    |
-| `PG_HOST`                 | yes      | PostgreSQL host                                                         | `localhost`                                       |
-| `PG_PORT`                 | yes      | PostgreSQL port                                                         | `5432`                                            |
-| `PG_ADMIN_USER`           | yes      | PostgreSQL role name                                                    | `admin`                                           |
-| `PG_ADMIN_PW`             | yes      | PostgreSQL password                                                     | (your password)                                   |
-| `PG_DATABASE`             | yes      | Database name                                                           | `dude`                                            |
-| `MONGO_URI`               | no       | MongoDB connection string                                               | default `mongodb://localhost:27017/dude-abidings` |
-| `JWT_SECRET`              | yes      | Key that signs login tokens                                             | (a long random string)                            |
-| `JWT_EXPIRES_IN`          | no       | How long a login token lasts, in seconds                                | default `3600`                                    |
-| `JWT_AUDIENCE`            | no       | Who a token is for. Written into each token and checked on each request | default `dudesphere-api`                          |
-| `JWT_ISSUER`              | no       | Who issued a token. Written and checked the same way                    | default `dudesphere`                              |
-| `DUDE_OBSERVE_APP_KEY`    | yes      | Observe project key                                                     | (from the Observe dashboard)                      |
-| `DUDE_OBSERVE_APP_SECRET` | yes      | Observe project secret                                                  | (from the Observe dashboard)                      |
-| `EMAIL`                   | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@dude.com`                                  |
-| `PASSWORD`                | seed     | Password of the seeded admin                                            | (your password)                                   |
-| `MG_ADMIN_USER`           | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app        | `dude`                                            |
-| `MG_ADMIN_PW`             | compose  | MongoDB admin password. Read by `docker-compose.yml`                    | (your password)                                   |
+| Variable                    | Required | Description                                                             | Example or default                                |
+| --------------------------- | -------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| `NODE_ENV`                  | no       | `development`, `staging`, `production` or `test`                        | default `development`                             |
+| `PORT`                      | no       | Port the app listens on                                                 | default `3000`                                    |
+| `PG_HOST`                   | yes      | PostgreSQL host                                                         | `localhost`                                       |
+| `PG_PORT`                   | yes      | PostgreSQL port                                                         | `5432`                                            |
+| `PG_ADMIN_USER`             | yes      | PostgreSQL role name                                                    | `admin`                                           |
+| `PG_ADMIN_PW`               | yes      | PostgreSQL password                                                     | (your password)                                   |
+| `PG_DATABASE`               | yes      | Database name                                                           | `dude`                                            |
+| `MONGO_URI`                 | no       | MongoDB connection string                                               | default `mongodb://localhost:27017/dude-abidings` |
+| `JWT_SECRET`                | yes      | Key that signs login tokens                                             | (a long random string)                            |
+| `JWT_EXPIRES_IN`            | no       | How long a login token lasts, in seconds                                | default `3600`                                    |
+| `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request | default `dudesphere-api`                          |
+| `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                    | default `dudesphere`                              |
+| `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself | default `true`                                    |
+| `MAIL_HOST`                 | no       | SMTP server for outgoing email                                          | default `localhost` (Mailpit)                     |
+| `MAIL_PORT`                 | no       | SMTP port. `465` means TLS from the start                               | default `1025` (Mailpit)                          |
+| `MAIL_USER`                 | no       | SMTP login. Mailpit needs none. With one set, the server must use TLS   | (empty)                                           |
+| `MAIL_PASSWORD`             | no       | SMTP password                                                           | (empty)                                           |
+| `MAIL_FROM`                 | no       | Who every email is from                                                 | default `Dudesphere <no-reply@dudesphere.local>`  |
+| `FRONTEND_URL`              | no       | Where the web app is served. The reset email links to it                | default `http://localhost:3000`                   |
+| `PASSWORD_RESET_EXPIRES_IN` | no       | How long a reset link works, in seconds. At least 60                    | default `1800`                                    |
+| `DUDE_OBSERVE_APP_KEY`      | yes      | Observe project key                                                     | (from the Observe dashboard)                      |
+| `DUDE_OBSERVE_APP_SECRET`   | yes      | Observe project secret                                                  | (from the Observe dashboard)                      |
+| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@dude.com`                                  |
+| `PASSWORD`                  | seed     | Password of the seeded admin                                            | (your password)                                   |
+| `MG_ADMIN_USER`             | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app        | `dude`                                            |
+| `MG_ADMIN_PW`               | compose  | MongoDB admin password. Read by `docker-compose.yml`                    | (your password)                                   |
 
 ## pgAdmin Setup
 

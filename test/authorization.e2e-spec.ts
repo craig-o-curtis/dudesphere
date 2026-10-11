@@ -36,11 +36,14 @@ describe("Authorization (e2e)", () => {
     const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
 
     await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send({ ...credentials, username: `e2e-${tag}` })
       .expect(201);
 
-    const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ identifier: credentials.email, password: credentials.password })
+      .expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
   }
@@ -108,15 +111,15 @@ describe("Authorization (e2e)", () => {
     });
 
     // Both have to stay open or there is no way to get a first token.
-    it("POST /auth and POST /users are reachable anonymously", async () => {
+    it("POST /auth/login and POST /auth/signup are reachable anonymously", async () => {
       await request(app.getHttpServer())
-        .post("/auth")
-        .send({ email: "nobody@example.com", password: "wrong" })
+        .post("/auth/login")
+        .send({ identifier: "nobody@example.com", password: "wrong" })
         .expect(401); // reached the handler, which rejected the credentials
 
       const tag = randomUUID().slice(0, 8);
       await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
         .expect(201);
     });
@@ -129,6 +132,7 @@ describe("Authorization (e2e)", () => {
       ["get", "/profiles/me"],
       ["post", "/abidings"],
       ["get", "/users"],
+      ["post", "/users"],
     ] as const)("%s %s", async (method, path) => {
       await request(app.getHttpServer())[method](path).expect(401);
     });
@@ -163,8 +167,30 @@ describe("Authorization (e2e)", () => {
         .expect(403);
     });
 
+    // Creating a user directly is for admins. Everyone else signs up through
+    // POST /auth/signup.
+    it("POST /users", async () => {
+      const tag = randomUUID().slice(0, 8);
+      await request(app.getHttpServer())
+        .post("/users")
+        .set(bearer(owner.token))
+        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .expect(403);
+    });
+
     it("lets an admin through the same route", async () => {
       await request(app.getHttpServer()).get("/users").set(bearer(adminToken)).expect(200);
+    });
+
+    it("lets an admin create a user with POST /users", async () => {
+      const tag = randomUUID().slice(0, 8);
+      const { body } = await request(app.getHttpServer())
+        .post("/users")
+        .set(bearer(adminToken))
+        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .expect(201);
+
+      expect(body).toMatchObject({ username: `e2e-${tag}`, role: UserRole.USER });
     });
   });
 
