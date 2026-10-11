@@ -146,6 +146,34 @@ export class TokenService {
     return pair;
   }
 
+  /**
+   * Signs out the device that holds this refresh token: ends its session,
+   * and no other. A spent token of the session works too, so a client that
+   * kept an old one can still sign out.
+   *
+   * An unknown or malformed token does nothing and raises nothing. The route
+   * answers the same either way, so it cannot be used to find out whether a
+   * token is real (RFC 7009, section 2.2).
+   */
+  async revoke(refreshToken: string): Promise<void> {
+    if (!isOneTimeToken(refreshToken)) {
+      return;
+    }
+    const token = await this.refreshTokens.find(hashOf(refreshToken));
+    if (token) {
+      await this.refreshTokens.revokeFamily(token.familyId);
+    }
+  }
+
+  /**
+   * Signs the member out on every device: ends every session they have now.
+   * A session started afterwards is not affected, so they can sign in again
+   * straight away.
+   */
+  async revokeAll(userId: number): Promise<void> {
+    await this.refreshTokens.revokeAllForUser(userId);
+  }
+
   // Makes one pair for a session: saves a new refresh token in the family,
   // and signs an access token that names the family as its session.
   private async pair(

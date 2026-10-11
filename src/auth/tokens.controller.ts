@@ -1,6 +1,9 @@
 import { Body, Controller, HttpCode, Post } from "@nestjs/common";
 import { minutes } from "@nestjs/throttler";
 
+import type { AuthUser } from "../shared/guards/auth-user.js";
+import { Auth } from "../shared/guards/auth.decorator.js";
+import { CurrentUser } from "../shared/guards/current-user.decorator.js";
 import { Public } from "../shared/guards/public.decorator.js";
 import { ThrottleByAccount } from "../shared/guards/throttle-by-account.decorator.js";
 import { AuthService } from "./auth.service.js";
@@ -61,5 +64,33 @@ export class TokensController {
   @HttpCode(200)
   refresh(@Body() { refreshToken }: RefreshTokenDto): Promise<TokenPair> {
     return this.tokenService.refresh(refreshToken);
+  }
+
+  // Signs out this device: ends the session the refresh token belongs to.
+  // Its access token stops on the next request, and its refresh tokens can
+  // no longer be swapped. The member's other devices stay signed in.
+  //
+  // Public, like refresh: a client must be able to sign out with an access
+  // token that has already expired.
+  //
+  // 204 every time, for a real token and an unknown one alike. A different
+  // answer would tell a caller whether a token they hold is real.
+  @Public()
+  @Post("revoke")
+  @HttpCode(204)
+  revoke(@Body() { refreshToken }: RefreshTokenDto): Promise<void> {
+    return this.tokenService.revoke(refreshToken);
+  }
+
+  // Signs the caller out on every device, this one included. For a member
+  // who has lost a phone, or thinks someone else is signed in as them.
+  //
+  // Needs a signed-in caller, and ends that caller's sessions only: the user
+  // id comes from the access token, never from the body.
+  @Auth()
+  @Post("revoke-all")
+  @HttpCode(204)
+  revokeAll(@CurrentUser() user: AuthUser): Promise<void> {
+    return this.tokenService.revokeAll(user.userId);
   }
 }

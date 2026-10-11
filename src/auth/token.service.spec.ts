@@ -20,6 +20,7 @@ describe("TokenService", () => {
     markUsed: vi.fn(),
     revokeFamily: vi.fn(),
     isFamilyRevoked: vi.fn(),
+    revokeAllForUser: vi.fn(),
   };
   const usersService = { getLiveUser: vi.fn() };
   const warn = vi.fn();
@@ -328,6 +329,60 @@ describe("TokenService", () => {
       await service.refresh(presented).catch(() => undefined);
 
       expect(JSON.stringify(warn.mock.calls)).not.toContain(presented);
+    });
+  });
+
+  // Signing out one device.
+  describe("revoke", () => {
+    const presented = newOneTimeToken();
+
+    it("ends the session the token belongs to", async () => {
+      refreshTokens.find.mockResolvedValue({ id: hashOf(presented), familyId, userId: 25 });
+
+      await service.revoke(presented);
+
+      expect(refreshTokens.find).toHaveBeenCalledWith(hashOf(presented));
+      expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(familyId);
+    });
+
+    // A client that kept an old token of the session can still sign out.
+    it("works with a token of the session that was already spent", async () => {
+      refreshTokens.find.mockResolvedValue({
+        id: hashOf(presented),
+        familyId,
+        userId: 25,
+        usedAt: getUtcNow(),
+      });
+
+      await service.revoke(presented);
+
+      expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(familyId);
+    });
+
+    // No error for either. The route answers 204 whatever it is given, so
+    // it cannot be used to find out whether a token is real.
+    it("does nothing, and raises nothing, for a token no row has", async () => {
+      refreshTokens.find.mockResolvedValue(null);
+
+      await expect(service.revoke(presented)).resolves.toBeUndefined();
+
+      expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+    });
+
+    it("does nothing for text that is not a token, without asking the database", async () => {
+      await expect(service.revoke("not-a-token")).resolves.toBeUndefined();
+
+      expect(refreshTokens.find).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+    });
+  });
+
+  // Signing out every device.
+  describe("revokeAll", () => {
+    it("ends every session of that member", async () => {
+      await service.revokeAll(25);
+
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(25);
     });
   });
 });

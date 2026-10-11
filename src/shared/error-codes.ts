@@ -18,7 +18,7 @@
 // version is installed, remove this code, each check that throws it
 // (UserAbidingsService.softDeleteForUser, HashtagsService.deleteBySlug,
 // PasswordResetService.sendLink, UsersService.passwordChangedNow,
-// TokenService.now), the
+// TokenService.now, JwtAuthGuard.isSessionLive), the
 // matching check in HashtagsService.registerTags, and the vi.mock of gmt in
 // hashtags.service.spec.ts.
 export enum ErrorCode {

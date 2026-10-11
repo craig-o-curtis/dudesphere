@@ -2,6 +2,7 @@ import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
+import { RefreshTokensService } from "../../auth/refresh-tokens.service.js";
 import { UserRole } from "../../users/user.entity.js";
 import { UsersService } from "../../users/users.service.js";
 import { TokenMissingException } from "../exceptions/token-missing.exception.js";
@@ -15,16 +16,20 @@ describe("JwtAuthGuard", () => {
   // The guard asks this who the token's user is today. Null means nobody:
   // the account is closed, or never existed.
   const getUserForToken = vi.fn();
+  // The guard asks this whether the token's session is still going.
+  const isSessionLive = vi.fn();
   const guard = new JwtAuthGuard(
     { verifyAsync } as unknown as JwtService,
     {
       getAllAndOverride,
     } as unknown as Reflector,
     { getUserForToken } as unknown as UsersService,
+    { isSessionLive } as unknown as RefreshTokensService,
   );
 
   // What a verified token holds, and the user the database has for it.
-  const payload = { sub: 25, username: "walter", iat: 1_800_000_000 };
+  const sid = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
+  const payload = { sub: 25, username: "walter", iat: 1_800_000_000, sid };
   const walter = { userId: 25, username: "walter", role: UserRole.USER };
 
   // A fake ExecutionContext that hands the guard our request object. The two
@@ -42,6 +47,7 @@ describe("JwtAuthGuard", () => {
     getAllAndOverride.mockReturnValue(undefined);
     verifyAsync.mockResolvedValue(payload);
     getUserForToken.mockResolvedValue(walter);
+    isSessionLive.mockResolvedValue(true);
   });
 
   it("looks the token's user up and puts them on the request", async () => {
@@ -84,6 +90,70 @@ describe("JwtAuthGuard", () => {
       errorCode: "TOKEN_INVALID",
     });
     expect(request.user).toBeUndefined();
+  });
+
+  // A session ends when the member signs out, changes their password, or a
+  // refresh token of theirs is used twice. The access token is still validly
+  // signed and not yet expired, and it stops here anyway.
+  describe("the token's session", () => {
+    it("asks whether the session the token names is still going", async () => {
+      const request = { headers: { authorization: "Bearer signed.jwt.token" } };
+
+      await guard.canActivate(contextFor(request));
+
+      expect(isSessionLive).toHaveBeenCalledWith(sid, expect.any(String));
+    });
+
+    it("throws 401 when the session has ended", async () => {
+      isSessionLive.mockResolvedValue(false);
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer signed.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+        message: "Invalid or expired token",
+        errorCode: "TOKEN_INVALID",
+      });
+      expect(request.user).toBeUndefined();
+    });
+
+    // A token from `pnpm dev:token` belongs to no session. Only the app can
+    // sign one, so there is nothing to check.
+    it("lets a token with no session id through without asking", async () => {
+      verifyAsync.mockResolvedValue({ sub: 25, username: "walter", iat: 1_800_000_000 });
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer signed.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(isSessionLive).not.toHaveBeenCalled();
+      expect(request.user).toEqual(walter);
+    });
+
+    // The column is a uuid. Anything else would make Postgres raise an
+    // error, so it is refused before the query.
+    it("throws 401 for a session id that is not a uuid, without asking", async () => {
+      verifyAsync.mockResolvedValue({ ...payload, sid: "not-a-uuid" });
+      const request = { headers: { authorization: "Bearer signed.jwt.token" } };
+
+      await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+        errorCode: "TOKEN_INVALID",
+      });
+      expect(isSessionLive).not.toHaveBeenCalled();
+    });
+
+    it("still lets the caller through a @Public() route, as nobody", async () => {
+      getAllAndOverride.mockReturnValue(true);
+      isSessionLive.mockResolvedValue(false);
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer signed.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(request.user).toBeUndefined();
+    });
   });
 
   // Not a 401. The token may be fine, and telling the client to log in again

@@ -1,6 +1,7 @@
 import { UnauthorizedException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { UserRole } from "../users/user.entity.js";
 import { AuthService } from "./auth.service.js";
 import { TokenService } from "./token.service.js";
 import { TokensController } from "./tokens.controller.js";
@@ -9,7 +10,7 @@ describe("TokensController", () => {
   let controller: TokensController;
 
   const authService = { verifyCredentials: vi.fn() };
-  const tokenService = { issue: vi.fn(), refresh: vi.fn() };
+  const tokenService = { issue: vi.fn(), refresh: vi.fn(), revoke: vi.fn(), revokeAll: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -67,6 +68,29 @@ describe("TokensController", () => {
       tokenService.refresh.mockRejectedValue(refused);
 
       await expect(controller.refresh({ refreshToken })).rejects.toBe(refused);
+    });
+  });
+
+  describe("revoke", () => {
+    it("hands the refresh token to TokenService and answers with nothing", async () => {
+      tokenService.revoke.mockResolvedValue(undefined);
+
+      await expect(controller.revoke({ refreshToken: "r".repeat(43) })).resolves.toBeUndefined();
+
+      expect(tokenService.revoke).toHaveBeenCalledWith("r".repeat(43));
+    });
+  });
+
+  describe("revokeAll", () => {
+    // The id comes from the access token, so a caller can only ever sign
+    // themselves out.
+    it("ends the sessions of the caller, by the id in their token", async () => {
+      tokenService.revokeAll.mockResolvedValue(undefined);
+      const caller = { userId: 25, username: "walter", role: UserRole.USER };
+
+      await expect(controller.revokeAll(caller)).resolves.toBeUndefined();
+
+      expect(tokenService.revokeAll).toHaveBeenCalledWith(25);
     });
   });
 });
