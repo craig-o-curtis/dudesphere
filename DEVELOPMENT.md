@@ -69,7 +69,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `PASSWORD_RESET_EXPIRES_IN` | no       | How long a reset link works, in seconds. At least 60                    | default `1800`                                    |
 | `DUDE_OBSERVE_APP_KEY`      | yes      | Observe project key                                                     | (from the Observe dashboard)                      |
 | `DUDE_OBSERVE_APP_SECRET`   | yes      | Observe project secret                                                  | (from the Observe dashboard)                      |
-| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@dude.com`                                  |
+| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@example.com`                               |
 | `PASSWORD`                  | seed     | Password of the seeded admin                                            | (your password)                                   |
 | `MG_ADMIN_USER`             | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app        | `dude`                                            |
 | `MG_ADMIN_PW`               | compose  | MongoDB admin password. Read by `docker-compose.yml`                    | (your password)                                   |
@@ -78,7 +78,8 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 
 pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
-1. Open http://localhost:5050
+1. Open http://localhost:5050 and log in with `EMAIL` and `PG_ADMIN_PW` from
+   your `.env`. `docker-compose.yml` reads both from there.
 2. Right-click **Servers** → **Register** → **Server**
 3. Fill in:
    - **Name**: `dude-postgres`
@@ -267,6 +268,125 @@ bring it back either. Only an admin can, with `POST /hashtags/:slug/restore`.
 It walks the whole collection with a cursor, so it does not load every abiding
 into memory, but it does write to every abiding. On a large collection, expect
 it to take a while.
+
+## Try the API by hand
+
+Almost every route needs a login token. A request with none answers
+401 `TOKEN_MISSING`. This section is the short way to send one.
+
+### 1. Start everything
+
+```bash
+docker compose up -d     # the databases
+pnpm start:dev           # the app
+pnpm seed:run            # once, to create the admin from EMAIL and PASSWORD in .env
+```
+
+The app listens on the `PORT` in your `.env`, 3000 unless you changed it. The
+examples below use 3000.
+
+### 2. Get a token
+
+```bash
+pnpm dev:token                        # for the admin named by EMAIL in .env
+pnpm dev:token walter                 # for any member, by username
+pnpm dev:token walter@example.com     # or by email
+pnpm dev:token | pbcopy               # straight to the clipboard, on macOS
+```
+
+The token is printed on a line of its own. It lasts 30 days. The command asks
+for no password, does not need the app to be running, and is not counted by
+the login rate limit. It refuses to run when `NODE_ENV` is `production`.
+
+A token belongs to one user. An admin's token opens the admin routes. A
+member's token is that member: `GET /users/me` shows who.
+
+The other way to get one is to log in. See "Two bodies" below. That token
+lasts one hour.
+
+### 3. Send it
+
+A token goes in one header:
+
+```text
+Authorization: Bearer <the token>
+```
+
+That is the word `Bearer`, one space, then the token.
+
+**In Thunder Client** you do not type the header:
+
+1. Open Thunder Client from the VS Code activity bar and click **New Request**.
+2. Pick the method and type the URL, such as
+   `GET http://localhost:3000/users/me`.
+3. Open the **Auth** tab and choose **Bearer**.
+4. Paste the token into the token box. Paste only the token, not the word
+   `Bearer`.
+5. Click **Send**.
+
+A request you sent before is in the **Activity** list, and it keeps its
+token. Open it from there to send it again. For a new request, paste the
+token again: `pnpm dev:token | pbcopy` makes that two keystrokes.
+
+**With curl:**
+
+```bash
+TOKEN=$(pnpm dev:token 2>/dev/null)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/users/me
+```
+
+### Which routes need what
+
+| Needs          | Routes                                                                                       |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| Nothing        | `GET /`, the four `/auth` routes, `GET /abidings`, `GET /abidings/:id`, both `GET /hashtags` |
+| Any token      | Everything under `/profiles`, the `me` routes, and posting or editing an abiding             |
+| An admin token | `GET /users`, `POST /users`, the `/users/:id` writes, hiding and restoring a hashtag         |
+
+`GET /users/:id` answers only that user or an admin.
+[context/overview.md](context/overview.md) lists every route.
+
+### Two bodies
+
+Both go in the **Body** tab as JSON. Thunder Client then sets
+`Content-Type: application/json` for you.
+
+Sign up, `POST /auth/signup`:
+
+```json
+{
+  "username": "walter",
+  "email": "walter@example.com",
+  "password": "secret123",
+  "profile": { "displayName": "Walter" }
+}
+```
+
+Log in, `POST /auth/login`. `identifier` is a username or an email:
+
+```json
+{ "identifier": "walter", "password": "secret123" }
+```
+
+The answer to a login holds `token`.
+
+### When a request is refused
+
+| Answer              | What it means                                         | What to do                                       |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------ |
+| 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one      | Set the Auth tab to Bearer and paste a token     |
+| 401 `TOKEN_INVALID` | The token has expired, or `JWT_SECRET` changed since  | Run `pnpm dev:token` again                       |
+| 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's   | Use `pnpm dev:token` with no name, for the admin |
+| 403 `NOT_OWNER`     | The thing exists and belongs to someone else          | Use that member's token, or the admin's          |
+| 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes | Wait for the time in the `Retry-After` header    |
+
+### Why Thunder Client needs a paste for each request
+
+The free version of the Thunder Client extension has had no environments
+since November 2024 and no collections since August 2025, and import is a
+paid feature. So there is no shared variable to hold one token for every
+request, and no collection to ship in this repo. Each request keeps its own
+token in its Auth tab. A 30-day token keeps that to one paste a request.
 
 ## End-to-End Tests
 

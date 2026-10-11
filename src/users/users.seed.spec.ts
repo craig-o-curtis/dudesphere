@@ -39,11 +39,11 @@ describe("UsersSeedService", () => {
   it("creates the admin with a hashed password when there is none", async () => {
     usersRepository.findOne.mockResolvedValue(null);
 
-    await seedService.seed("admin@dude.com", "rug-password");
+    await seedService.seed("admin@example.com", "rug-password");
 
     expect(usersRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        email: "admin@dude.com",
+        email: "admin@example.com",
         role: UserRole.ADMIN,
         password: "hashed(rug-password)",
       }),
@@ -52,10 +52,15 @@ describe("UsersSeedService", () => {
 
   // A re-run resets the admin's password to the value in .env, as a hash.
   it("stores a hash, not the password, when it updates an existing admin", async () => {
-    const existing = { id: 1, email: "admin@dude.com", password: "old-plain-text", role: "user" };
+    const existing = {
+      id: 1,
+      email: "admin@example.com",
+      password: "old-plain-text",
+      role: "user",
+    };
     usersRepository.findOne.mockResolvedValue(existing);
 
-    await seedService.seed("admin@dude.com", "rug-password");
+    await seedService.seed("admin@example.com", "rug-password");
 
     expect(usersRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ id: 1, role: UserRole.ADMIN, password: "hashed(rug-password)" }),
@@ -63,7 +68,7 @@ describe("UsersSeedService", () => {
   });
 
   it("does nothing, and returns null, when the email or the password is not set", async () => {
-    await expect(seedService.seed("admin@dude.com", "")).resolves.toBeNull();
+    await expect(seedService.seed("admin@example.com", "")).resolves.toBeNull();
 
     expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
     expect(usersRepository.save).not.toHaveBeenCalled();
@@ -74,12 +79,12 @@ describe("UsersSeedService", () => {
   it("returns the id of the admin it created", async () => {
     usersRepository.findOne.mockResolvedValue(null);
 
-    await expect(seedService.seed("admin@dude.com", "rug-password")).resolves.toBe(7);
+    await expect(seedService.seed("admin@example.com", "rug-password")).resolves.toBe(7);
   });
 
   it("returns the id of the admin it updated", async () => {
-    usersRepository.findOne.mockResolvedValue({ id: 42, email: "admin@dude.com", role: "user" });
+    usersRepository.findOne.mockResolvedValue({ id: 42, email: "admin@example.com", role: "user" });
 
-    await expect(seedService.seed("admin@dude.com", "rug-password")).resolves.toBe(42);
+    await expect(seedService.seed("admin@example.com", "rug-password")).resolves.toBe(42);
   });
 });
