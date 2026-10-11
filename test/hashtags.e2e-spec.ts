@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import { INestApplication } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -10,6 +9,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { bearer, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp } from "./sign-up.js";
 
@@ -18,16 +18,6 @@ import { signUp } from "./sign-up.js";
 // and restored. test/global-setup.ts deletes all of them when the run ends.
 describe("Hashtag delete and restore (e2e)", () => {
   let app: INestApplication<App>;
-
-  // Signed here rather than logged in, so nothing depends on a seeded user.
-  // RolesGuard reads the role from the token and looks nothing up.
-  function tokenFor(role: UserRole) {
-    return app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "e2e", role });
-  }
-
-  function bearer(token: string) {
-    return { authorization: `Bearer ${token}` };
-  }
 
   // Letters and digits only, so it survives normalizeHashtag, and random, so
   // it cannot collide with a tag someone really used.
@@ -80,7 +70,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("returns 403 for a restore by a signed-in user who is not an admin", async () => {
       await request(app.getHttpServer())
         .post(`/hashtags/${unusedSlug()}/restore`)
-        .set(bearer(await tokenFor(UserRole.USER)))
+        .set(bearer(await tokenFor(app, UserRole.USER)))
         .expect(403);
     });
 
@@ -88,7 +78,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("lets an admin through a restore, and returns 404 when no deleted tag matches", async () => {
       await request(app.getHttpServer())
         .post(`/hashtags/${unusedSlug()}/restore`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(404);
     });
 
@@ -100,7 +90,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("returns 403 for a signed-in user who is not an admin", async () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${unusedSlug()}`)
-        .set(bearer(await tokenFor(UserRole.USER)))
+        .set(bearer(await tokenFor(app, UserRole.USER)))
         .expect(403);
     });
 
@@ -110,14 +100,14 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("lets an admin through, and returns 404 for a tag that does not exist", async () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${unusedSlug()}`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(404);
     });
 
     it("returns 404 to an admin for a slug that cannot be a hashtag", async () => {
       await request(app.getHttpServer())
         .delete("/hashtags/%23%23%23")
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(404);
     });
   });
@@ -164,7 +154,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("survives a delete attempt by a user who is not an admin", async () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${slug}`)
-        .set(bearer(await tokenFor(UserRole.USER)))
+        .set(bearer(await tokenFor(app, UserRole.USER)))
         .expect(403);
 
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(200);
@@ -173,7 +163,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("is deleted by an admin", async () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${slug}`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(204);
     });
 
@@ -188,7 +178,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("cannot be deleted a second time", async () => {
       await request(app.getHttpServer())
         .delete(`/hashtags/${slug}`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(404);
     });
 
@@ -235,7 +225,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("cannot be restored by a user who is not an admin", async () => {
       await request(app.getHttpServer())
         .post(`/hashtags/${slug}/restore`)
-        .set(bearer(await tokenFor(UserRole.USER)))
+        .set(bearer(await tokenFor(app, UserRole.USER)))
         .expect(403);
 
       await request(app.getHttpServer()).get(`/hashtags/${slug}`).expect(404);
@@ -247,7 +237,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("is restored by an admin, with its first casing and date", async () => {
       const restored = await request(app.getHttpServer())
         .post(`/hashtags/${slug}/restore`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(200);
 
       const body = restored.body as { slug: string; display: string; firstUsedAt: string };
@@ -266,7 +256,7 @@ describe("Hashtag delete and restore (e2e)", () => {
     it("cannot be restored a second time, because it is no longer deleted", async () => {
       await request(app.getHttpServer())
         .post(`/hashtags/${slug}/restore`)
-        .set(bearer(await tokenFor(UserRole.ADMIN)))
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
         .expect(404);
     });
   });

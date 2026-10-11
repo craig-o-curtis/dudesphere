@@ -4,11 +4,11 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { User, UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";

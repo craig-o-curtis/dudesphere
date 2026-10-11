@@ -1,6 +1,7 @@
 import { SetMetadata } from "@nestjs/common";
 
-import { IS_PUBLIC_KEY } from "../auth-metadata.js";
+/** The key @Public() writes. JwtAuthGuard, in this folder, reads it. */
+export const IS_PUBLIC_KEY = "isPublic";
 
 /**
  * Opens one route to callers with no token.

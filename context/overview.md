@@ -229,7 +229,7 @@ reverse proxy that is the proxy's address, so every caller shares one count
 until Express is told to trust the proxy (`trust proxy`). Set that before a
 deploy behind one.
 
-`AuthThrottlerGuard` in `src/auth/guards/` does this, on top of
+`AuthThrottlerGuard` in `src/shared/guards/` does this, on top of
 `@nestjs/throttler`. The counts are kept in the app's memory: they reset on a
 restart and are not shared between two copies of the app. `THROTTLE_ENABLED=false`
 turns it off, which only the e2e suite does.

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as pause } from "node:timers/promises";
 
 import { INestApplication } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import { addUtc, isBeforeUtc, subtractUtc } from "@northguild/gmt";
 import request from "supertest";
@@ -12,6 +11,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { bearer, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp } from "./sign-up.js";
 
@@ -30,16 +30,6 @@ describe("Pagination (e2e)", () => {
     id: string;
     message: string;
     createdAt: string;
-  }
-
-  // Signed here rather than logged in, so nothing depends on a seeded user.
-  // RolesGuard reads the role from the token and looks nothing up.
-  function tokenFor(role: UserRole) {
-    return app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "e2e", role });
-  }
-
-  function bearer(token: string) {
-    return { authorization: `Bearer ${token}` };
   }
 
   async function getPage<T>(url: string, token?: string): Promise<Paginated<T>> {
@@ -375,7 +365,7 @@ describe("Pagination (e2e)", () => {
     it("returns users in id order, even after the first one is edited", async () => {
       const users = await getEveryPage<{ id: number }>(
         "/users?limit=100",
-        await tokenFor(UserRole.ADMIN),
+        await tokenFor(app, UserRole.ADMIN),
       );
       const ids = users.map((user) => user.id);
 
@@ -409,7 +399,7 @@ describe("Pagination (e2e)", () => {
     });
 
     it("rejects a limit over 100 with 400 on every list", async () => {
-      const admin = await tokenFor(UserRole.ADMIN);
+      const admin = await tokenFor(app, UserRole.ADMIN);
       for (const path of ["/users", "/profiles", "/abidings", "/abidings/me", "/hashtags"]) {
         await request(app.getHttpServer()).get(`${path}?limit=101`).set(bearer(admin)).expect(400);
       }

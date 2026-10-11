@@ -10,44 +10,9 @@ Nest and TypeORM read that information later.
 
 ### Auth
 
-These only write metadata. A guard reads it and makes the decision.
-
-- `@Public()` opens one route to callers with no token. `JwtAuthGuard` reads it.
-- `@Authenticated()` says a route needs a signed-in caller. No guard reads it.
-  `JwtAuthGuard` already refuses a caller with no token on every route that is
-  not `@Public()`, so this is a label for the person reading the controller.
-- `@Roles(...roles)` limits a route, or a whole controller, to the given roles.
-  `RolesGuard` reads it.
-
-Every route carries exactly one of the three. `../route-access.spec.ts` reads
-every controller under `src` and fails when a route has none, or more than
-one. A route that someone forgot to label still needs a token, so the mistake
-fails the test and never opens the route.
-
-The metadata keys live in `../auth-metadata.ts`, so a decorator and its guard
-cannot drift apart.
-
-### How `@Roles` and `RolesGuard` work together
-
-`@Roles` is the label. `RolesGuard` is the check.
-
-```ts
-@Roles(UserRole.ADMIN)
-@Get()
-getUsers() {}
-```
-
-1. `@Roles(UserRole.ADMIN)` stores `["admin"]` on `getUsers` under the key
-   `ROLES_KEY`. It does this once, when the file loads. It blocks nobody.
-2. On each request, `RolesGuard` reads that list and compares it with the
-   signed-in user's role. A role outside the list gets a 403.
-3. A route with no `@Roles` has no list, so `RolesGuard` lets the request
-   through.
-
-Put `@Roles` on a controller to cover every route in it. A `@Roles` on one
-method replaces the controller's list for that method.
-
-The guard side is in `../guards/README.md`.
+The auth decorators are not in this folder. `@Public()`, `@Auth()`,
+`@CurrentUser()` and `@ThrottleByAccount()` live in `../guards/`, each one
+beside the guard that reads it. See `../guards/README.md`.
 
 ### Validation
 

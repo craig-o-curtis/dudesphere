@@ -8,9 +8,8 @@ import type {
   ThrottlerStorage,
 } from "@nestjs/throttler";
 
-import { THROTTLE_ACCOUNT_FIELD_KEY } from "../../shared/auth-metadata.js";
-import { ErrorCode } from "../../shared/error-codes.js";
-import { ACCOUNT_THROTTLER } from "../decorators/throttle-by-account.decorator.js";
+import { ErrorCode } from "../error-codes.js";
+import { ACCOUNT_THROTTLER, THROTTLE_ACCOUNT_FIELD_KEY } from "./throttle-by-account.decorator.js";
 
 interface RequestWithBody {
   body?: unknown;

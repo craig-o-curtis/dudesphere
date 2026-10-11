@@ -3,9 +3,9 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { EntityManager, In, IsNull, Not, QueryFailedError } from "typeorm";
 
-import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";

@@ -2,28 +2,24 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
-import { IS_PUBLIC_KEY } from "../../shared/auth-metadata.js";
-import { ErrorCode } from "../../shared/error-codes.js";
-import { TokenMissingException } from "../../shared/exceptions/token-missing.exception.js";
-import type { AuthUser, JwtPayload } from "../auth-user.js";
+import { ErrorCode } from "../error-codes.js";
+import { TokenMissingException } from "../exceptions/token-missing.exception.js";
+import type { AuthUser, JwtPayload, RequestWithUser } from "./auth-user.js";
+import { IS_PUBLIC_KEY } from "./public.decorator.js";
 
-interface RequestWithUser {
-  headers: { authorization?: string };
-  user?: AuthUser;
-}
-
+// Checks the token and puts the user on the request. RolesGuard and
+// @CurrentUser(), both in this folder, read that user.
+//
 // Depends only on JwtService, which AuthModule registers globally, and
-// Reflector, which Nest provides everywhere. So any feature can use this guard
-// without importing AuthModule. That matters: AuthModule imports UsersModule,
-// which imports ProfilesModule, so an import the other way would close a cycle.
+// Reflector, which Nest provides everywhere. So it needs no module of its own.
 //
 // AppModule registers this as an APP_GUARD, so it runs on every route. Routes
 // an anonymous caller is meant to reach carry @Public(). On those the token is
 // optional: a good one still identifies the caller, and a bad one is ignored.
 //
-// Every other route needs a token. Those carry @Authenticated() or @Roles(),
-// but this guard reads neither: needing a token is the default, and
-// @Authenticated() only says so in the controller.
+// Every other route needs a token, whether it carries a label or not. Needing
+// a token is the default, so a route someone forgot to label is closed, not
+// open. Those routes carry @Auth(), which RolesGuard reads next.
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
