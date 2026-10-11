@@ -112,7 +112,7 @@ limit: number = DEFAULT_LIMIT;
 }
 ```
 
-A nested field carries its path: `profile.firstName must be a string`.
+A nested field carries its path: `profile.displayName must be a string`.
 
 ## This app's own validators
 

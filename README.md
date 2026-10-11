@@ -206,6 +206,8 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 | POST   | /auth/forgot-password | Email a password reset link      |
 | POST   | /auth/reset-password  | Set a new password with the link |
 
+Sign up with `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`. The username is for logging in and only you and admins see it. The display name is what other members see, on your profile and on your abidings. It must be unique, and letter case does not count.
+
 Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
 
 Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.

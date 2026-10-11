@@ -20,7 +20,7 @@ Read only the sections the diff touches.
 
 `SoftDeleteUtcColumn` wraps TypeORM's `@DeleteDateColumn`. That hides soft-deleted rows from `find*` calls, and from nothing else.
 
-- **Conflict checks.** A lookup before writing a unique column (email, username) needs `withDeleted: true`. Without it, a deleted row passes the check, the unique index rejects the insert, and the caller gets a 500. Search every unique field in one `where: [...]`.
+- **Conflict checks.** A lookup before writing a unique column (email, username, a profile's display name) needs `withDeleted: true`. Without it, a deleted row passes the check, the unique index rejects the insert, and the caller gets a 500. Search every unique field in one `where: [...]`.
 - **Writes by criteria.** `update()`, `softDelete()` and `restore()` don't apply the filter. Writes meant for live rows need `deletedAt: IsNull()` in the criteria. Restores need `deletedAt: Not(IsNull())`. Check that `affected === 0` produces a 404.
 - **Cascades.** `ON DELETE CASCADE` never fires, because a soft delete is an `UPDATE`. Rows that belong to the deleted row, like its profile, need their own soft-delete column. Set it in the same transaction, and restore it the same way.
 - **Child reads.** Reading a child by its parent's id (for example `GET /profiles/user/:userId`) must not return data for a deleted parent.
@@ -38,7 +38,7 @@ The pattern: `UsersService.createUser`, `deleteUser` and `restoreUser` each open
 
 Users and profiles live in Postgres (TypeORM). Abidings live in Mongo (Mongoose) and link to users by a plain `userId`. There's no foreign key and no TypeORM relation between the two.
 
-- **Join in code.** Collect the distinct ids, load them with one `findBy({ id: In(ids) })` (`UsersService.getUsersByIds`), then look each one up in a `Map`.
+- **Join in code.** Collect the distinct ids, load them with one query on `In(ids)` (`ProfilesService.getDisplayNamesByUserIds`), then look each one up in a `Map`.
   - Flag code that loads a page with `getUsers()` and then calls `.find()` on it. Anyone past the first page is missed.
   - Flag one lookup per item. That's an N+1.
 - **Bound every list.** A route that returns a list takes `PaginationQueryDto` (or a class that extends it) and answers with `PaginationProvider.toResponse` from `src/shared/pagination/pagination.provider.ts`. Flag a list route that returns a bare array, or a query with no limit.
@@ -90,6 +90,8 @@ Login (`POST /auth/login`) checks the username or email and the password, and re
 - **Guards are tested in e2e.** A controller spec overrides the guard. The 401 cases live in `test/`.
 - **A token is optional on a `@Public()` route.** `JwtAuthGuard` still reads a good token there and puts the user on the request, so the fault log names a signed-in caller and `@CurrentUser()` works. A missing or bad token is ignored. Flag a public route that treats `@CurrentUser()` as always present: it is `undefined` for an anonymous caller.
 - **Routes are guarded by default.** `JwtAuthGuard` and `RolesGuard` are global. A route is open only with `@Public()`, and admin-only with `@Roles(UserRole.ADMIN)`. Flag a new destructive or admin route (delete, restore, role changes) that has neither a role nor an ownership check.
+- **Every route says who may call it.** Each handler carries exactly one of `@Public()`, `@Authenticated()` or `@Roles()`, and `src/shared/route-access.spec.ts` fails otherwise. `@Authenticated()` is a label no guard reads. Flag a route moved to `@Public()` without a reason in the diff.
+- **A username is private.** It is a login name. Only the member and admins see it: `GET /users/me`, and `GET /users/:id` for that user or an admin. Abidings and profiles carry `displayName`. Flag any response another member or an anonymous caller can read that holds a `username` or an `email`.
 - **Passwords are hashed.** Every write of `user.password` goes through `HashingProvider` (`src/hashing`), and login compares through it. Flag a plain write, or a compare with `===`. The hasher lives outside `AuthModule` so `UsersModule` can import it without a cycle.
 
 ## Errors
