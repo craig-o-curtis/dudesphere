@@ -1,19 +1,19 @@
 import { isEmail, maxLength, validateSync } from "class-validator";
-import { getMetadataArgsStorage } from "typeorm";
 
+import { columnLimits } from "../../../test/column-limits.js";
 import { User } from "../user.entity.js";
 import { CreateUserDto } from "./create-user.dto.js";
 
-/** The varchar length declared on a User column. */
+/**
+ * The most characters a User column holds. username and email are citext,
+ * which has no length, so the entity declares each limit as a CHECK.
+ */
 function columnLength(propertyName: string): number {
-  const column = getMetadataArgsStorage().columns.find(
-    (candidate) => candidate.target === User && candidate.propertyName === propertyName,
-  );
-  const length = column?.options.length;
+  const length = columnLimits(User).get(propertyName);
   if (length === undefined) {
     throw new Error(`User.${propertyName} has no declared length`);
   }
-  return Number(length);
+  return length;
 }
 
 /** Builds a syntactically valid value of exactly `length` characters. */
@@ -67,7 +67,7 @@ describe("CreateUserDto", () => {
     const WITH_SELECTOR = "a\uFE0F";
 
     it("rejects such a username", () => {
-      // 13 letters to @MaxLength, 26 characters to varchar(24).
+      // 13 letters to @MaxLength, 26 characters to the column's limit of 24.
       const username = WITH_SELECTOR.repeat(13);
       expect(maxLength(username, columnLength("username"))).toBe(true);
 
@@ -77,7 +77,7 @@ describe("CreateUserDto", () => {
     });
 
     it("rejects such an email", () => {
-      // 71 to @MaxLength, 131 characters to varchar(100).
+      // 71 to @MaxLength, 131 characters to the column's limit of 100.
       const label = "b\uFE0F".repeat(30);
       const email = `aaaaa@${label}.${label}.com`;
       expect(isEmail(email)).toBe(true);
@@ -93,6 +93,31 @@ describe("CreateUserDto", () => {
     const errors = validateSync(buildDto({ username: "du\u0000de" }));
 
     expect(errors.map((error) => error.property)).toEqual(["username"]);
+  });
+
+  // Login takes a username or an email in one field and tells them apart by
+  // the "@", so a username must never hold one. Login also trims what the
+  // caller typed, so a username must not hold whitespace either.
+  describe("a username login could not tell from an email, or could not match", () => {
+    it.each([
+      ["an @", "dude@example.com"],
+      ["an @ on its own", "du@de"],
+      ["a space inside", "the dude"],
+      ["a space at the end", "dude "],
+      ["a tab", "du\tde"],
+      ["a line break", "du\nde"],
+    ])("rejects a username with %s", (_what, username) => {
+      const errors = validateSync(buildDto({ username }));
+
+      expect(errors.map((error) => error.property)).toEqual(["username"]);
+      expect(errors[0].constraints).toMatchObject({
+        matches: "username must not contain spaces or @",
+      });
+    });
+
+    it.each(["dude", "The_Dude", "el-duderino.99", "dudé"])("accepts %s", (username) => {
+      expect(validateSync(buildDto({ username }))).toEqual([]);
+    });
   });
 
   // The password is not in sizedFields: its column holds a 60-character hash,

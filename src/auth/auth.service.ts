@@ -2,9 +2,10 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
 import { ErrorCode } from "../shared/error-codes.js";
+import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
 import type { JwtPayload } from "./auth-user.js";
-import { LoginUserDto } from "./dto/login-user.dto.js";
+import { LoginDto } from "./dto/login.dto.js";
 
 @Injectable()
 export class AuthService {
@@ -13,13 +14,21 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(loginUser: LoginUserDto) {
-    const user = await this.usersService.getUserByCredentials(loginUser.email, loginUser.password);
+  async signup(signupDto: CreateUserDto) {
+    // prevent dupes happens inside the usersService.createUser method
+    return await this.usersService.createUser(signupDto);
+  }
 
-    // One message for both cases, so the response doesn't reveal which
-    // emails have an account.
+  async login(loginDto: LoginDto) {
+    const user = await this.usersService.getUserByCredentials(
+      loginDto.identifier,
+      loginDto.password,
+    );
+
+    // One message for every case, so the response doesn't reveal which
+    // usernames and emails have an account.
     if (!user) {
-      throw new UnauthorizedException("Invalid email or password", {
+      throw new UnauthorizedException("Invalid username, email or password", {
         errorCode: ErrorCode.BAD_CREDENTIALS,
       });
     }

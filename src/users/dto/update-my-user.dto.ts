@@ -12,7 +12,7 @@ export class UpdateMyUserDto extends UpdateUserDto {
   // Needed only when the body also sets a new `password`. UsersService checks
   // that, because "required when another field is present" is a rule about
   // two fields, and it also has to compare this against the stored hash.
-  // No length rule, for the reason LoginUserDto gives: a rule here that
+  // No length rule, for the reason LoginDto gives: a rule here that
   // differs from sign-up's would lock out users with a valid password.
   //
   // Not @IsOptional(): that also skips null, and a null here reached the

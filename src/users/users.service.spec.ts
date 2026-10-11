@@ -46,17 +46,20 @@ describe("UsersService", () => {
     restoreForUser: vi.fn(),
   };
 
-  // A fake hasher, so no test here runs bcrypt. hash() wraps its input, which
-  // makes a stored hash easy to tell from the password it came from.
+  // A fake hasher, so no test here runs bcrypt. hashPassword() wraps its
+  // input, which makes a stored hash easy to tell from the password it came
+  // from.
   const hashingProvider = {
-    hash: vi.fn(),
-    compare: vi.fn(),
+    hashPassword: vi.fn(),
+    comparePassword: vi.fn(),
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
     manager.create.mockImplementation((_entity: unknown, values: object) => values);
-    hashingProvider.hash.mockImplementation((plain: string) => Promise.resolve(`hashed(${plain})`));
+    hashingProvider.hashPassword.mockImplementation((plain: string) =>
+      Promise.resolve(`hashed(${plain})`),
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -144,34 +147,62 @@ describe("UsersService", () => {
 
     it("returns the user, without the password, when the hasher says it matches", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
-      hashingProvider.compare.mockResolvedValue(true);
+      hashingProvider.comparePassword.mockResolvedValue(true);
 
       const result = await service.getUserByCredentials("w@x.com", "secret1");
 
+      // An "@" means an email, so the email column is searched and no other.
       // No withDeleted, so a soft-deleted user is not found and can't log in.
       expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
       // The typed password first, the stored hash second.
-      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
+      expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       expect(result).toMatchObject({ id: 4, username: "walter" });
       expect(result?.password).toBeUndefined();
     });
 
+    it("searches by username when the identifier has no @", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.comparePassword.mockResolvedValue(true);
+
+      const result = await service.getUserByCredentials("walter", "secret1");
+
+      expect(usersRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { username: "walter" } });
+      expect(result).toMatchObject({ id: 4, username: "walter" });
+    });
+
+    // The casing is passed on as typed. The columns are citext, so Postgres
+    // is what ignores it; test/login.e2e-spec.ts proves that part.
+    it("passes the identifier to the query with its casing as typed", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+      hashingProvider.comparePassword.mockResolvedValue(true);
+
+      await service.getUserByCredentials("Walter", "secret1");
+      await service.getUserByCredentials("W@X.com", "secret1");
+
+      expect(usersRepository.findOne).toHaveBeenNthCalledWith(1, { where: { username: "Walter" } });
+      expect(usersRepository.findOne).toHaveBeenNthCalledWith(2, { where: { email: "W@X.com" } });
+    });
+
     it("returns null when the hasher says the password is wrong", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
-      hashingProvider.compare.mockResolvedValue(false);
+      hashingProvider.comparePassword.mockResolvedValue(false);
 
       await expect(service.getUserByCredentials("w@x.com", "wrong-one")).resolves.toBeNull();
     });
 
-    // The compare still runs, against no hash, so an unknown email takes as
-    // long to reject as a wrong password.
-    it("returns null when no user has that email, and still runs the compare", async () => {
-      usersRepository.findOne.mockResolvedValue(null);
-      hashingProvider.compare.mockResolvedValue(false);
+    // The compare still runs, against no hash, so an unknown email or
+    // username takes as long to reject as a wrong password.
+    it.each(["no@x.com", "nobody"])(
+      "returns null when no user matches %s, and still runs the compare",
+      async (identifier) => {
+        usersRepository.findOne.mockResolvedValue(null);
+        hashingProvider.comparePassword.mockResolvedValue(false);
 
-      await expect(service.getUserByCredentials("no@x.com", "secret1")).resolves.toBeNull();
-      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", undefined);
-    });
+        await expect(service.getUserByCredentials(identifier, "secret1")).resolves.toBeNull();
+        expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", undefined);
+      },
+    );
   });
 
   describe("createUser", () => {
@@ -196,7 +227,7 @@ describe("UsersService", () => {
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       // The user is saved through the transaction's manager, not the repository.
       // The hash is what gets stored, never the password itself.
-      expect(hashingProvider.hash).toHaveBeenCalledWith("secret1");
+      expect(hashingProvider.hashPassword).toHaveBeenCalledWith("secret1");
       expect(manager.save).toHaveBeenCalledWith(User, {
         username: "dude",
         email: "d@x.com",
@@ -247,6 +278,24 @@ describe("UsersService", () => {
       expect(manager.save).not.toHaveBeenCalled();
     });
 
+    // The columns ignore case, so the lookup returns a row whose casing
+    // differs from what was sent. The 409 still has to name the right field.
+    it("names the email when it is taken in a different casing", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
+
+      await expect(
+        service.createUser({ username: "dude", email: "D@X.com", password: "secret1" }),
+      ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
+    });
+
+    it("names the username when it is taken in a different casing", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
+
+      await expect(
+        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1" }),
+      ).rejects.toMatchObject({ errorCode: "USERNAME_TAKEN" });
+    });
+
     // The unique indexes on email and username still cover soft-deleted rows,
     // so the conflict lookup has to see them or the insert fails as a 500.
     it("searches soft-deleted rows for both email and username", async () => {
@@ -284,11 +333,11 @@ describe("UsersService", () => {
     it("sets a new password when the current one is right", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
       usersRepository.update.mockResolvedValue({ affected: 1 });
-      hashingProvider.compare.mockResolvedValue(true);
+      hashingProvider.comparePassword.mockResolvedValue(true);
 
       await service.updateMyUser(3, { password: "secret2", currentPassword: "secret1" });
 
-      expect(hashingProvider.compare).toHaveBeenCalledWith("secret1", "hashed(secret1)");
+      expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       // currentPassword is not a column, so it must not reach the update.
       expect(usersRepository.update).toHaveBeenCalledWith(
         { id: 3, deletedAt: IsNull() },
@@ -305,13 +354,13 @@ describe("UsersService", () => {
 
     it("throws 403 and changes nothing when the current password is wrong", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
-      hashingProvider.compare.mockResolvedValue(false);
+      hashingProvider.comparePassword.mockResolvedValue(false);
 
       const attempt = service.updateMyUser(3, { password: "secret2", currentPassword: "not-it" });
 
       await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
       await expect(attempt).rejects.toMatchObject({ errorCode: "WRONG_PASSWORD" });
-      expect(hashingProvider.hash).not.toHaveBeenCalled();
+      expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 
@@ -323,7 +372,7 @@ describe("UsersService", () => {
 
       await service.updateMyUser(3, { username: "donny" });
 
-      expect(hashingProvider.compare).not.toHaveBeenCalled();
+      expect(hashingProvider.comparePassword).not.toHaveBeenCalled();
       expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
   });
@@ -356,7 +405,7 @@ describe("UsersService", () => {
 
       await service.updateUser(3, { password: "secret2" });
 
-      expect(hashingProvider.hash).toHaveBeenCalledWith("secret2");
+      expect(hashingProvider.hashPassword).toHaveBeenCalledWith("secret2");
       expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), {
         password: "hashed(secret2)",
       });
@@ -370,7 +419,7 @@ describe("UsersService", () => {
 
       await service.updateUser(3, { username: "donny" });
 
-      expect(hashingProvider.hash).not.toHaveBeenCalled();
+      expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
       expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
 

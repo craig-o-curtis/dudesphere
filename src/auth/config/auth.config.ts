@@ -9,5 +9,9 @@ export default registerAs("auth", () => {
     expiresIn: env.JWT_EXPIRES_IN,
     audience: env.JWT_AUDIENCE,
     issuer: env.JWT_ISSUER,
+    // For the password reset email: where its link points, and how long the
+    // link works, in seconds.
+    frontendUrl: env.FRONTEND_URL,
+    passwordResetExpiresIn: env.PASSWORD_RESET_EXPIRES_IN,
   };
 });

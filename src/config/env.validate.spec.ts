@@ -1,5 +1,6 @@
 import appConfig from "./app.config.js";
 import { validateEnv } from "./env.validate.js";
+import throttleConfig from "./throttle.config.js";
 
 // The smallest environment the app starts with: every required variable and
 // nothing else.
@@ -33,6 +34,56 @@ describe("validateEnv", () => {
     expect(env.JWT_EXPIRES_IN).toBe(3600);
     expect(env.JWT_AUDIENCE).toBe("dudesphere-api");
     expect(env.JWT_ISSUER).toBe("dudesphere");
+    // Rate limiting is on unless someone turns it off.
+    expect(env.THROTTLE_ENABLED).toBe("true");
+    // Mail goes to the Mailpit container unless it is pointed elsewhere, so
+    // an app with no mail settings sends nothing real.
+    expect(env.MAIL_HOST).toBe("localhost");
+    expect(env.MAIL_PORT).toBe(1025);
+    expect(env.MAIL_USER).toBeUndefined();
+    expect(env.MAIL_PASSWORD).toBeUndefined();
+    expect(env.MAIL_FROM).toBe("Dudesphere <no-reply@dudesphere.local>");
+    expect(env.FRONTEND_URL).toBe("http://localhost:3000");
+    expect(env.PASSWORD_RESET_EXPIRES_IN).toBe(1800);
+  });
+
+  it("reads the mail and password reset settings when they are set", () => {
+    const env = validateEnv({
+      ...required,
+      MAIL_HOST: "smtp.example.com",
+      MAIL_PORT: "587",
+      MAIL_USER: "apikey",
+      MAIL_PASSWORD: "s3cret",
+      MAIL_FROM: "The Dude <dude@example.com>",
+      FRONTEND_URL: "https://dudesphere.example.com",
+      PASSWORD_RESET_EXPIRES_IN: "900",
+    });
+
+    expect(env.MAIL_HOST).toBe("smtp.example.com");
+    expect(env.MAIL_PORT).toBe(587);
+    expect(env.MAIL_USER).toBe("apikey");
+    expect(env.MAIL_FROM).toBe("The Dude <dude@example.com>");
+    expect(env.FRONTEND_URL).toBe("https://dudesphere.example.com");
+    expect(env.PASSWORD_RESET_EXPIRES_IN).toBe(900);
+  });
+
+  it.each([
+    ["FRONTEND_URL", "dudesphere.example.com"],
+    ["FRONTEND_URL", "ftp://dudesphere.example.com"],
+    ["MAIL_PORT", "0"],
+    ["MAIL_PORT", "70000"],
+    // Under a minute, every link would be dead before it was opened.
+    ["PASSWORD_RESET_EXPIRES_IN", "59"],
+  ])("throws when %s is %s", (name, value) => {
+    expect(() => validateEnv({ ...required, [name]: value })).toThrow(new RegExp(name));
+  });
+
+  it("takes true or false for THROTTLE_ENABLED and nothing else", () => {
+    expect(validateEnv({ ...required, THROTTLE_ENABLED: "false" }).THROTTLE_ENABLED).toBe("false");
+    // "0" and "off" look like "false" to a person. Reading them as on, or as
+    // off, would both be a guess, so the app refuses to start.
+    expect(() => validateEnv({ ...required, THROTTLE_ENABLED: "0" })).toThrow(/THROTTLE_ENABLED/);
+    expect(() => validateEnv({ ...required, THROTTLE_ENABLED: "off" })).toThrow(/THROTTLE_ENABLED/);
   });
 
   it("reads the JWT settings when they are set", () => {
@@ -124,5 +175,24 @@ describe("appConfig", () => {
     vi.stubEnv("PORT", "");
 
     expect(appConfig().port).toBe(3000);
+  });
+});
+
+describe("throttleConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    ["true", true],
+    ["false", false],
+    ["", true],
+  ])("reads THROTTLE_ENABLED=%j as enabled: %s", (value, enabled) => {
+    for (const [name, requiredValue] of Object.entries(required)) {
+      vi.stubEnv(name, requiredValue);
+    }
+    vi.stubEnv("THROTTLE_ENABLED", value);
+
+    expect(throttleConfig().enabled).toBe(enabled);
   });
 });

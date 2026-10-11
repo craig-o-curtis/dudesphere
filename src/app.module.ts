@@ -3,18 +3,22 @@ import { ConfigModule, type ConfigType } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { MongooseModule } from "@nestjs/mongoose";
 import { createObserveModule } from "@nestjs/observe";
+import { minutes, ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ACCOUNT_THROTTLER } from "./auth/decorators/throttle-by-account.decorator.js";
+import { AuthThrottlerGuard } from "./auth/guards/auth-throttler.guard.js";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
 import mongoConfig from "./config/mongo.config.js";
 import observeConfig from "./config/observe.config.js";
 import postgresConfig from "./config/postgres.config.js";
+import throttleConfig from "./config/throttle.config.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
 import { RolesGuard } from "./shared/guards/roles.guard.js";
@@ -34,7 +38,26 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       // One file per namespace. Each is injected by its KEY, as below. These are
       // the ones this module uses. A feature with config of its own loads it
       // itself, as AuthModule does with ConfigModule.forFeature.
-      load: [appConfig, postgresConfig, mongoConfig, observeConfig],
+      load: [appConfig, postgresConfig, mongoConfig, observeConfig, throttleConfig],
+    }),
+    // Two counts. "default" is the limit every route gets: 100 requests a
+    // minute from one IP address. The second is tighter and counts by account
+    // and IP address together. It runs only on a route marked
+    // @ThrottleByAccount, as login and forgot-password are in AuthController,
+    // and AuthThrottlerGuard skips it everywhere else. Its 5 in 15 minutes is
+    // the fallback for a marked route that sets no limit of its own.
+    //
+    // The counts are kept in this process's memory, so they reset on a
+    // restart and are not shared between two copies of the app.
+    ThrottlerModule.forRootAsync({
+      inject: [throttleConfig.KEY],
+      useFactory: (throttle: ConfigType<typeof throttleConfig>) => ({
+        skipIf: () => !throttle.enabled,
+        throttlers: [
+          { name: "default", ttl: minutes(1), limit: 100 },
+          { name: ACCOUNT_THROTTLER, ttl: minutes(15), limit: 5 },
+        ],
+      }),
     }),
     ObserveModule.forRootAsync({
       inject: [observeConfig.KEY],
@@ -98,13 +121,17 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
   controllers: [AppController],
   providers: [
     AppService,
-    // Both guards run on every route in the app. Order matters and is the
-    // order they are listed in: JwtAuthGuard verifies the token and puts the
-    // user on the request, then RolesGuard reads that user's role.
+    // All three guards run on every route in the app. Order matters and is
+    // the order they are listed in: AuthThrottlerGuard counts the request and
+    // refuses it with a 429 when the caller is over the limit, JwtAuthGuard
+    // verifies the token and puts the user on the request, then RolesGuard
+    // reads that user's role. The limiter goes first so that a guessed token
+    // is counted too.
     //
     // Because these are global, a route needs no @UseGuards. Routes an
     // anonymous caller is meant to reach carry @Public(); routes limited to a
     // role carry @Roles().
+    { provide: APP_GUARD, useClass: AuthThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

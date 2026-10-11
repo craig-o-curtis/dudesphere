@@ -91,17 +91,24 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
-  // For login. Returns null for an unknown email and for a wrong password
-  // alike, so the caller can't tell which it was. A soft-deleted user is not
-  // found, so they can't log in.
-  async getUserByCredentials(email: string, password: string): Promise<UserResponseDto | null> {
-    const user = await this.usersRepository.findOne({ where: { email } });
+  // For login. `identifier` is a username or an email. Returns null for an
+  // unknown identifier and for a wrong password alike, so the caller can't
+  // tell which it was. A soft-deleted user is not found, so they can't log in.
+  async getUserByCredentials(
+    identifier: string,
+    password: string,
+  ): Promise<UserResponseDto | null> {
+    // An "@" means an email. CreateUserDto and a CHECK on the table both keep
+    // "@" out of usernames, so one identifier can never match two accounts.
+    // Both columns are citext, so either lookup ignores case.
+    const where = identifier.includes("@") ? { email: identifier } : { username: identifier };
+    const user = await this.usersRepository.findOne({ where });
     // The column holds a hash, so the two are compared by the hasher, never
-    // with ===. For an unknown email user?.password is undefined, and compare
-    // still does the work before answering false. Both failures then take
-    // about the same time, which keeps the response from revealing which
-    // emails have an account.
-    const matches = await this.hashingProvider.compare(password, user?.password);
+    // with ===. For an unknown identifier user?.password is undefined, and
+    // compare still does the work before answering false. Both failures then
+    // take about the same time, which keeps the response from revealing which
+    // usernames and emails have an account.
+    const matches = await this.hashingProvider.comparePassword(password, user?.password);
     if (!user || !matches) {
       return null;
     }
@@ -130,7 +137,7 @@ export class UsersService {
           username: createUserDto.username,
           email: createUserDto.email,
           // Only the hash is stored. The password itself is never written.
-          password: await this.hashingProvider.hash(createUserDto.password),
+          password: await this.hashingProvider.hashPassword(createUserDto.password),
         }),
       );
 
@@ -159,7 +166,7 @@ export class UsersService {
       }
 
       const user = await this.usersRepository.findOne({ where: { id: userId } });
-      const matches = await this.hashingProvider.compare(currentPassword, user?.password);
+      const matches = await this.hashingProvider.comparePassword(currentPassword, user?.password);
       if (!user) {
         throw new NotFoundException(`My User #${userId} not found`);
       }
@@ -207,7 +214,7 @@ export class UsersService {
     // A new password arrives as plain text and is stored as a hash, the same
     // as on sign-up. update() below runs no entity hooks, so it is done here.
     if (userFields.password !== undefined) {
-      userFields.password = await this.hashingProvider.hash(userFields.password);
+      userFields.password = await this.hashingProvider.hashPassword(userFields.password);
     }
 
     // deletedAt: IsNull() because update() does not apply the soft-delete
@@ -296,5 +303,9 @@ function takenField(
   existing: Pick<User, "email" | "username">,
   attempted: { email?: string; username?: string },
 ): TakenField {
-  return attempted.email && existing.email === attempted.email ? "email" : "username";
+  // Lowercased on both sides, because the columns ignore case: the lookup
+  // finds "w@x.com" for "W@X.com", and === alone would then blame the username.
+  return attempted.email && existing.email.toLowerCase() === attempted.email.toLowerCase()
+    ? "email"
+    : "username";
 }

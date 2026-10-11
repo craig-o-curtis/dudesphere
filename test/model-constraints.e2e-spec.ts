@@ -51,10 +51,13 @@ describe("Model constraints (e2e)", () => {
     const name = tag();
     const credentials = { email: `e2e-${name}@example.com`, password: "secret123" };
     await request(app.getHttpServer())
-      .post("/users")
+      .post("/auth/signup")
       .send({ ...credentials, username: `e2e-${name}` })
       .expect(201);
-    const login = await request(app.getHttpServer()).post("/auth").send(credentials).expect(201);
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ identifier: credentials.email, password: credentials.password })
+      .expect(201);
     token = (login.body as { token: string }).token;
   });
 
@@ -142,7 +145,7 @@ describe("Model constraints (e2e)", () => {
       const name = tag();
 
       const { body } = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({
           email: `e2e-${name}@example.com`,
           password: "secret123",
@@ -155,12 +158,12 @@ describe("Model constraints (e2e)", () => {
   });
 
   describe("a value longer than its column, counted the way Postgres counts", () => {
-    // 13 letters to @MaxLength, 26 characters to varchar(24).
-    it("POST /users rejects a username that is only short if selectors are left out", async () => {
+    // 13 letters to @MaxLength, 26 characters to the column's limit of 24.
+    it("POST /auth/signup rejects a username that is only short if selectors are left out", async () => {
       const name = tag();
 
       const { body } = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({
           email: `e2e-${name}@example.com`,
           password: "secret123",
@@ -171,7 +174,7 @@ describe("Model constraints (e2e)", () => {
       expectRejectedField(body, "username");
     });
 
-    // 51 letters to @MaxLength, 102 characters to varchar(100).
+    // 51 letters to @MaxLength, 102 characters to the column's limit of 100.
     it("PATCH /profiles/me rejects such a firstName", async () => {
       const { body } = await patch("/profiles/me", {
         firstName: LETTER_WITH_SELECTOR.repeat(51),
@@ -202,7 +205,7 @@ describe("Model constraints (e2e)", () => {
       const name = tag();
 
       const { body } = await request(app.getHttpServer())
-        .post("/users")
+        .post("/auth/signup")
         .send({
           email: `e2e-${name}@example.com`,
           password: "secret123",
