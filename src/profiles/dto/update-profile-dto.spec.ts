@@ -23,10 +23,25 @@ describe("UpdateProfileDto", () => {
   });
 
   // These columns are nullable, and null is how a client clears one.
-  it.each(["firstName", "lastName", "bio", "profileImageUrl", "ordainedDate"])(
-    "accepts null for %s",
-    async (field) => {
-      expect(await invalidFields({ [field]: null })).toEqual([]);
-    },
-  );
+  it.each(["bio", "profileImageUrl", "ordainedDate"])("accepts null for %s", async (field) => {
+    expect(await invalidFields({ [field]: null })).toEqual([]);
+  });
+
+  // Required at sign up, optional here: a member may edit their bio without
+  // sending their name again. The column is NOT NULL, so null is refused.
+  describe("displayName", () => {
+    it("accepts a new name", async () => {
+      expect(await invalidFields({ displayName: "El Duderino" })).toEqual([]);
+    });
+
+    it("rejects null", async () => {
+      expect(await invalidFields({ displayName: null })).toEqual(["displayName"]);
+    });
+
+    it("cleans it the way sign up does", () => {
+      const dto = plainToInstance(UpdateProfileDto, { displayName: "  El   Duderino " });
+
+      expect(dto.displayName).toBe("El Duderino");
+    });
+  });
 });

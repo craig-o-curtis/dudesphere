@@ -16,6 +16,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp } from "./sign-up.js";
 
 // A timestamp has to mean the same instant on every machine.
 //
@@ -57,17 +58,12 @@ describe("Timestamps (e2e)", () => {
     configureApp(app);
     await listenOnLoopback(app);
 
-    const name = randomUUID().replaceAll("-", "").slice(0, 8);
-    const credentials = { email: `e2e-${name}@example.com`, password: "secret123" };
-    const created = await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...credentials, username: `e2e-${name}` })
-      .expect(201);
-    user = created.body as { createdAt: string; updatedAt: string };
+    const { sent, user: created } = await signUp(app);
+    user = created;
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(201);
     token = (login.body as { token: string }).token;
   });

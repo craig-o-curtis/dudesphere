@@ -1,6 +1,8 @@
+import { plainToInstance } from "class-transformer";
 import { isEmail, maxLength, validateSync } from "class-validator";
 
 import { columnLimits } from "../../../test/column-limits.js";
+import { CreateProfileDto } from "../../profiles/dto/create-profile-dto.js";
 import { User } from "../user.entity.js";
 import { CreateUserDto } from "./create-user.dto.js";
 
@@ -29,6 +31,9 @@ function buildDto(overrides: Partial<CreateUserDto>): CreateUserDto {
     username: "dude",
     email: "dude@example.com",
     password: "secret1",
+    // An instance, not a plain object: Object.assign runs no @Type, and
+    // @ValidateNested refuses a nested value that is not a class instance.
+    profile: Object.assign(new CreateProfileDto(), { displayName: "The Dude" }),
     ...overrides,
   });
 }
@@ -117,6 +122,30 @@ describe("CreateUserDto", () => {
 
     it.each(["dude", "The_Dude", "el-duderino.99", "dudé"])("accepts %s", (username) => {
       expect(validateSync(buildDto({ username }))).toEqual([]);
+    });
+  });
+
+  // A profile's display name is required, so the profile is too. These go
+  // through plainToInstance, as a request body does, so @Type builds the
+  // nested class.
+  describe("profile", () => {
+    const account = { username: "dude", email: "dude@example.com", password: "secret1" };
+
+    function invalidFields(body: object): string[] {
+      return validateSync(plainToInstance(CreateUserDto, body)).map((error) => error.property);
+    }
+
+    it("accepts a profile with a display name", () => {
+      expect(invalidFields({ ...account, profile: { displayName: "The Dude" } })).toEqual([]);
+    });
+
+    it.each([
+      ["no profile", account],
+      ["a null profile", { ...account, profile: null }],
+      ["a profile with no display name", { ...account, profile: { bio: "abides" } }],
+      ["a profile that is not an object", { ...account, profile: "The Dude" }],
+    ])("rejects %s", (_what, body) => {
+      expect(invalidFields(body)).toEqual(["profile"]);
     });
   });
 

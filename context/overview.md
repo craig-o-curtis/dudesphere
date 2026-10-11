@@ -25,16 +25,16 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 
 ### PostgreSQL — `user` table
 
-| Column      | Type                   | Description                                                                    |
-| ----------- | ---------------------- | ------------------------------------------------------------------------------ |
-| `id`        | serial PK              | Auto-increment                                                                 |
-| `username`  | citext UNIQUE          | Shown on abidings. Up to 24 characters, no `@` and no whitespace. A login name |
-| `email`     | citext UNIQUE          | Up to 100 characters. A login name                                             |
-| `password`  | varchar(255)           | bcrypt hash; never returned                                                    |
-| `role`      | enum `admin` or `user` | Defaults to `user`                                                             |
-| `createdAt` | timestamptz            | Set by the database when the row is created                                    |
-| `updatedAt` | timestamptz            | Moved by TypeORM on every update                                               |
-| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                       |
+| Column      | Type                   | Description                                                                                         |
+| ----------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `id`        | serial PK              | Auto-increment                                                                                      |
+| `username`  | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only |
+| `email`     | citext UNIQUE          | Up to 100 characters. A login name                                                                  |
+| `password`  | varchar(255)           | bcrypt hash; never returned                                                                         |
+| `role`      | enum `admin` or `user` | Defaults to `user`                                                                                  |
+| `createdAt` | timestamptz            | Set by the database when the row is created                                                         |
+| `updatedAt` | timestamptz            | Moved by TypeORM on every update                                                                    |
+| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                                            |
 
 ### PostgreSQL — `password_reset_token` table
 
@@ -54,19 +54,27 @@ A row is deleted when its link is used, so there is no "used" column.
 
 One per user, created in the same transaction as the user.
 
-| Column            | Type                   | Description                               |
-| ----------------- | ---------------------- | ----------------------------------------- |
-| `id`              | serial PK              | Auto-increment                            |
-| `userId`          | int UNIQUE, FK         | References `user.id`, `ON DELETE CASCADE` |
-| `firstName`       | varchar(100), nullable |                                           |
-| `lastName`        | varchar(100), nullable |                                           |
-| `bio`             | text, nullable         |                                           |
-| `profileImageUrl` | varchar, nullable      | A URL                                     |
-| `isDude`          | boolean                | Dudeist flag. Defaults to `false`         |
-| `ordainedDate`    | timestamptz, nullable  | An instant in UTC                         |
-| `createdAt`       | timestamptz            | Set by the database                       |
-| `updatedAt`       | timestamptz            | Moved by TypeORM on every update          |
-| `deletedAt`       | timestamptz, nullable  | Set and cleared together with its user's  |
+| Column            | Type                  | Description                                        |
+| ----------------- | --------------------- | -------------------------------------------------- |
+| `id`              | serial PK             | Auto-increment                                     |
+| `userId`          | int UNIQUE, FK        | References `user.id`, `ON DELETE CASCADE`          |
+| `displayName`     | citext UNIQUE         | The one name other members see. 2 to 50 characters |
+| `bio`             | text, nullable        |                                                    |
+| `profileImageUrl` | varchar, nullable     | A URL                                              |
+| `isDude`          | boolean               | Dudeist flag. Defaults to `false`                  |
+| `ordainedDate`    | timestamptz, nullable | An instant in UTC                                  |
+| `createdAt`       | timestamptz           | Set by the database                                |
+| `updatedAt`       | timestamptz           | Moved by TypeORM on every update                   |
+| `deletedAt`       | timestamptz, nullable | Set and cleared together with its user's           |
+
+**Username and display name.** A username is a login name. Only the member
+and admins ever see it. The display name is what everyone else sees, on the
+profile and on every abiding. It is required at sign up and unique, ignoring
+letter case, so one member cannot pass as another. Before it is checked or
+stored it is put in Unicode form NFKC, each run of whitespace becomes one
+space, and the ends are trimmed. Control characters and characters nobody can
+see are refused. A soft-deleted member's name stays reserved. The rules are in
+`src/shared/utils/display-name.ts`.
 
 Every timestamp column is `timestamptz`, so a value means the same instant on
 any machine. The app reads and writes them as ISO 8601 UTC strings and never
@@ -157,6 +165,12 @@ There is no logout route yet. A login token is a signed JWT the server does not
 store, so there is nothing for the server to end. Logout comes with refresh
 tokens.
 
+The sign-up body is
+`{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`.
+`profile` may also carry `bio`, `profileImageUrl`, `isDude` and `ordainedDate`.
+A display name in use answers 409 `DISPLAY_NAME_TAKEN`, as a taken email or
+username answers `EMAIL_TAKEN` or `USERNAME_TAKEN`.
+
 The login body is `{ "identifier": "...", "password": "..." }`. `identifier` is
 a username or an email. A value with `@` is looked up as an email, and any
 other value as a username. Spaces around it are dropped.
@@ -222,28 +236,31 @@ turns it off, which only the e2e suite does.
 
 ### Users (PostgreSQL)
 
-| Method | Endpoint             | Access | Description                          |
-| ------ | -------------------- | ------ | ------------------------------------ |
-| POST   | `/users`             | Admin  | Create a user and a profile          |
-| GET    | `/users`             | Admin  | List users, paginated, in id order   |
-| GET    | `/users/me`          | Token  | The caller's own user                |
-| GET    | `/users/:id`         | Public | One user                             |
-| PATCH  | `/users/me`          | Token  | Update the caller's own user         |
-| PATCH  | `/users/:id`         | Admin  | Update any user                      |
-| DELETE | `/users/me`          | Token  | Soft-delete the caller's own account |
-| DELETE | `/users/:id`         | Admin  | Soft-delete any user                 |
-| POST   | `/users/:id/restore` | Admin  | Restore a soft-deleted user          |
+| Method | Endpoint             | Access        | Description                                 |
+| ------ | -------------------- | ------------- | ------------------------------------------- |
+| POST   | `/users`             | Admin         | Create a user and a profile                 |
+| GET    | `/users`             | Admin         | List users, paginated, in id order          |
+| GET    | `/users/me`          | Token         | The caller's own user                       |
+| GET    | `/users/:id`         | Self or admin | One user. It carries the email and the role |
+| PATCH  | `/users/me`          | Token         | Update the caller's own user                |
+| PATCH  | `/users/:id`         | Admin         | Update any user                             |
+| DELETE | `/users/me`          | Token         | Soft-delete the caller's own account        |
+| DELETE | `/users/:id`         | Admin         | Soft-delete any user                        |
+| POST   | `/users/:id/restore` | Admin         | Restore a soft-deleted user                 |
 
 ### Profiles (PostgreSQL)
 
 | Method | Endpoint             | Access         | Description                 |
 | ------ | -------------------- | -------------- | --------------------------- |
-| GET    | `/profiles`          | Public         | List profiles, paginated    |
+| GET    | `/profiles`          | Token          | List profiles, paginated    |
 | GET    | `/profiles/me`       | Token          | The caller's own profile    |
-| GET    | `/profiles/user/:id` | Public         | The profile of one user     |
-| GET    | `/profiles/:id`      | Public         | One profile                 |
+| GET    | `/profiles/user/:id` | Token          | The profile of one user     |
+| GET    | `/profiles/:id`      | Token          | One profile                 |
 | PATCH  | `/profiles/me`       | Token          | Update the caller's profile |
 | PATCH  | `/profiles/:id`      | Owner or admin | Update a profile            |
+
+A profile carries `displayName` and no username. Changing `displayName` to one
+in use answers 409 `DISPLAY_NAME_TAKEN`.
 
 ### Abidings (MongoDB)
 
@@ -258,6 +275,10 @@ turns it off, which only the e2e suite does.
 | POST   | `/abidings`                       | Token           | Post an abiding, or a reply with `replyToId`                                       |
 | PATCH  | `/abidings/:id`                   | Author or admin | Edit an abiding                                                                    |
 | DELETE | `/abidings/:id`                   | Author or admin | Delete an abiding                                                                  |
+
+Every abiding in a response carries its author's `userId` and `displayName`. It
+never carries the username. The name is read from the profile on each request,
+so a member who changes it sees the new one on their old abidings at once.
 
 ### Hashtags (MongoDB)
 

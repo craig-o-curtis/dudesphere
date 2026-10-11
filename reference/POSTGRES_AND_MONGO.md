@@ -70,11 +70,11 @@ quickest way to find your way around the other half of the code.
 No foreign key crosses from one database to the other, and no transaction
 covers both. The app does that work itself, in three places.
 
-**Reading an author's name.** An abiding stores `userId` and no username. A
-copied name would go stale the first time the user renamed. So
+**Reading an author's name.** An abiding stores `userId` and no name. A
+copied name would go stale the first time the member changed it. So
 `AbidingsService` reads a page of abidings from Mongo, then asks Postgres once
-for the authors of that page, and puts each name on its abidings. See
-`withUsernames` in `src/abidings/abidings.service.ts`.
+for the display names of that page's authors, and puts each name on its
+abidings. See `withDisplayNames` in `src/abidings/abidings.service.ts`.
 
 **Posting.** Before it writes an abiding, `createAbiding` checks in Postgres
 that the author still exists. A foreign key would do this in one database.

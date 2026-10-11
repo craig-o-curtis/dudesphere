@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
@@ -8,6 +6,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp } from "./sign-up.js";
 
 // Needs the databases running. Creates a throwaway user and soft-deletes it.
 // test/global-setup.ts deletes the row when the run ends.
@@ -31,19 +30,11 @@ describe("DELETE /users/me (e2e)", () => {
   });
 
   it("closes the caller's own account", async () => {
-    // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
-    // keep the username under its 24-character limit.
-    const tag = randomUUID().slice(0, 8);
-    const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-
-    await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...credentials, username: `e2e-${tag}` })
-      .expect(201);
+    const { sent } = await signUp(app);
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(201);
     const { token } = login.body as { token: string };
 
@@ -59,7 +50,7 @@ describe("DELETE /users/me (e2e)", () => {
       .expect(404);
     await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(401);
 
     // The token is still valid until it expires, but it can no longer post.

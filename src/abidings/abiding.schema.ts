@@ -39,9 +39,10 @@ export class Abiding extends Document {
   @Prop({ type: String, default: null })
   replyToId: string | null;
 
-  // There is no username here, on purpose. A copy of the author's name would
-  // go stale the first time they renamed, so every response reads the current
-  // one from Postgres by userId. See AbidingsController.toResponse.
+  // There is no author name here, on purpose. A copy of the author's display
+  // name would go stale the first time they changed it, so every response
+  // reads the current one from Postgres by userId. See
+  // AbidingsService.withDisplayNames.
 
   // Normalized slugs derived from `message` by extractHashtags. Never set
   // directly by a client: neither abiding DTO has a `hashtags` field, and the

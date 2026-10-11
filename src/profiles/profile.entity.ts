@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   Entity,
   JoinColumn,
@@ -13,7 +14,11 @@ import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorato
 import { UtcColumn } from "../shared/decorators/utc-column.decorator.js";
 import { User } from "../users/user.entity.js";
 
+// The check is the database's own copy of a rule CreateProfileDto already
+// applies, so a writer that skips the DTO, such as the seed, cannot break it.
+// The name matches the migration ProfileDisplayName.
 @Entity("profile")
+@Check("CHK_profile_displayName_length", `char_length("displayName") <= 50`)
 export class Profile {
   @PrimaryGeneratedColumn()
   id: number;
@@ -30,11 +35,14 @@ export class Profile {
   // the SQL equivalent here is `FOREIGN KEY (userId) REFERENCES user(id) ON DELETE CASCADE`
   user: Relation<User>;
 
-  @Column({ type: "varchar", nullable: true, length: 100 })
-  firstName: string | null;
-
-  @Column({ type: "varchar", nullable: true, length: 100 })
-  lastName: string | null;
+  // The one name other members see: on the profile and on every abiding. A
+  // username is a login name and is shown to nobody else.
+  //
+  // citext compares without regard to case, so "The Dude" and "the dude" are
+  // the same name, and unique refuses the second. The value is stored as
+  // typed. citext has no length, so the check above holds the limit.
+  @Column({ type: "citext", nullable: false, unique: true })
+  displayName: string;
 
   @Column({ type: "text", nullable: true })
   bio: string | null;

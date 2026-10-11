@@ -8,6 +8,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp, signUpBody } from "./sign-up.js";
 
 // Values a DTO used to accept and the database or the model then refused.
 // Each one reached the caller as a 500, or was stored as something else.
@@ -48,15 +49,10 @@ describe("Model constraints (e2e)", () => {
     configureApp(app);
     await listenOnLoopback(app);
 
-    const name = tag();
-    const credentials = { email: `e2e-${name}@example.com`, password: "secret123" };
-    await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...credentials, username: `e2e-${name}` })
-      .expect(201);
+    const { sent } = await signUp(app);
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(201);
     token = (login.body as { token: string }).token;
   });
@@ -120,19 +116,25 @@ describe("Model constraints (e2e)", () => {
       expectRejectedField(body, "isDude");
     });
 
+    it("PATCH /profiles/me rejects null for displayName", async () => {
+      const { body } = await patch("/profiles/me", { displayName: null }).expect(400);
+
+      expectRejectedField(body, "displayName");
+    });
+
     // The other side of the same rule: null is how a client clears a column
     // that allows it.
     it("PATCH /profiles/me still accepts null for a nullable column", async () => {
-      await patch("/profiles/me", { firstName: "Walter" }).expect(200);
+      await patch("/profiles/me", { bio: "The Dude abides" }).expect(200);
 
-      const { body } = await patch("/profiles/me", { firstName: null }).expect(200);
+      const { body } = await patch("/profiles/me", { bio: null }).expect(200);
 
-      expect((body as { firstName: string | null }).firstName).toBeNull();
+      expect((body as { bio: string | null }).bio).toBeNull();
     });
   });
 
   describe("a NUL character, which Postgres cannot store", () => {
-    it.each(["bio", "firstName", "lastName", "profileImageUrl"])(
+    it.each(["bio", "displayName", "profileImageUrl"])(
       "PATCH /profiles/me rejects one in %s",
       async (field) => {
         const { body } = await patch("/profiles/me", { [field]: "ab\u0000cd" }).expect(400);
@@ -142,15 +144,9 @@ describe("Model constraints (e2e)", () => {
     );
 
     it("POST /users rejects one in username", async () => {
-      const name = tag();
-
       const { body } = await request(app.getHttpServer())
         .post("/auth/signup")
-        .send({
-          email: `e2e-${name}@example.com`,
-          password: "secret123",
-          username: `e2e\u0000${name}`,
-        })
+        .send(signUpBody({ username: `e2e\u0000${tag()}` }))
         .expect(400);
 
       expectRejectedField(body, "username");
@@ -160,27 +156,21 @@ describe("Model constraints (e2e)", () => {
   describe("a value longer than its column, counted the way Postgres counts", () => {
     // 13 letters to @MaxLength, 26 characters to the column's limit of 24.
     it("POST /auth/signup rejects a username that is only short if selectors are left out", async () => {
-      const name = tag();
-
       const { body } = await request(app.getHttpServer())
         .post("/auth/signup")
-        .send({
-          email: `e2e-${name}@example.com`,
-          password: "secret123",
-          username: LETTER_WITH_SELECTOR.repeat(13),
-        })
+        .send(signUpBody({ username: LETTER_WITH_SELECTOR.repeat(13) }))
         .expect(400);
 
       expectRejectedField(body, "username");
     });
 
-    // 51 letters to @MaxLength, 102 characters to the column's limit of 100.
-    it("PATCH /profiles/me rejects such a firstName", async () => {
+    // 26 letters to @MaxLength, 52 characters to the column's limit of 50.
+    it("PATCH /profiles/me rejects such a displayName", async () => {
       const { body } = await patch("/profiles/me", {
-        firstName: LETTER_WITH_SELECTOR.repeat(51),
+        displayName: LETTER_WITH_SELECTOR.repeat(26),
       }).expect(400);
 
-      expectRejectedField(body, "firstName");
+      expectRejectedField(body, "displayName");
     });
   });
 
@@ -202,16 +192,9 @@ describe("Model constraints (e2e)", () => {
     );
 
     it("rejects a bad date at sign-up too", async () => {
-      const name = tag();
-
       const { body } = await request(app.getHttpServer())
         .post("/auth/signup")
-        .send({
-          email: `e2e-${name}@example.com`,
-          password: "secret123",
-          username: `e2e-${name}`,
-          profile: { ordainedDate: "2026-02-30" },
-        })
+        .send(signUpBody({ profile: { ordainedDate: "2026-02-30" } }))
         .expect(400);
 
       expectRejectedField(body, "ordainedDate");

@@ -30,7 +30,12 @@ describe("AuthController", () => {
 
   describe("signup", () => {
     it("passes the body to AuthService and returns what it returns", async () => {
-      const body = { username: "walter", email: "w@x.com", password: "secret1" };
+      const body = {
+        username: "walter",
+        email: "w@x.com",
+        password: "secret1",
+        profile: { displayName: "Walter Sobchak" },
+      };
       const created = { id: 4, username: "walter", email: "w@x.com" };
       authService.signup.mockResolvedValue(created);
 

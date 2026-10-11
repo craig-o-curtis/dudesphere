@@ -13,8 +13,10 @@ export class AbidingResponseDto {
   @Expose()
   imageUrl?: string | null;
 
+  // The author's display name, read from their profile. Never the username:
+  // that is a login name and is shown to nobody else.
   @Expose()
-  username?: string | null;
+  displayName?: string | null;
 
   // Always an array in a response, never undefined — see the constructor.
   // Abidings written before this field existed have no `hashtags` at all.

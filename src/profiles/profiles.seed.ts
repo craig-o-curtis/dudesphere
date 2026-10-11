@@ -37,8 +37,12 @@ export class ProfilesSeedService {
     const profile = adminUser.profile ?? this.profilesRepository.create({ userId: adminUser.id });
     const isNew = !adminUser.profile;
 
-    profile.firstName = "Admin";
-    profile.lastName = "Dude";
+    // Set once, when the profile is created. A later run leaves the name
+    // alone: the admin may have changed it, and writing it back could collide
+    // with a member who has taken "Admin Dude" since.
+    if (isNew) {
+      profile.displayName = "Admin Dude";
+    }
     profile.bio = "bio breaking";
     profile.isDude = true;
     await this.profilesRepository.save(profile);

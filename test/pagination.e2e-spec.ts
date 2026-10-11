@@ -13,6 +13,7 @@ import { AppModule } from "./../src/app.module.js";
 import type { Paginated } from "./../src/shared/pagination/paginated.interface.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp } from "./sign-up.js";
 
 // Needs the databases running. Each run registers three throwaway users, five
 // abidings and three hashtags. test/global-setup.ts deletes all of them when
@@ -91,17 +92,11 @@ describe("Pagination (e2e)", () => {
     const postedAt: string[] = [];
 
     beforeAll(async () => {
-      // randomUUID, not Date.now(), which the gmt lint rules ban.
-      const tag = randomUUID().slice(0, 8);
-      const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-      const user = await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ ...credentials, username: `e2e-${tag}` })
-        .expect(201);
-      authorId = (user.body as { id: number }).id;
+      const { sent, user } = await signUp(app);
+      authorId = user.id;
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send({ identifier: credentials.email, password: credentials.password })
+        .send({ identifier: sent.email, password: sent.password })
         .expect(201);
       authorToken = (login.body as { token: string }).token;
 
@@ -335,29 +330,22 @@ describe("Pagination (e2e)", () => {
     const earlySlug = `e2e0${hex}`;
     const lateSlug = `e2ef${hex}`;
 
-    async function signUp(): Promise<Account> {
-      // randomUUID, not Date.now(), which the gmt lint rules ban.
-      const tag = randomUUID().slice(0, 8);
-      const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-      const user = await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ ...credentials, username: `e2e-${tag}` })
-        .expect(201);
+    async function signUpAndLogIn(): Promise<Account> {
+      const { sent, user } = await signUp(app);
       const login = await request(app.getHttpServer())
         .post("/auth/login")
-        .send({ identifier: credentials.email, password: credentials.password })
+        .send({ identifier: sent.email, password: sent.password })
         .expect(201);
-      const body = user.body as { id: number; profile: { id: number } };
       return {
-        id: body.id,
-        profileId: body.profile.id,
+        id: user.id,
+        profileId: user.profile.id,
         token: (login.body as { token: string }).token,
       };
     }
 
     beforeAll(async () => {
-      first = await signUp();
-      second = await signUp();
+      first = await signUpAndLogIn();
+      second = await signUpAndLogIn();
 
       // Editing a row makes Postgres write a new copy of it further along in
       // the table. With no ORDER BY, the first user and the first profile
@@ -396,7 +384,7 @@ describe("Pagination (e2e)", () => {
     });
 
     it("returns profiles in id order, even after the first one is edited", async () => {
-      const profiles = await getEveryPage<{ id: number }>("/profiles?limit=100");
+      const profiles = await getEveryPage<{ id: number }>("/profiles?limit=100", first.token);
       const ids = profiles.map((profile) => profile.id);
 
       expect(ids).toContain(first.profileId);
@@ -414,7 +402,7 @@ describe("Pagination (e2e)", () => {
     // The last page the API allows. With 10 rows to a page it starts ten
     // million rows in, so it is empty, and the answer is still a 200.
     it("answers the last allowed page with 200 and no rows", async () => {
-      const page = await getPage<unknown>("/profiles?page=1000000");
+      const page = await getPage<unknown>("/profiles?page=1000000", first.token);
 
       expect(page.data).toEqual([]);
       expect(page.links.next).toBeNull();

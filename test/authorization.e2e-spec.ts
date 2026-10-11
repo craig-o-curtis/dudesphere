@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { INestApplication } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -10,6 +8,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp, signUpBody } from "./sign-up.js";
 
 // The only place the guards are proved over real HTTP. A unit controller spec
 // cannot do it: both guards are APP_GUARDs registered in AppModule, and
@@ -30,19 +29,11 @@ describe("Authorization (e2e)", () => {
   let ownersAbidingId: string;
 
   async function registerAndLogin(): Promise<{ token: string; userId: number }> {
-    // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
-    // keep the username under its 24-character limit.
-    const tag = randomUUID().slice(0, 8);
-    const credentials = { email: `e2e-${tag}@example.com`, password: "secret123" };
-
-    await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...credentials, username: `e2e-${tag}` })
-      .expect(201);
+    const { sent } = await signUp(app);
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ identifier: credentials.email, password: credentials.password })
+      .send({ identifier: sent.email, password: sent.password })
       .expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
@@ -92,7 +83,6 @@ describe("Authorization (e2e)", () => {
       ["/", 200],
       ["/abidings", 200],
       ["/hashtags", 200],
-      ["/profiles", 200],
     ] as const)("GET %s is %i", async (path, status) => {
       await request(app.getHttpServer()).get(path).expect(status);
     });
@@ -117,19 +107,19 @@ describe("Authorization (e2e)", () => {
         .send({ identifier: "nobody@example.com", password: "wrong" })
         .expect(401); // reached the handler, which rejected the credentials
 
-      const tag = randomUUID().slice(0, 8);
-      await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
-        .expect(201);
+      await signUp(app);
     });
   });
 
   describe("401 without a token", () => {
     it.each([
       ["get", "/users/me"],
+      ["get", "/users/1"],
       ["get", "/abidings/me"],
+      ["get", "/profiles"],
       ["get", "/profiles/me"],
+      ["get", "/profiles/1"],
+      ["get", "/profiles/user/1"],
       ["post", "/abidings"],
       ["get", "/users"],
       ["post", "/users"],
@@ -170,11 +160,10 @@ describe("Authorization (e2e)", () => {
     // Creating a user directly is for admins. Everyone else signs up through
     // POST /auth/signup.
     it("POST /users", async () => {
-      const tag = randomUUID().slice(0, 8);
       await request(app.getHttpServer())
         .post("/users")
         .set(bearer(owner.token))
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .send(signUpBody())
         .expect(403);
     });
 
@@ -183,14 +172,14 @@ describe("Authorization (e2e)", () => {
     });
 
     it("lets an admin create a user with POST /users", async () => {
-      const tag = randomUUID().slice(0, 8);
+      const sent = signUpBody();
       const { body } = await request(app.getHttpServer())
         .post("/users")
         .set(bearer(adminToken))
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .send(sent)
         .expect(201);
 
-      expect(body).toMatchObject({ username: `e2e-${tag}`, role: UserRole.USER });
+      expect(body).toMatchObject({ username: sent.username, role: UserRole.USER });
     });
   });
 
@@ -237,10 +226,57 @@ describe("Authorization (e2e)", () => {
     });
   });
 
+  // The record carries the email and the role. Before this rule any signed-in
+  // caller could read anyone's.
+  describe("a user record can only be read by that user or an admin", () => {
+    it("200 for the user themselves, with their own email", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${owner.userId}`)
+        .set(bearer(owner.token))
+        .expect(200);
+
+      expect(body).toMatchObject({ id: owner.userId, role: UserRole.USER });
+      expect((body as { email: string }).email).toMatch(/^e2e-/);
+    });
+
+    it("403 for another member, with nothing of the user in the body", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${owner.userId}`)
+        .set(bearer(stranger.token))
+        .expect(403);
+
+      expect(body).toEqual({
+        statusCode: 403,
+        message: "Not authorized to read this user",
+        error: "Forbidden",
+        errorCode: "NOT_OWNER",
+      });
+    });
+
+    it("200 for an admin reading someone else", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/users/${stranger.userId}`)
+        .set(bearer(adminToken))
+        .expect(200);
+
+      expect(body).toMatchObject({ id: stranger.userId });
+    });
+
+    // 404 before 403, as for abidings and profiles.
+    it("404 for a user that does not exist, even for a member", async () => {
+      await request(app.getHttpServer())
+        .get("/users/2147483647")
+        .set(bearer(stranger.token))
+        .expect(404);
+    });
+  });
+
   describe("a profile can only be changed by its owner or an admin", () => {
     it("403 for a stranger", async () => {
+      // Reading someone else's profile is allowed for any signed-in caller.
       const profile = await request(app.getHttpServer())
         .get(`/profiles/user/${owner.userId}`)
+        .set(bearer(stranger.token))
         .expect(200);
       const { id } = profile.body as { id: number };
 
@@ -254,6 +290,7 @@ describe("Authorization (e2e)", () => {
     it("200 for the owner", async () => {
       const profile = await request(app.getHttpServer())
         .get(`/profiles/user/${owner.userId}`)
+        .set(bearer(owner.token))
         .expect(200);
       const { id } = profile.body as { id: number };
 

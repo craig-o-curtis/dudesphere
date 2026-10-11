@@ -92,7 +92,7 @@ describe("a paginated response (over HTTP)", () => {
   it("applies @Transform to the items inside data", async () => {
     abidingsService.getAbidings.mockResolvedValue({
       items: [
-        new AbidingResponseDto({ id: "a1", userId: 1, message: "hello", username: "walter" }),
+        new AbidingResponseDto({ id: "a1", userId: 1, message: "hello", displayName: "Walter" }),
       ],
       total: 1,
     });
@@ -102,7 +102,7 @@ describe("a paginated response (over HTTP)", () => {
 
     expect(body.data[0]).toMatchObject({
       id: "a1",
-      username: "walter",
+      displayName: "Walter",
       replyToId: null,
       hashtags: [],
     });
