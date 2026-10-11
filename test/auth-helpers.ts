@@ -87,6 +87,13 @@ export async function setRole(
  * The same member's token, as if they had logged in a minute earlier. It is
  * signed by the app's own JwtService, so it is as real as the one passed in.
  *
+ * It carries the member's id and username and no session id. That is on
+ * purpose: the guard then skips its session check, and what refuses this
+ * token is the password check alone, which is what the suites that use it
+ * are testing. A password change also ends every session, so with a session
+ * id the token would be refused twice over and the test would prove nothing
+ * about the first.
+ *
  * For a test that needs a token that is plainly older than something it is
  * about to do, such as a password change. A token records only the second it
  * was signed in, so a token from a login moments before would be a coin toss.

@@ -192,7 +192,7 @@ describe("Password reset (e2e)", () => {
 
     // A member resets a password because they forgot it, or because someone
     // else has it. Either way, whoever was signed in before is signed out.
-    it("ends the login tokens that were signed before the reset", async () => {
+    it("ends the access tokens that were signed before the reset", async () => {
       const user = await signUp();
       const { body: session } = await login(user.email, oldPassword).expect(200);
       const earlier = await signedAMinuteEarlier(
