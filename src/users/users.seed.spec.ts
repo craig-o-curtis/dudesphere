@@ -52,7 +52,12 @@ describe("UsersSeedService", () => {
 
   // A re-run resets the admin's password to the value in .env, as a hash.
   it("stores a hash, not the password, when it updates an existing admin", async () => {
-    const existing = { id: 1, email: "admin@example.com", password: "old-plain-text", role: "user" };
+    const existing = {
+      id: 1,
+      email: "admin@example.com",
+      password: "old-plain-text",
+      role: "user",
+    };
     usersRepository.findOne.mockResolvedValue(existing);
 
     await seedService.seed("admin@example.com", "rug-password");
