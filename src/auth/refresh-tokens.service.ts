@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, LessThanOrEqual, Repository } from "typeorm";
+import { type EntityManager, IsNull, LessThanOrEqual, Repository } from "typeorm";
 
 import { RefreshToken } from "./refresh-token.entity.js";
 
@@ -9,6 +9,18 @@ export type NewRefreshToken = Pick<
   RefreshToken,
   "id" | "familyId" | "userId" | "expiresAt" | "familyExpiresAt"
 >;
+
+// For isSessionLive. Every row of a family carries the same familyExpiresAt,
+// so one row that is not past it means the session is still going.
+const SESSION_STATE = `
+  SELECT
+    EXISTS (
+      SELECT 1 FROM "refresh_token" WHERE "familyId" = $1 AND "familyExpiresAt" > $2
+    ) AS "going",
+    EXISTS (
+      SELECT 1 FROM "refresh_token" WHERE "familyId" = $1 AND "revoked" = true
+    ) AS "revoked"
+`;
 
 /**
  * Reads and writes the refresh_token table, and decides nothing.
@@ -19,8 +31,10 @@ export type NewRefreshToken = Pick<
  * docs. Each one that settles "who got there first" is a single statement,
  * so the answer holds with any number of copies of the app running.
  *
- * Every time comes in as an argument, from the caller's clock. Nothing here
- * reads the database's clock, so the two can never disagree.
+ * Every time these methods write or compare comes in as an argument, from
+ * the caller's clock. No query here reads the database's clock, so the two
+ * can never disagree. The one exception is `createdAt`, which Postgres
+ * stamps itself and nothing reads.
  */
 @Injectable()
 export class RefreshTokensService {
@@ -75,9 +89,14 @@ export class RefreshTokensService {
   /**
    * Ends every session the member has now. A session started afterwards is
    * not affected, so the member can sign in again straight away.
+   *
+   * Pass the caller's `manager` to make this part of its transaction. A
+   * password change does: the new password and the end of the old sessions
+   * then succeed or fail together, and never one without the other.
    */
-  async revokeAllForUser(userId: number): Promise<void> {
-    await this.refreshTokensRepository.update({ userId }, { revoked: true });
+  async revokeAllForUser(userId: number, manager?: EntityManager): Promise<void> {
+    const repository = manager?.getRepository(RefreshToken) ?? this.refreshTokensRepository;
+    await repository.update({ userId }, { revoked: true });
   }
 
   /**
@@ -85,18 +104,23 @@ export class RefreshTokensService {
    * access token belongs to is still going at `now`.
    *
    * Live means three things: the session has rows, it has not passed its
-   * end, and none of its rows is revoked. One query, which counts the rows
-   * that are not past the end and asks whether any is revoked.
+   * end, and none of its rows is revoked.
+   *
+   * One statement with two EXISTS probes. A session gains a row with every
+   * refresh, so counting them would read hundreds of rows on every request.
+   * The index on (familyId, revoked) narrows both probes to the one session.
+   * The "revoked" probe is answered from the index alone. The other reads
+   * one row of a session that is still going, and stops there. Only for a
+   * session past its end and not yet cleared out does it read them all, and
+   * an access token cannot outlive its session by more than its own 15
+   * minutes.
    */
   async isSessionLive(familyId: string, now: string): Promise<boolean> {
-    const session = await this.refreshTokensRepository
-      .createQueryBuilder("token")
-      .select("COUNT(*)", "tokens")
-      .addSelect("COALESCE(BOOL_OR(token.revoked), false)", "revoked")
-      .where("token.familyId = :familyId", { familyId })
-      .andWhere("token.familyExpiresAt > :now", { now })
-      .getRawOne<{ tokens: string; revoked: boolean }>();
+    const [session] = (await this.refreshTokensRepository.query(SESSION_STATE, [
+      familyId,
+      now,
+    ])) as [{ going: boolean; revoked: boolean }];
 
-    return session !== undefined && Number(session.tokens) > 0 && !session.revoked;
+    return session.going && !session.revoked;
   }
 }

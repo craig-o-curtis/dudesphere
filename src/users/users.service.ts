@@ -3,11 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { getUtcNow } from "@northguild/gmt";
-import { DataSource, IsNull, Not, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository, type UpdateResult } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
 import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
@@ -24,6 +22,7 @@ import {
 import type { AuthUser } from "../shared/guards/auth-user.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
+import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -37,6 +36,15 @@ const TOKEN_NOT_OLDER_THAN_PASSWORD = `(
   user.passwordChangedAt IS NULL
   OR user.passwordChangedAt < to_timestamp(:issuedAt) + interval '1 second'
 )`;
+
+/**
+ * A member whose password has just been checked, and the stored hash it was
+ * checked against. See UsersService.getUserByCredentials.
+ */
+export interface CheckedCredentials {
+  user: UserResponseDto;
+  passwordHash: string;
+}
 
 @Injectable()
 export class UsersService {
@@ -118,8 +126,9 @@ export class UsersService {
   // account is closed or gone.
   //
   // No password check here, unlike getUserForToken. A password change ends
-  // the member's sessions outright, in updateUser, so a refresh token from
-  // before it is already refused.
+  // the member's sessions in the same transaction that stores the new
+  // password, in updateUser, so a refresh token from before it is already
+  // refused.
   async getLiveUser(id: number): Promise<AuthUser | null> {
     const user = await this.usersRepository.findOne({
       where: { id },
@@ -162,13 +171,18 @@ export class UsersService {
     return user ? this.toResponseDto(user) : null;
   }
 
-  // For login. `identifier` is a username or an email. Returns null for an
-  // unknown identifier and for a wrong password alike, so the caller can't
-  // tell which it was. A soft-deleted user is not found, so they can't log in.
+  // For signing in. `identifier` is a username or an email. Returns null for
+  // an unknown identifier and for a wrong password alike, so the caller can't
+  // tell which it was. A soft-deleted user is not found, so they can't sign
+  // in.
+  //
+  // With the member comes the stored hash their password was checked against.
+  // AuthService hands it straight back to credentialsStillHold below, and
+  // must do nothing else with it: it is never returned, logged or kept.
   async getUserByCredentials(
     identifier: string,
     password: string,
-  ): Promise<UserResponseDto | null> {
+  ): Promise<CheckedCredentials | null> {
     const user = await this.findByIdentifier(identifier);
     // The column holds a hash, so the two are compared by the hasher, never
     // with ===. For an unknown identifier user?.password is undefined, and
@@ -179,7 +193,34 @@ export class UsersService {
     if (!user || !matches) {
       return null;
     }
-    return this.toResponseDto(user);
+    return { user: this.toResponseDto(user), passwordHash: user.password };
+  }
+
+  // For signing in, straight after the session is started. True when the
+  // member's account is still open and `passwordHash` is still their stored
+  // hash: that is, when what getUserByCredentials checked is still true.
+  //
+  // It closes a gap of about a tenth of a second. Checking a password takes
+  // that long, on purpose. If the password is changed, or the account is
+  // closed, while a sign-in with the old password is being checked, that
+  // change ends the member's sessions before this sign-in has started its
+  // own. The new session would then outlive the change. AuthService asks
+  // here after it has the session, and ends it when the answer is no.
+  //
+  // The row is read with a share lock (FOR SHARE). A password change holds a
+  // lock on the row from its UPDATE until it commits, so this read waits for
+  // one that is in flight and then sees the new hash. Without the lock it
+  // could read the old hash a moment before the commit. A lock needs a
+  // transaction, which is the only reason for one here.
+  async credentialsStillHold(userId: number, passwordHash: string): Promise<boolean> {
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id: userId, password: passwordHash },
+        select: { id: true },
+        lock: { mode: "pessimistic_read" },
+      });
+      return user !== null;
+    });
   }
 
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -300,20 +341,38 @@ export class UsersService {
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and
     // the caller still gets a 404 from getUserById below.
-    const result = await this.usersRepository.update({ id, deletedAt: IsNull() }, userFields);
-    if (result.affected === 0) {
-      throw new NotFoundException(`User #${id} not found`);
+    const liveUser = { id, deletedAt: IsNull() };
+
+    if (password === undefined) {
+      this.assertFound(await this.usersRepository.update(liveUser, userFields), id);
+      return this.getUserById(id);
     }
 
     // A new password signs the member out everywhere: every session they
     // have is ended, on the device that changed the password too. Whoever
     // was signed in with the old password, the member or someone else, signs
-    // in again with the new one. After the update, so a password that was
-    // not changed ends nothing.
-    if (password !== undefined) {
-      await this.refreshTokens.revokeAllForUser(id);
-    }
+    // in again with the new one.
+    //
+    // One transaction for the two writes. If ending the sessions failed after
+    // the password was stored, the old refresh tokens would go on working,
+    // which is the one thing a password change must stop. Here either both
+    // happen or neither does, and the caller can simply try again.
+    //
+    // The user row is written first. That holds a lock on it until the
+    // commit, which credentialsStillHold waits on.
+    await this.dataSource.transaction(async (manager) => {
+      this.assertFound(await manager.update(User, liveUser, userFields), id);
+      await this.refreshTokens.revokeAllForUser(id, manager);
+    });
     return this.getUserById(id);
+  }
+
+  // An update that matched no row means there is no such live user: a 404.
+  // Thrown inside the transaction above, it also rolls the transaction back.
+  private assertFound(result: UpdateResult, id: number): void {
+    if (result.affected === 0) {
+      throw new NotFoundException(`User #${id} not found`);
+    }
   }
 
   async deleteUser(id: number): Promise<void> {
@@ -338,18 +397,16 @@ export class UsersService {
         throw new NotFoundException(`User #${id} not found`);
       }
       await this.profilesService.softDeleteForUser(manager, id);
+      // A closed account has no sessions. In this transaction, so the account
+      // cannot be closed with its sessions left alive: if this fails, the
+      // account stays open and the caller tries again. The sessions stay
+      // ended if the account is restored, and the member signs in again.
+      await this.refreshTokens.revokeAllForUser(id, manager);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
-      // failure throws and rolls back the user and profile.
+      // failure throws and rolls back the user, the profile and the sessions.
       await this.userAbidingsService.softDeleteForUser(id);
     });
-
-    // A closed account has no sessions. After the transaction, not inside it:
-    // the account is closed either way, and JwtAuthGuard already refuses a
-    // closed account's tokens, so a failure here leaves nothing open. The
-    // sessions stay ended if the account is restored, and the member signs
-    // in again.
-    await this.refreshTokens.revokeAllForUser(id);
   }
 
   async restoreUser(id: number): Promise<UserResponseDto> {
@@ -369,34 +426,33 @@ export class UsersService {
         throw new NotFoundException(`Deleted user #${id} not found`);
       }
       await this.profilesService.restoreForUser(manager, id);
+      // An account comes back with no sessions, whatever it had when it was
+      // closed. deleteUser ended them already. This makes the same true of a
+      // session that slipped in around the delete, so nobody is signed in to
+      // a restored account until they sign in to it.
+      await this.refreshTokens.revokeAllForUser(id, manager);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });
     return this.getUserById(id);
   }
 
-  // The one place that decides whether an identifier is a username or an
-  // email. An "@" means an email. CreateUserDto and a CHECK on the table both
-  // keep "@" out of usernames, so one identifier can never match two accounts.
-  // Both columns are citext, so either lookup ignores case.
   // The moment a password change is recorded at. It comes from the app's
   // clock, not the database's, because the app's clock is also what writes
   // the `iat` of a token. Two clocks a second apart would refuse a member's
   // new token straight after they reset their password.
   //
-  // getUtcNow returns "" on failure. A password must not change without the
-  // stamp, or the old tokens would outlive it, so that is a 503 and nothing
-  // is written. See CLOCK_UNAVAILABLE in src/shared/error-codes.ts.
+  // A password must not change without the stamp, or the old tokens would
+  // outlive it. utcNowOrThrow throws a 503 when the clock cannot be read, and
+  // nothing is written.
   private passwordChangedNow(): string {
-    const now = getUtcNow();
-    if (!now) {
-      throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
-      });
-    }
-    return now;
+    return utcNowOrThrow();
   }
 
+  // The one place that decides whether an identifier is a username or an
+  // email. An "@" means an email. CreateUserDto and a CHECK on the table both
+  // keep "@" out of usernames, so one identifier can never match two accounts.
+  // Both columns are citext, so either lookup ignores case.
   private findByIdentifier(identifier: string): Promise<User | null> {
     const where = identifier.includes("@") ? { email: identifier } : { username: identifier };
     return this.usersRepository.findOne({ where });

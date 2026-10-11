@@ -1,20 +1,17 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
-import { getUtcNow } from "@northguild/gmt";
 
 import { RefreshTokensService } from "../../auth/refresh-tokens.service.js";
 import { UsersService } from "../../users/users.service.js";
 import { ErrorCode } from "../error-codes.js";
 import { TokenMissingException } from "../exceptions/token-missing.exception.js";
+import { utcNowOrThrow } from "../utils/utc-clock.js";
 import type { AuthUser, RequestWithUser, VerifiedJwtPayload } from "./auth-user.js";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
+
+// What a session id looks like: a UUID. See isSessionLive below.
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Checks the token, loads the user it belongs to, and puts that user on the
 // request. RolesGuard and @CurrentUser(), both in this folder, read that user.
@@ -43,8 +40,6 @@ import { IS_PUBLIC_KEY } from "./public.decorator.js";
 // Every other route needs a token, whether it carries a label or not. Needing
 // a token is the default, so a route someone forgot to label is closed, not
 // open. Those routes carry @Auth(), which RolesGuard reads next.
-const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -74,8 +69,17 @@ export class JwtAuthGuard implements CanActivate {
       // without this, a fault on a public route was logged as "anonymous"
       // even for a signed-in caller, and @CurrentUser() could never be used
       // on one. A request with no token costs nothing extra.
+      //
+      // Only a refused token is ignored. A database that cannot be reached
+      // is not a reason to treat a signed-in caller as nobody, so anything
+      // else that goes wrong is thrown on, to the filters, as it is.
       if (token) {
-        request.user = await this.verifyToken(token).catch(() => undefined);
+        request.user = await this.verifyToken(token).catch((error: unknown) => {
+          if (error instanceof UnauthorizedException) {
+            return undefined;
+          }
+          throw error;
+        });
       }
       return true;
     }
@@ -129,8 +133,12 @@ export class JwtAuthGuard implements CanActivate {
   //
   // A token with no session id passes. Only two kinds exist: one from
   // `pnpm dev:token`, which belongs to no session, and one signed before
-  // sessions were added, which expires within the hour. Nobody else can make
+  // sessions were added, which has long since expired. Nobody else can make
   // one, because nobody else can sign a token.
+  //
+  // What follows from that: signing out, and a refresh token used twice, do
+  // not stop a dev token. It lasts its 30 days unless the account is closed
+  // or its password changes. dev:token refuses to run in production.
   private async isSessionLive(sessionId: string | undefined): Promise<boolean> {
     if (sessionId === undefined) {
       return true;
@@ -142,15 +150,7 @@ export class JwtAuthGuard implements CanActivate {
       return false;
     }
 
-    // getUtcNow returns "" on failure. See CLOCK_UNAVAILABLE in
-    // src/shared/error-codes.ts.
-    const now = getUtcNow();
-    if (!now) {
-      throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
-      });
-    }
-    return this.refreshTokens.isSessionLive(sessionId, now);
+    return this.refreshTokens.isSessionLive(sessionId, utcNowOrThrow());
   }
 
   // One answer for every token that is refused, so a caller cannot tell a

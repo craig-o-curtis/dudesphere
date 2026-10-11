@@ -10,7 +10,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 // - "id" is the SHA-256 hash of the token, never the token. It is the primary
 //   key because a token is always looked up by its hash.
 // - "familyId" is the session: every token that descends from one sign-in
-//   shares it. Indexed, because a session is ended and checked by it.
+//   shares it. It is indexed together with "revoked", because every signed-in
+//   request asks two things of a session: is any row of it not past its end,
+//   and is any row of it revoked. The index narrows both to the one session.
+//   The second is answered from the index alone, and the first reads a row.
 // - "userId" is indexed for "sign out everywhere", and cascades, so a user
 //   row that is deleted for real takes its tokens with it.
 // - "expiresAt" ends this one token. "familyExpiresAt" ends the session
@@ -34,13 +37,13 @@ export class AddRefreshToken1791737547894 implements MigrationInterface {
       `CREATE TABLE "refresh_token" ("id" character varying(64) NOT NULL, "familyId" uuid NOT NULL, "userId" integer NOT NULL, "expiresAt" TIMESTAMP WITH TIME ZONE NOT NULL, "familyExpiresAt" TIMESTAMP WITH TIME ZONE NOT NULL, "usedAt" TIMESTAMP WITH TIME ZONE, "revoked" boolean NOT NULL DEFAULT false, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_b575dd3c21fb0831013c909e7fe" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_b803086815f2d539fe7a0349d1" ON "refresh_token"  ("familyId") `,
-    );
-    await queryRunner.query(
       `CREATE INDEX "IDX_8e913e288156c133999341156a" ON "refresh_token"  ("userId") `,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_d3a42295870a8ef226e63f9005" ON "refresh_token"  ("familyExpiresAt") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_ba6e194c5c121e94e34780cceb" ON "refresh_token"  ("familyId", "revoked") `,
     );
     await queryRunner.query(
       `ALTER TABLE "refresh_token" ADD CONSTRAINT "FK_8e913e288156c133999341156ad" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
@@ -51,9 +54,9 @@ export class AddRefreshToken1791737547894 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "refresh_token" DROP CONSTRAINT "FK_8e913e288156c133999341156ad"`,
     );
+    await queryRunner.query(`DROP INDEX "public"."IDX_ba6e194c5c121e94e34780cceb"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_d3a42295870a8ef226e63f9005"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_8e913e288156c133999341156a"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_b803086815f2d539fe7a0349d1"`);
     await queryRunner.query(`DROP TABLE "refresh_token"`);
   }
 }
