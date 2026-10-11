@@ -171,6 +171,51 @@ describe("UsersService", () => {
     });
   });
 
+  // For the dev token command. It reads an identifier the way login does,
+  // through the same private finder, and asks for no password.
+  describe("getUserByIdentifier", () => {
+    const storedUser = {
+      id: 4,
+      username: "walter",
+      email: "w@x.com",
+      password: "hashed(secret1)",
+      role: "user",
+    };
+
+    it("searches the email column when the identifier has an @", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserByIdentifier("w@x.com");
+
+      // No withDeleted, so a soft-deleted user is not found.
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
+      expect(result).toMatchObject({ id: 4, username: "walter", role: "user" });
+    });
+
+    it("searches the username column when it has none", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      await service.getUserByIdentifier("walter");
+
+      expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { username: "walter" } });
+    });
+
+    it("returns the user without the password, and never runs the hasher", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserByIdentifier("walter");
+
+      expect(result?.password).toBeUndefined();
+      expect(hashingProvider.comparePassword).not.toHaveBeenCalled();
+    });
+
+    it("returns null when nobody has the identifier", async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getUserByIdentifier("nobody")).resolves.toBeNull();
+    });
+  });
+
   describe("getUserByCredentials", () => {
     const storedUser = {
       id: 4,
