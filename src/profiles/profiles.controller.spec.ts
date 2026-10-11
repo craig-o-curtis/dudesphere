@@ -1,6 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { ProfilesController } from "./profiles.controller.js";
@@ -38,11 +37,9 @@ describe("ProfilesController", () => {
         // The real one: it has no dependencies, and it builds the links these tests read.
         PaginationProvider,
       ],
-    })
-      // Guards only run on real requests. The e2e test covers this one.
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
-      .compile();
+      // No guard runs here: the guards are APP_GUARDs in AppModule, which this
+      // module does not load. The e2e suites cover them.
+    }).compile();
 
     controller = module.get<ProfilesController>(ProfilesController);
   });

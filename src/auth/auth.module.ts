@@ -8,7 +8,6 @@ import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset.service.js";
 
@@ -27,15 +26,16 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, PasswordResetService, JwtAuthGuard],
+  providers: [AuthService, PasswordResetService],
   imports: [
     UsersModule,
     // For PasswordResetService: the mail it sends and the table it keeps.
     MailModule,
     TypeOrmModule.forFeature([PasswordResetToken]),
     authConfigModule,
-    // global: JwtAuthGuard needs JwtService in whichever feature uses the
-    // guard, and those features can't import AuthModule (see the guard).
+    // global: AppModule registers JwtAuthGuard as an APP_GUARD, and the guard
+    // needs JwtService there. Global makes JwtService injectable in every
+    // module, so nothing has to import AuthModule to get it.
     JwtModule.registerAsync({
       global: true,
       // Auth owns its own config, so it is loaded here and not in AppModule.
@@ -60,6 +60,6 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
       }),
     }),
   ],
-  exports: [AuthService, JwtAuthGuard],
+  exports: [AuthService],
 })
 export class AuthModule {}
