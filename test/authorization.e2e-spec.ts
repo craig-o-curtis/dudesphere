@@ -7,6 +7,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { bearer } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, signUpBody } from "./sign-up.js";
 
@@ -37,10 +38,6 @@ describe("Authorization (e2e)", () => {
       .expect(201);
     const { token, userId } = login.body as { token: string; userId: number };
     return { token, userId };
-  }
-
-  function bearer(token: string) {
-    return { authorization: `Bearer ${token}` };
   }
 
   beforeAll(async () => {
