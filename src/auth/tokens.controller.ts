@@ -41,9 +41,8 @@ export class TokensController {
   @ThrottleByAccount("identifier", { limit: 5, ttl: minutes(15) })
   @Post()
   @HttpCode(200)
-  async issue(@Body() loginDto: LoginDto): Promise<TokenPair> {
-    const user = await this.authService.verifyCredentials(loginDto);
-    return this.tokenService.issue(user);
+  issue(@Body() loginDto: LoginDto): Promise<TokenPair> {
+    return this.authService.signIn(loginDto);
   }
 
   // Swaps a refresh token for a new pair, when the access token has expired

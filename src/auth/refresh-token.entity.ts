@@ -26,7 +26,12 @@ import { User } from "../users/user.entity.js";
 // The columns follow the refresh token entity in the NestJS authentication
 // docs. TokenService decides what the rows mean; RefreshTokensService reads
 // and writes them.
+//
+// The index on (familyId, revoked) serves the two questions asked of a
+// session on every request: is any row of it not past its end, and is any
+// row of it revoked. See RefreshTokensService.isSessionLive.
 @Entity("refresh_token")
+@Index(["familyId", "revoked"])
 export class RefreshToken {
   // The SHA-256 hash of the token, as 64 hex characters. Never the token, so
   // someone who reads the table cannot use what they find. It is the primary
@@ -37,7 +42,6 @@ export class RefreshToken {
   // The session this token belongs to. One per sign-in, shared by every
   // successor. The access token carries the same value as its `sid` claim,
   // which is how JwtAuthGuard can tell that a session has ended.
-  @Index()
   @Column({ type: "uuid" })
   familyId: string;
 

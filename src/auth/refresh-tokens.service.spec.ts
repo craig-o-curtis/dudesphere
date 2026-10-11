@@ -1,32 +1,25 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { IsNull, LessThanOrEqual } from "typeorm";
+import { type EntityManager, IsNull, LessThanOrEqual } from "typeorm";
 
 import { RefreshToken } from "./refresh-token.entity.js";
 import { RefreshTokensService } from "./refresh-tokens.service.js";
 
 // These cases cover what each method asks the database and what it makes of
-// the answer. The statements themselves are proved against the real
-// database, races included, in test/tokens.e2e-spec.ts.
+// the answer. test/tokens.e2e-spec.ts runs the statements against the real
+// database: the one-winner UPDATE, the session check, and the clearing out
+// of sessions that have run out.
 describe("RefreshTokensService", () => {
   let service: RefreshTokensService;
 
-  // One query builder stands for every createQueryBuilder() call. Each step
-  // returns it, as TypeORM's does, and getRawOne() is what a test sets.
-  const queryBuilder = {
-    select: vi.fn(),
-    addSelect: vi.fn(),
-    where: vi.fn(),
-    andWhere: vi.fn(),
-    getRawOne: vi.fn(),
-  };
   const repository = {
     insert: vi.fn(),
     delete: vi.fn(),
     findOneBy: vi.fn(),
     update: vi.fn(),
     existsBy: vi.fn(),
-    createQueryBuilder: vi.fn(),
+    // isSessionLive sends one statement of its own and reads one row back.
+    query: vi.fn(),
   };
 
   const now = "2026-10-11T12:00:00.000Z";
@@ -35,11 +28,6 @@ describe("RefreshTokensService", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    queryBuilder.select.mockReturnValue(queryBuilder);
-    queryBuilder.addSelect.mockReturnValue(queryBuilder);
-    queryBuilder.where.mockReturnValue(queryBuilder);
-    queryBuilder.andWhere.mockReturnValue(queryBuilder);
-    repository.createQueryBuilder.mockReturnValue(queryBuilder);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -141,34 +129,53 @@ describe("RefreshTokensService", () => {
 
       expect(repository.update).toHaveBeenCalledWith({ userId: 25 }, { revoked: true });
     });
+
+    // A password change passes its transaction's manager, so the new
+    // password and the end of the old sessions commit or roll back together.
+    it("writes through the caller's manager when it is given one", async () => {
+      const inTransaction = { update: vi.fn() };
+      const manager = { getRepository: vi.fn(() => inTransaction) };
+
+      await service.revokeAllForUser(25, manager as unknown as EntityManager);
+
+      expect(manager.getRepository).toHaveBeenCalledWith(RefreshToken);
+      expect(inTransaction.update).toHaveBeenCalledWith({ userId: 25 }, { revoked: true });
+      expect(repository.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("isSessionLive", () => {
-    it("counts only the rows of that session that have not passed its end", async () => {
-      queryBuilder.getRawOne.mockResolvedValue({ tokens: "2", revoked: false });
+    // One statement, with the session and the time as its two parameters.
+    // It asks two things: is any row of the session not past its end, and is
+    // any row revoked.
+    it("asks about that session at that time, in one statement", async () => {
+      repository.query.mockResolvedValue([{ going: true, revoked: false }]);
 
       await service.isSessionLive(familyId, now);
 
-      expect(queryBuilder.where).toHaveBeenCalledWith("token.familyId = :familyId", { familyId });
-      expect(queryBuilder.andWhere).toHaveBeenCalledWith("token.familyExpiresAt > :now", { now });
+      expect(repository.query).toHaveBeenCalledTimes(1);
+      const [sql, parameters] = repository.query.mock.calls[0] as [string, unknown[]];
+      expect(parameters).toEqual([familyId, now]);
+      expect(sql).toContain(`"familyExpiresAt" > $2`);
+      expect(sql).toContain(`"revoked" = true`);
     });
 
-    it("is live when the session has rows and none is revoked", async () => {
-      queryBuilder.getRawOne.mockResolvedValue({ tokens: "2", revoked: false });
+    it("is live when the session is still going and no row is revoked", async () => {
+      repository.query.mockResolvedValue([{ going: true, revoked: false }]);
 
       await expect(service.isSessionLive(familyId, now)).resolves.toBe(true);
     });
 
     it("is not live when any row is revoked", async () => {
-      queryBuilder.getRawOne.mockResolvedValue({ tokens: "2", revoked: true });
+      repository.query.mockResolvedValue([{ going: true, revoked: true }]);
 
       await expect(service.isSessionLive(familyId, now)).resolves.toBe(false);
     });
 
-    // A session that never existed, or one that has run out: the query
-    // finds no rows either way. Postgres counts as a string.
-    it("is not live when the session has no rows left", async () => {
-      queryBuilder.getRawOne.mockResolvedValue({ tokens: "0", revoked: false });
+    // A session that never existed, or one that has passed its end: no row
+    // answers the first question either way.
+    it("is not live when no row of the session is inside its time", async () => {
+      repository.query.mockResolvedValue([{ going: false, revoked: false }]);
 
       await expect(service.isSessionLive(familyId, now)).resolves.toBe(false);
     });

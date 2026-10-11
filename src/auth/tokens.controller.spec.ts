@@ -9,7 +9,7 @@ import { TokensController } from "./tokens.controller.js";
 describe("TokensController", () => {
   let controller: TokensController;
 
-  const authService = { verifyCredentials: vi.fn() };
+  const authService = { signIn: vi.fn() };
   const tokenService = { issue: vi.fn(), refresh: vi.fn(), revoke: vi.fn(), revokeAll: vi.fn() };
 
   beforeEach(async () => {
@@ -29,25 +29,20 @@ describe("TokensController", () => {
   describe("issue", () => {
     const body = { identifier: "walter", password: "secret1" };
 
-    it("checks the credentials, then answers with the tokens for that member", async () => {
-      const walter = { id: 4, username: "walter" };
+    it("hands the body to AuthService and answers with the tokens it returns", async () => {
       const tokens = { accessToken: "a.b.c", refreshToken: "r".repeat(43), expiresIn: 900 };
-      authService.verifyCredentials.mockResolvedValue(walter);
-      tokenService.issue.mockResolvedValue(tokens);
+      authService.signIn.mockResolvedValue(tokens);
 
       await expect(controller.issue(body)).resolves.toBe(tokens);
 
-      expect(authService.verifyCredentials).toHaveBeenCalledWith(body);
-      expect(tokenService.issue).toHaveBeenCalledWith(walter);
+      expect(authService.signIn).toHaveBeenCalledWith(body);
     });
 
-    it("lets the 401 through and makes no token when the credentials are wrong", async () => {
+    it("lets the 401 through when the credentials are wrong", async () => {
       const refused = new UnauthorizedException("Invalid username, email or password");
-      authService.verifyCredentials.mockRejectedValue(refused);
+      authService.signIn.mockRejectedValue(refused);
 
       await expect(controller.issue(body)).rejects.toBe(refused);
-
-      expect(tokenService.issue).not.toHaveBeenCalled();
     });
   });
 

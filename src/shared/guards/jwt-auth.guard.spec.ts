@@ -211,6 +211,19 @@ describe("JwtAuthGuard", () => {
       expect(request.user).toEqual(walter);
     });
 
+    // Only a refused token is ignored. A database that cannot be reached is
+    // not a reason to treat a signed-in caller as nobody: the failure goes
+    // on to the filters, which answer 503.
+    it("lets a database failure through as it is, and does not hide it", async () => {
+      const failure = new Error("connection refused");
+      getUserForToken.mockRejectedValue(failure);
+      const request: { headers: object; user?: unknown } = {
+        headers: { authorization: "Bearer signed.jwt.token" },
+      };
+
+      await expect(guard.canActivate(contextFor(request))).rejects.toBe(failure);
+    });
+
     it("still lets the caller through, as nobody, when the token's user is gone", async () => {
       getUserForToken.mockResolvedValue(null);
       const request: { headers: object; user?: unknown } = {

@@ -27,7 +27,7 @@ describe("TokenService", () => {
   // 15 minutes, 7 days and 30 days, in seconds.
   const auth = { expiresIn: 900, refreshExpiresIn: 604800, sessionExpiresIn: 2592000 };
 
-  const walter = { id: 25, username: "walter", email: "w@x.com", role: "user" };
+  const walter = { id: 25, username: "walter", email: "walter@example.com", role: "user" };
   const familyId = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
 
   /** The row save() was last called with. */
