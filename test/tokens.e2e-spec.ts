@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as pause } from "node:timers/promises";
 
 import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
+import { getUtcNow, subtractUtc } from "@northguild/gmt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -11,7 +13,10 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
-import { bearer } from "./auth-helpers.js";
+import { RefreshTokensService } from "./../src/auth/refresh-tokens.service.js";
+import { UserRole } from "./../src/users/user.entity.js";
+import { UsersService } from "./../src/users/users.service.js";
+import { bearer, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, type SignUpBody } from "./sign-up.js";
 
@@ -92,6 +97,11 @@ describe("Tokens (e2e)", () => {
     const { sent, user } = await signUp(app);
     const { body } = await signInAs(sent).expect(200);
     return { sent, userId: user.id, pair: body as Pair };
+  }
+
+  /** A minute ago, by the app's clock, which is the clock the token code uses. */
+  function aMinuteAgo(): string {
+    return subtractUtc(getUtcNow(), { minutes: 1 });
   }
 
   /** The row for a refresh token, found the way the app finds it: by its hash. */
@@ -205,8 +215,8 @@ describe("Tokens (e2e)", () => {
   });
 
   describe("a refresh token that is refused", () => {
-    // None of these has the shape of a token, so no row could match. An
-    // access token sent by mistake is among them.
+    // The first is refused by its shape, with no query. The second has the
+    // shape of a token, so it is looked up, and no row has its hash.
     it.each([
       ["text that is not a token", "not-a-token"],
       ["a token nobody was given", "x".repeat(43)],
@@ -236,10 +246,10 @@ describe("Tokens (e2e)", () => {
     // stolen, so the session is not ended: it has only run out for them.
     it("401 for a token past its time, which does not end the session", async () => {
       const { pair } = await newSession();
-      await dataSource.query(
-        `UPDATE "refresh_token" SET "expiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE "id" = $1`,
-        [(await storedToken(pair.refreshToken))?.id],
-      );
+      await dataSource.query(`UPDATE "refresh_token" SET "expiresAt" = $1 WHERE "id" = $2`, [
+        aMinuteAgo(),
+        (await storedToken(pair.refreshToken))?.id,
+      ]);
 
       const { body } = await refresh(pair.refreshToken).expect(401);
 
@@ -463,9 +473,207 @@ describe("Tokens (e2e)", () => {
         .set(bearer(phone.accessToken))
         .expect(204);
 
+      // Read straight from the table, before anything else touches these
+      // tokens. A refresh would also revoke the session, on finding the
+      // account closed, and this must show that closing the account did it.
+      expect(await storedToken(phone.refreshToken)).toMatchObject({ revoked: true });
+      expect(await storedToken(laptop.refreshToken)).toMatchObject({ revoked: true });
       await expectSignedOut(phone);
       await expectSignedOut(laptop);
-      expect(await storedToken(laptop.refreshToken)).toMatchObject({ revoked: true });
+    });
+
+    // An admin brings the account back. The member has to sign in to it:
+    // the tokens they held when it was closed do not come back with it.
+    //
+    // Closing the account already ended the session, so on its own that
+    // would prove nothing about the restore. The row is set back to "not
+    // revoked" by hand, to stand for a session that slipped in around the
+    // close. Restoring must end that one too.
+    it("ends every session when an admin restores the account", async () => {
+      const { sent, userId, pair } = await newSession();
+      const familyId = (await storedToken(pair.refreshToken))?.familyId;
+      await request(app.getHttpServer())
+        .delete("/users/me")
+        .set(bearer(pair.accessToken))
+        .expect(204);
+      await dataSource.query(`UPDATE "refresh_token" SET "revoked" = false WHERE "familyId" = $1`, [
+        familyId,
+      ]);
+
+      await request(app.getHttpServer())
+        .post(`/users/${userId}/restore`)
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
+        .expect(200);
+
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
+      await expectSignedOut(pair);
+      const again = (await signInAs(sent).expect(200)).body as Pair;
+      await expectSignedIn(again);
+    });
+  });
+
+  describe("an admin changing a member's password", () => {
+    it("ends every session of that member", async () => {
+      const { sent, userId, pair } = await newSession();
+
+      await request(app.getHttpServer())
+        .patch(`/users/${userId}`)
+        .set(bearer(await tokenFor(app, UserRole.ADMIN)))
+        .send({ password: "set-by-an-admin-1" })
+        .expect(200);
+
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
+      await expectSignedOut(pair);
+      const again = await signInAs({ ...sent, password: "set-by-an-admin-1" }).expect(200);
+      await expectSignedIn(again.body as Pair);
+    });
+  });
+
+  // A session lasts 30 days at most, however often it was renewed. The end
+  // is on every row of the session, and nothing moves it.
+  describe("a session that has reached its end", () => {
+    /** Moves a session's end, and its tokens' own, a minute into the past. */
+    async function endSessionOf(refreshToken: string) {
+      const past = aMinuteAgo();
+      await dataSource.query(
+        `UPDATE "refresh_token" SET "familyExpiresAt" = $1, "expiresAt" = $1 WHERE "familyId" = $2`,
+        [past, (await storedToken(refreshToken))?.familyId],
+      );
+    }
+
+    // The access token still has minutes to run by its own expiry. The guard
+    // checks the session's end on every request, so it stops with it.
+    //
+    // "Nothing was revoked" is checked by counting revoked rows, not by
+    // reading the row. Another suite's sign-in may clear the row out at any
+    // moment, now that it is past its end, and the count holds either way.
+    it("refuses both of its tokens, though nothing was revoked", async () => {
+      const { pair } = await newSession();
+      const familyId = (await storedToken(pair.refreshToken))?.familyId;
+      await expectSignedIn(pair);
+
+      await endSessionOf(pair.refreshToken);
+
+      const [{ revoked }] = (await dataSource.query(
+        `SELECT count(*)::int AS "revoked" FROM "refresh_token" WHERE "familyId" = $1 AND "revoked" = true`,
+        [familyId],
+      )) as [{ revoked: number }];
+      expect(revoked).toBe(0);
+      await expectSignedOut(pair);
+    });
+
+    // The table's only housekeeping: saving any new token clears out the
+    // rows of every session that has run out, whoever they belonged to.
+    it("has its rows cleared out the next time anybody signs in", async () => {
+      const { pair } = await newSession();
+      await endSessionOf(pair.refreshToken);
+
+      await newSession();
+
+      expect(await storedToken(pair.refreshToken)).toBeUndefined();
+    });
+
+    it("leaves the rows of a session that is still going", async () => {
+      const { pair } = await newSession();
+
+      await newSession();
+
+      expect(await storedToken(pair.refreshToken)).toBeDefined();
+    });
+  });
+
+  // The statements that settle "who was first", run against the real
+  // database through the service, where nothing else can explain the result.
+  describe("the one-winner statements", () => {
+    // Two requests with one token both read it as unused. This UPDATE is what
+    // lets only one of them spend it. Whether the two overlap or run one
+    // after the other, exactly one must be told it won.
+    it("lets exactly one of two calls mark a token used", async () => {
+      const { pair } = await newSession();
+      const id = (await storedToken(pair.refreshToken))?.id ?? "";
+      const refreshTokens = app.get(RefreshTokensService);
+
+      const results = await Promise.all([
+        refreshTokens.markUsed(id, getUtcNow()),
+        refreshTokens.markUsed(id, getUtcNow()),
+      ]);
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await refreshTokens.markUsed(id, getUtcNow())).toBe(false);
+    });
+
+    // What sign-in asks once it has started a session: is the password that
+    // was checked still the member's? It reads the row with a share lock, so
+    // only the real database can show the statement is one Postgres accepts.
+    it("tells sign-in whether the password it checked is still the member's", async () => {
+      const { sent, userId, pair } = await newSession();
+      const users = app.get(UsersService);
+      const [{ password: hash }] = (await dataSource.query(
+        `SELECT "password" FROM "user" WHERE "id" = $1`,
+        [userId],
+      )) as [{ password: string }];
+
+      expect(await users.credentialsStillHold(userId, hash)).toBe(true);
+      expect(await users.credentialsStillHold(userId, "not-the-stored-hash")).toBe(false);
+
+      await request(app.getHttpServer())
+        .patch("/users/me")
+        .set(bearer(pair.accessToken))
+        .send({ password: "a-new-secret-2", currentPassword: sent.password })
+        .expect(200);
+
+      // The old hash no longer holds, so a sign-in that had been checking the
+      // old password would end the session it started.
+      expect(await users.credentialsStillHold(userId, hash)).toBe(false);
+    });
+
+    // The lock is what makes the recheck wait for a password change that has
+    // written the new hash and not yet committed. Without it the recheck
+    // would read the old hash, answer "still holds", and let the session
+    // through. Here the change is held open by hand, and the recheck must
+    // still be waiting a fifth of a second later.
+    it("makes the recheck wait for a password change that is in flight", async () => {
+      const { userId } = await newSession();
+      const [{ password: oldHash }] = (await dataSource.query(
+        `SELECT "password" FROM "user" WHERE "id" = $1`,
+        [userId],
+      )) as [{ password: string }];
+      const users = app.get(UsersService);
+      let settled = false;
+      let recheck: Promise<boolean> = Promise.resolve(true);
+
+      await dataSource.transaction(async (manager) => {
+        await manager.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
+          "a-hash-that-is-not-the-old-one",
+          userId,
+        ]);
+
+        recheck = users.credentialsStillHold(userId, oldHash).finally(() => {
+          settled = true;
+        });
+        await pause(200);
+
+        // Still waiting on the row lock this transaction holds.
+        expect(settled).toBe(false);
+      });
+
+      // The change has committed. The recheck now sees the new hash.
+      await expect(recheck).resolves.toBe(false);
+    });
+
+    it("says the credentials no longer hold once the account is closed", async () => {
+      const { userId, pair } = await newSession();
+      const [{ password: hash }] = (await dataSource.query(
+        `SELECT "password" FROM "user" WHERE "id" = $1`,
+        [userId],
+      )) as [{ password: string }];
+
+      await request(app.getHttpServer())
+        .delete("/users/me")
+        .set(bearer(pair.accessToken))
+        .expect(204);
+
+      expect(await app.get(UsersService).credentialsStillHold(userId, hash)).toBe(false);
     });
   });
 

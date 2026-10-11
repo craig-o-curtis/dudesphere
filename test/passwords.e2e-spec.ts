@@ -239,7 +239,7 @@ describe("Passwords (e2e)", () => {
     });
   });
 
-  describe("the login token", () => {
+  describe("the access token", () => {
     it("carries an audience, an issuer and an expiry", async () => {
       const { email } = await register("secret123");
       const { body } = await login(email, "secret123").expect(200);

@@ -6,11 +6,16 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import { signIn } from "./auth-helpers.js";
+import { UserRole } from "./../src/users/user.entity.js";
+import { signedInAs } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
-// Needs the databases running and the admin user seeded (`pnpm seed:run`).
-// It logs in as the admin from .env and only reads data.
+// Needs the databases running. It signs up one throwaway e2e- member and
+// reads their profile. test/global-setup.ts deletes them when the run ends.
+//
+// It used to sign in as the seeded admin. Every sign-in saves a refresh
+// token row, and the admin is not an e2e- user, so the cleanup never removed
+// that row. A member of its own leaves nothing behind.
 describe("GET /profiles/me (e2e)", () => {
   let app: INestApplication<App>;
 
@@ -30,13 +35,8 @@ describe("GET /profiles/me (e2e)", () => {
     await app.close();
   });
 
-  // The seeded admin, by EMAIL and PASSWORD from .env.
-  function login(): Promise<{ token: string; userId: number }> {
-    return signIn(app, process.env.EMAIL ?? "", process.env.PASSWORD ?? "");
-  }
-
-  it("returns the profile of the user who logged in", async () => {
-    const { token, userId } = await login();
+  it("returns the profile of the member who signed in", async () => {
+    const { token, userId } = await signedInAs(app, UserRole.USER);
 
     const response = await request(app.getHttpServer())
       .get("/profiles/me")
@@ -66,13 +66,6 @@ describe("GET /profiles/me (e2e)", () => {
     await request(app.getHttpServer())
       .get("/profiles/me")
       .set("Authorization", "Bearer MY_TOKEN")
-      .expect(401);
-  });
-
-  it("returns 401 when the password is wrong", async () => {
-    await request(app.getHttpServer())
-      .post("/auth/token")
-      .send({ identifier: process.env.EMAIL, password: "not-the-password" })
       .expect(401);
   });
 });

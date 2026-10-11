@@ -55,7 +55,7 @@ describe("DELETE /users/me (e2e)", () => {
       .send({ identifier: sent.email, password: sent.password })
       .expect(401);
 
-    // It has an hour left before it expires, and it still cannot post.
+    // It has not expired yet, and it still cannot post.
     await request(app.getHttpServer())
       .post("/abidings")
       .set("Authorization", `Bearer ${token}`)
