@@ -7,6 +7,7 @@ import { PasswordResetService } from "./password-reset.service.js";
 describe("AuthController", () => {
   let controller: AuthController;
 
+  const authService = { signup: vi.fn(), login: vi.fn() };
   const passwordResetService = { requestEmail: vi.fn(), reset: vi.fn() };
 
   beforeEach(async () => {
@@ -15,7 +16,7 @@ describe("AuthController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
-        { provide: AuthService, useValue: {} },
+        { provide: AuthService, useValue: authService },
         { provide: PasswordResetService, useValue: passwordResetService },
       ],
     }).compile();
@@ -25,6 +26,28 @@ describe("AuthController", () => {
 
   it("should be defined", () => {
     expect(controller).toBeDefined();
+  });
+
+  describe("signup", () => {
+    it("passes the body to AuthService and returns what it returns", async () => {
+      const body = { username: "walter", email: "w@x.com", password: "secret1" };
+      const created = { id: 4, username: "walter", email: "w@x.com" };
+      authService.signup.mockResolvedValue(created);
+
+      await expect(controller.signup(body)).resolves.toBe(created);
+      expect(authService.signup).toHaveBeenCalledWith(body);
+    });
+  });
+
+  describe("login", () => {
+    it("passes the body to AuthService and returns what it returns", async () => {
+      const body = { identifier: "walter", password: "secret1" };
+      const loggedIn = { token: "a.b.c", userId: 4, name: "walter" };
+      authService.login.mockResolvedValue(loggedIn);
+
+      await expect(controller.login(body)).resolves.toBe(loggedIn);
+      expect(authService.login).toHaveBeenCalledWith(body);
+    });
   });
 
   describe("forgotPassword", () => {
