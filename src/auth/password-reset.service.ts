@@ -1,18 +1,12 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { addUtc, getUtcNow } from "@northguild/gmt";
+import { addUtc } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
 import { MailProvider } from "../mail/mail.provider.js";
-import { ErrorCode } from "../shared/error-codes.js";
 import { ResetTokenInvalidException } from "../shared/exceptions/reset-token-invalid.exception.js";
+import { orClockUnavailable, utcNowOrThrow } from "../shared/utils/utc-clock.js";
 import { UsersService } from "../users/users.service.js";
 import authConfig from "./config/auth.config.js";
 import { hashOf, newOneTimeToken } from "./one-time-token.js";
@@ -77,15 +71,11 @@ export class PasswordResetService {
       return;
     }
 
-    // getUtcNow and addUtc return "" on failure. See CLOCK_UNAVAILABLE in
-    // src/shared/error-codes.ts.
-    const now = getUtcNow();
-    const expiresAt = now ? addUtc(now, { seconds: this.auth.passwordResetExpiresIn }) : "";
-    if (!expiresAt) {
-      throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
-      });
-    }
+    // getUtcNow and addUtc return "" on failure, and both helpers turn that
+    // into a 503. See CLOCK_UNAVAILABLE in src/shared/error-codes.ts.
+    const expiresAt = orClockUnavailable(
+      addUtc(utcNowOrThrow(), { seconds: this.auth.passwordResetExpiresIn }),
+    );
 
     // Housekeeping, with no scheduler: every request clears the links nobody
     // used in time, and this user's earlier links, so only the newest works.

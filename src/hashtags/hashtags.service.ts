@@ -1,12 +1,12 @@
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
-import { ErrorCode } from "../shared/error-codes.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { normalizeHashtag } from "../shared/utils/hashtag.js";
+import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
 import { HashtagResponseDto } from "./dto/hashtag-response.dto.js";
 import { Hashtag, HashtagDocument } from "./hashtag.schema.js";
 
@@ -147,14 +147,10 @@ export class HashtagsService {
     const normalized = normalizeHashtag(slug);
     if (!normalized) throw new NotFoundException("Hashtag not found");
 
-    // getUtcNow returns "" on failure. Throwing beats hiding the tag behind a
-    // blank timestamp, which is how UserAbidingsService treats the same case.
-    const deletedAt = getUtcNow();
-    if (!deletedAt) {
-      throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
-      });
-    }
+    // utcNowOrThrow throws a 503 when the clock cannot be read. Throwing beats
+    // hiding the tag behind a blank timestamp, which is how
+    // UserAbidingsService treats the same case.
+    const deletedAt = utcNowOrThrow();
 
     // deletedAt: null so a tag that is already deleted keeps its first
     // timestamp, and deleting it a second time is a 404.
