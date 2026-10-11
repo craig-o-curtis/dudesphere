@@ -10,6 +10,7 @@ import { getUtcNow } from "@northguild/gmt";
 import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
@@ -46,6 +47,7 @@ export class UsersService {
     private readonly userAbidingsService: UserAbidingsService,
     private readonly hashingProvider: HashingProvider,
     private readonly paginationProvider: PaginationProvider,
+    private readonly refreshTokens: RefreshTokensService,
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
@@ -302,6 +304,15 @@ export class UsersService {
     if (result.affected === 0) {
       throw new NotFoundException(`User #${id} not found`);
     }
+
+    // A new password signs the member out everywhere: every session they
+    // have is ended, on the device that changed the password too. Whoever
+    // was signed in with the old password, the member or someone else, signs
+    // in again with the new one. After the update, so a password that was
+    // not changed ends nothing.
+    if (password !== undefined) {
+      await this.refreshTokens.revokeAllForUser(id);
+    }
     return this.getUserById(id);
   }
 
@@ -332,6 +343,13 @@ export class UsersService {
       // failure throws and rolls back the user and profile.
       await this.userAbidingsService.softDeleteForUser(id);
     });
+
+    // A closed account has no sessions. After the transaction, not inside it:
+    // the account is closed either way, and JwtAuthGuard already refuses a
+    // closed account's tokens, so a failure here leaves nothing open. The
+    // sessions stay ended if the account is restored, and the member signs
+    // in again.
+    await this.refreshTokens.revokeAllForUser(id);
   }
 
   async restoreUser(id: number): Promise<UserResponseDto> {

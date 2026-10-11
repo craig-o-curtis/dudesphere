@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -63,6 +64,27 @@ describe("Tokens (e2e)", () => {
 
   function whoAmI(accessToken: string) {
     return request(app.getHttpServer()).get("/users/me").set(bearer(accessToken));
+  }
+
+  function revoke(refreshToken: unknown) {
+    return request(app.getHttpServer()).post("/auth/token/revoke").send({ refreshToken });
+  }
+
+  function revokeAll(accessToken?: string) {
+    const post = request(app.getHttpServer()).post("/auth/token/revoke-all");
+    return accessToken ? post.set(bearer(accessToken)) : post;
+  }
+
+  /** A session that has ended: neither of its tokens works any more. */
+  async function expectSignedOut(pair: Pair) {
+    const me = await whoAmI(pair.accessToken).expect(401);
+    expect(me.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+    await refresh(pair.refreshToken).expect(401);
+  }
+
+  /** A session that is still going: its access token works. */
+  async function expectSignedIn(pair: Pair) {
+    await whoAmI(pair.accessToken).expect(200);
   }
 
   /** A new member, signed in: what they sent at sign up, their id, and their first pair. */
@@ -255,6 +277,21 @@ describe("Tokens (e2e)", () => {
       expect(await storedToken(next.refreshToken)).toMatchObject({ revoked: true });
     });
 
+    // The access tokens have minutes left to run, and stop anyway: the guard
+    // checks the session on every request. Without that, a thief would keep
+    // what they stole until it expired.
+    it("stops the session's access tokens on the next request", async () => {
+      const { pair } = await newSession();
+      const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
+      await whoAmI(next.accessToken).expect(200);
+
+      await refresh(pair.refreshToken).expect(401);
+
+      const newest = await whoAmI(next.accessToken).expect(401);
+      expect(newest.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      await whoAmI(pair.accessToken).expect(401);
+    });
+
     it("leaves the member's other sessions alone", async () => {
       const { sent, pair: phone } = await newSession();
       const laptop = (await signInAs(sent).expect(200)).body as Pair;
@@ -277,6 +314,179 @@ describe("Tokens (e2e)", () => {
       const winner = answers.find((answer) => answer.status === 200)?.body as Pair;
       await refresh(winner.refreshToken).expect(401);
     });
+  });
+
+  describe("signing out this device", () => {
+    it("answers 204 with no body, and ends that session at once", async () => {
+      const { pair } = await newSession();
+      await expectSignedIn(pair);
+
+      const response = await revoke(pair.refreshToken).expect(204);
+
+      expect(response.text).toBe("");
+      await expectSignedOut(pair);
+    });
+
+    it("leaves the member's other devices signed in", async () => {
+      const { sent, pair: phone } = await newSession();
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
+
+      await revoke(phone.refreshToken).expect(204);
+
+      await expectSignedOut(phone);
+      await expectSignedIn(laptop);
+      await refresh(laptop.refreshToken).expect(200);
+    });
+
+    // A client that kept an old token of the session can still sign out.
+    it("works with a refresh token that was already spent", async () => {
+      const { pair } = await newSession();
+      const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
+
+      await revoke(pair.refreshToken).expect(204);
+
+      await expectSignedOut(next);
+    });
+
+    // The same answer whatever is sent, so the route cannot be used to find
+    // out whether a token is real.
+    it.each([
+      ["a token nobody was given", "x".repeat(43)],
+      ["text that is not a token", "not-a-token"],
+    ])("answers 204 for %s too", async (_what, value) => {
+      const response = await revoke(value).expect(204);
+
+      expect(response.text).toBe("");
+    });
+
+    it("answers 204 again for a session that is already signed out", async () => {
+      const { pair } = await newSession();
+      await revoke(pair.refreshToken).expect(204);
+
+      await revoke(pair.refreshToken).expect(204);
+    });
+
+    it("400 for a body with no refreshToken", async () => {
+      await revoke(undefined).expect(400);
+    });
+
+    it("lets the member sign in again straight away", async () => {
+      const { sent, pair } = await newSession();
+      await revoke(pair.refreshToken).expect(204);
+
+      const again = (await signInAs(sent).expect(200)).body as Pair;
+
+      await expectSignedIn(again);
+    });
+  });
+
+  describe("signing out every device", () => {
+    it("401 with no access token", async () => {
+      const { body } = await revokeAll().expect(401);
+
+      expect(body).toMatchObject({ errorCode: "TOKEN_MISSING" });
+    });
+
+    it("answers 204 and ends every session of the caller, this one included", async () => {
+      const { sent, pair: phone } = await newSession();
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
+
+      const response = await revokeAll(phone.accessToken).expect(204);
+
+      expect(response.text).toBe("");
+      await expectSignedOut(phone);
+      await expectSignedOut(laptop);
+    });
+
+    it("leaves every other member signed in", async () => {
+      const walter = await newSession();
+      const donny = await newSession();
+
+      await revokeAll(walter.pair.accessToken).expect(204);
+
+      await expectSignedIn(donny.pair);
+      await refresh(donny.pair.refreshToken).expect(200);
+    });
+
+    // Only the sessions that exist at that moment are ended.
+    it("lets the member sign in again straight away", async () => {
+      const { sent, pair } = await newSession();
+      await revokeAll(pair.accessToken).expect(204);
+
+      const again = (await signInAs(sent).expect(200)).body as Pair;
+
+      await expectSignedIn(again);
+      await refresh(again.refreshToken).expect(200);
+    });
+  });
+
+  // Whoever was signed in with the old password signs in again with the new
+  // one: the member on another device, or someone who should not be there.
+  describe("changing the password", () => {
+    it("ends every session of the member, on this device too", async () => {
+      const { sent, pair: phone } = await newSession();
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
+
+      await request(app.getHttpServer())
+        .patch("/users/me")
+        .set(bearer(phone.accessToken))
+        .send({ password: "a-new-secret-1", currentPassword: sent.password })
+        .expect(200);
+
+      await expectSignedOut(phone);
+      await expectSignedOut(laptop);
+      const again = await signInAs({ ...sent, password: "a-new-secret-1" }).expect(200);
+      await expectSignedIn(again.body as Pair);
+    });
+
+    it("ends no session when only the username changes", async () => {
+      const { pair } = await newSession();
+
+      await request(app.getHttpServer())
+        .patch("/users/me")
+        .set(bearer(pair.accessToken))
+        .send({ username: `e2e-${randomUUID().slice(0, 8)}` })
+        .expect(200);
+
+      await expectSignedIn(pair);
+      await refresh(pair.refreshToken).expect(200);
+    });
+  });
+
+  describe("closing the account", () => {
+    it("ends every session of the member", async () => {
+      const { sent, pair: phone } = await newSession();
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
+
+      await request(app.getHttpServer())
+        .delete("/users/me")
+        .set(bearer(phone.accessToken))
+        .expect(204);
+
+      await expectSignedOut(phone);
+      await expectSignedOut(laptop);
+      expect(await storedToken(laptop.refreshToken)).toMatchObject({ revoked: true });
+    });
+  });
+
+  // `pnpm dev:token` signs a token for a member with no sign-in behind it, so
+  // it names no session. Only the app can sign one, so the guard lets it
+  // through with the user check alone.
+  describe("a token that belongs to no session", () => {
+    it("still works, as the dev token command needs", async () => {
+      const { sent, userId } = await newSession();
+
+      const token = await app.get(JwtService).signAsync({ sub: userId, username: sent.username });
+
+      const me = await whoAmI(token).expect(200);
+      expect(me.body).toMatchObject({ id: userId });
+    });
+  });
+
+  // The routes these replaced. Signing in is POST /auth/token and signing out
+  // is POST /auth/token/revoke.
+  it.each(["/auth/login", "/auth/logout"])("POST %s is not a route any more", async (path) => {
+    await request(app.getHttpServer()).post(path).send({}).expect(404);
   });
 
   // The two tokens are not interchangeable. Each is refused where the other

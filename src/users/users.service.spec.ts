@@ -5,6 +5,7 @@ import { isValidUtc } from "@northguild/gmt";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -60,6 +61,10 @@ describe("UsersService", () => {
     restoreForUser: vi.fn(),
   };
 
+  // Ends a member's sessions. UsersService calls it when a password is set
+  // and when an account is closed.
+  const refreshTokens = { revokeAllForUser: vi.fn() };
+
   // A fake hasher, so no test here runs bcrypt. hashPassword() wraps its
   // input, which makes a stored hash easy to tell from the password it came
   // from.
@@ -89,6 +94,7 @@ describe("UsersService", () => {
         { provide: HashingProvider, useValue: hashingProvider },
         // The real one. It has no dependencies, and getUsers is tested through it.
         PaginationProvider,
+        { provide: RefreshTokensService, useValue: refreshTokens },
       ],
     }).compile();
 
@@ -662,6 +668,43 @@ describe("UsersService", () => {
       expect(isValidUtc(written.passwordChangedAt)).toBe(true);
     });
 
+    // Whoever was signed in with the old password signs in again with the
+    // new one: the member on another device, or someone who should not be
+    // there at all.
+    it("ends every session of the member when a password is set", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude", email: "d@x.com" });
+
+      await service.updateUser(3, { password: "secret2" });
+
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3);
+      // After the password is stored, so a change that fails ends nothing.
+      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        usersRepository.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("ends no session when the user is not found", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.updateUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it("ends no session when the body has no password", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "d@x.com" });
+
+      await service.updateUser(3, { username: "donny" });
+
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
     // Changing a username must not sign anybody out.
     it("leaves passwordChangedAt alone when the body has no password", async () => {
       usersRepository.update.mockResolvedValue({ affected: 1 });
@@ -783,6 +826,20 @@ describe("UsersService", () => {
 
       expect(profilesService.softDeleteForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    // A closed account has no sessions. Done once the account is closed, so
+    // a delete that rolls back signs nobody out.
+    it("ends every session of the member, after the account is closed", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+
+      await service.deleteUser(3);
+
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3);
+      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0],
+      );
     });
 
     // As with createUser: the error has to escape the transaction callback,

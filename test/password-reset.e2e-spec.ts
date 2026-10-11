@@ -216,6 +216,26 @@ describe("Password reset (e2e)", () => {
         .expect(200);
     });
 
+    // The sessions go with the old password, so a refresh token from before
+    // the reset cannot be swapped for a new pair.
+    it("ends the sessions that were open before the reset", async () => {
+      const user = await signUp();
+      const { body: session } = await login(user.email, oldPassword).expect(200);
+      const { accessToken, refreshToken } = session as {
+        accessToken: string;
+        refreshToken: string;
+      };
+
+      await reset(await requestToken(user.email)).expect(204);
+
+      await request(app.getHttpServer()).get("/users/me").set(bearer(accessToken)).expect(401);
+      const refused = await request(app.getHttpServer())
+        .post("/auth/token/refresh")
+        .send({ refreshToken })
+        .expect(401);
+      expect(refused.body).toMatchObject({ errorCode: "REFRESH_TOKEN_INVALID" });
+    });
+
     it("stores the new password as a bcrypt hash, as sign-up does", async () => {
       const user = await signUp();
       const token = await requestToken(user.email);
@@ -337,9 +357,5 @@ describe("Password reset (e2e)", () => {
       );
       await login(user.email, oldPassword).expect(200);
     });
-  });
-
-  it("POST /auth/logout is gone until refresh tokens exist", async () => {
-    await request(app.getHttpServer()).post("/auth/logout").expect(404);
   });
 });
