@@ -127,10 +127,10 @@ Public. What a visitor sees first.
 ### Sign up `/signup` and log in `/login`
 
 - Sign up posts to `server/api/signup.post.ts`, which calls
-  `POST /auth/signup`, then `POST /auth/login` with the same credentials, then
-  sets the cookie.
+  `POST /auth/signup`, then `POST /auth/token` with the same credentials, then
+  sets the cookies.
 - Log in posts to `server/api/session.post.ts`, which calls
-  `POST /auth/login`.
+  `POST /auth/token`.
 - The login form has one input, labelled "Username or email", and a password.
   It posts `{ identifier, password }`. The API decides which of the two the
   identifier is and ignores its letter case, so the form does neither.
@@ -151,17 +151,35 @@ Public. What a visitor sees first.
   the link no longer works and offers `/forgot-password` again.
 - A 429 from login or forgot password carries `Retry-After`, in seconds. The
   form shows how long to wait.
-- The token goes into a cookie named `session` through Nitro's `setCookie`:
-  `httpOnly`, `secure`, `sameSite: 'lax'`, `path: '/'`, lifetime matching
-  the JWT's expiry. `server/api/session.delete.ts` clears it for log out.
+- `POST /auth/token` answers `{ accessToken, refreshToken, expiresIn }`. Each
+  token goes into its own cookie through Nitro's `setCookie`, both `httpOnly`,
+  `secure` and `sameSite: 'lax'`:
+  - `session` holds the access token, with `path: '/'` and a lifetime of
+    `expiresIn` seconds.
+  - `refresh` holds the refresh token, with a lifetime of 7 days and a `path`
+    limited to the Nitro routes that refresh and log out, so it is not sent
+    with every page.
+- **Refreshing.** When the `session` cookie is missing or the API answers
+  401 `TOKEN_INVALID`, Nitro calls `POST /auth/token/refresh` with the refresh
+  token, sets both cookies from the answer, and repeats the request once.
+- **One refresh at a time for a session.** A refresh token works once, and the
+  API ends the whole session if one is used twice. Two page requests that
+  arrive together must not both refresh. The Nitro refresh step keeps one
+  pending promise for each refresh token and has later callers wait for it.
+- On 401 `REFRESH_TOKEN_INVALID`, Nitro clears both cookies and sends the
+  visitor to `/login`.
+- `server/api/session.delete.ts` logs out: it calls `POST /auth/token/revoke`
+  with the refresh token, then clears both cookies. "Log out everywhere" calls
+  `POST /auth/token/revoke-all`.
 - Forms are plain `<form @submit.prevent>` with a `pending` ref. A 400 from
   Nest carries the field messages. Nitro passes the body through with
   `createError`, and the form shows each message under its input. No
   client-side validation library.
-- `server/middleware/auth.ts` runs on every request. It reads the cookie,
-  verifies the JWT with the same secret as the API, and puts
-  `{ sub, username, role }` on `event.context.user`. It does not only
-  decode.
+- `server/middleware/auth.ts` runs on every request. It reads the `session`
+  cookie, refreshes as above when it has to, and asks the API `GET /users/me`
+  for who that is. It puts the answer on `event.context.user`. The token
+  carries no role, on purpose: the API reads the role from the database on
+  every request, so Nitro asks for it and does not decode it.
 - A server plugin copies `event.context.user` into `useState('me')` during
   SSR, so pages and route middleware know who is signed in without reading
   the httpOnly cookie, which they cannot.

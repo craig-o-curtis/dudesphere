@@ -273,7 +273,7 @@ it to take a while.
 
 ## Try the API by hand
 
-Almost every route needs a login token. A request with none answers
+Almost every route needs an access token. A request with none answers
 401 `TOKEN_MISSING`. This section is the short way to send one.
 
 ### 1. Start everything
@@ -364,23 +364,29 @@ Sign up, `POST /auth/signup`:
 }
 ```
 
-Log in, `POST /auth/login`. `identifier` is a username or an email:
+Sign in, `POST /auth/token`. `identifier` is a username or an email:
 
 ```json
 { "identifier": "walter", "password": "secret123" }
 ```
 
-The answer to a login holds `token`.
+The answer holds `accessToken`, `refreshToken` and `expiresIn`. Send
+`accessToken` as the bearer token. It lasts 15 minutes. For a new pair, post
+`{ "refreshToken": "..." }` to `POST /auth/token/refresh`, and keep the new
+refresh token from the answer: each one works once.
+
+For trying routes by hand, `pnpm dev:token` is easier. Its token lasts 30 days
+and belongs to no session, so there is nothing to refresh.
 
 ### When a request is refused
 
-| Answer              | What it means                                         | What to do                                       |
-| ------------------- | ----------------------------------------------------- | ------------------------------------------------ |
-| 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one      | Set the Auth tab to Bearer and paste a token     |
-| 401 `TOKEN_INVALID` | Expired, or its account or password changed since     | Run `pnpm dev:token` again                       |
-| 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's   | Use `pnpm dev:token` with no name, for the admin |
-| 403 `NOT_OWNER`     | The thing exists and belongs to someone else          | Use that member's token, or the admin's          |
-| 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes | Wait for the time in the `Retry-After` header    |
+| Answer              | What it means                                           | What to do                                       |
+| ------------------- | ------------------------------------------------------- | ------------------------------------------------ |
+| 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one        | Set the Auth tab to Bearer and paste a token     |
+| 401 `TOKEN_INVALID` | Expired, signed out, or its account or password changed | Run `pnpm dev:token` again                       |
+| 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's     | Use `pnpm dev:token` with no name, for the admin |
+| 403 `NOT_OWNER`     | The thing exists and belongs to someone else            | Use that member's token, or the admin's          |
+| 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes   | Wait for the time in the `Retry-After` header    |
 
 ### Why Thunder Client needs a paste for each request
 

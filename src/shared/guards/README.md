@@ -24,8 +24,8 @@ beside the guard that reads it, and each decorator file holds its own key.
 Also here:
 
 - `auth-user.ts` holds `AuthUser`, the user `JwtAuthGuard` puts on the
-  request, and `JwtPayload`, what login signs into the token: the id and the
-  username, and no role.
+  request, and `JwtPayload`, what signing in puts in the access token: the
+  member's id, their username and the session's id, and no role.
 - `current-user.decorator.ts` holds `@CurrentUser()`, which hands that user to
   a route handler.
 - `route-access.spec.ts` fails when a route carries no label, or two.
@@ -70,6 +70,7 @@ Take `DELETE /users/7`, which carries `@Auth(UserRole.ADMIN)`.
      another algorithm: 401 `TOKEN_INVALID`.
    - A real token whose user is gone, or whose password changed after it was
      signed: 401 `TOKEN_INVALID`.
+   - A real token whose session has ended: 401 `TOKEN_INVALID`.
    - A good token for a live user: it puts `{ userId, username, role }` on
      `request.user`. The id comes from the token. The username and the role
      come from the database.
@@ -115,12 +116,23 @@ So `@CurrentUser()` can be `undefined` on a public route.
 ## Why the guard reads the database
 
 A token cannot change once it is signed. It is a snapshot of the moment the
-member logged in. So it is trusted for one thing only: which member it was
-signed for. Everything else is read fresh, by `UsersService.getUserForToken`,
-on every signed-in request.
+member logged in. So it is trusted for two things only: which member it was
+signed for, and which session it belongs to. Everything else is read fresh on
+every signed-in request, by two small queries that run side by side:
+
+- `UsersService.getUserForToken` reads who the member is now.
+- `RefreshTokensService.isSessionLive` reads whether the session is still
+  going. The access token names its session in its `sid` claim. The session
+  is the family of refresh tokens that one sign-in started, kept in the
+  `refresh_token` table. `src/auth/token.service.ts` has the rules.
+
+A token from `pnpm dev:token` names no session and skips the second query.
+Only the app can sign one.
 
 | What happened after login         | What the same token gets            |
 | --------------------------------- | ----------------------------------- |
+| The member signed out             | 401 `TOKEN_INVALID`                 |
+| A refresh token was used twice    | 401 `TOKEN_INVALID`                 |
 | The account was closed            | 401 `TOKEN_INVALID`                 |
 | The password was changed or reset | 401 `TOKEN_INVALID`                 |
 | An admin was made a plain member  | 403 `ROLE_REQUIRED` on admin routes |
@@ -136,8 +148,9 @@ will not start with one shorter than 32 characters, and only tokens signed
 with HS256 are accepted. Both rules are in `src/config/env.validate.ts` and
 `src/auth/auth.module.ts`.
 
-The cost is one small query for each signed-in request. It is not cached. A
-cache would bring back the window in which a closed account still works.
+The cost is two small queries for each signed-in request. They are not
+cached. A cache would bring back the window in which a closed account or an
+ended session still works.
 
 ## What is not a guard here
 

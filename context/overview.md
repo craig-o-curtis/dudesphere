@@ -143,8 +143,8 @@ Costs accepted with this design:
 
 ## API Endpoints
 
-Every route needs a token unless it is marked public. A token comes from
-`POST /auth/login`.
+Every route needs an access token unless it is marked public. An access token
+comes from `POST /auth/token`.
 
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
@@ -157,26 +157,56 @@ full shape.
 | Method | Endpoint                | Access | Description                             |
 | ------ | ----------------------- | ------ | --------------------------------------- |
 | POST   | `/auth/signup`          | Public | Sign up. Creates the user and a profile |
-| POST   | `/auth/login`           | Public | Log in and get a JWT token              |
 | POST   | `/auth/forgot-password` | Public | Email a password reset link. Always 202 |
 | POST   | `/auth/reset-password`  | Public | Set a new password with the link. 204   |
 
-A login token holds the member's id and username, and nothing else. On every
-request the server reads the member from the database, so the role is always
-the current one. A client that needs the role asks `GET /users/me`.
+### Tokens and sessions
 
-A token stops working at once, with 401 `TOKEN_INVALID`, when:
+| Method | Endpoint                 | Access | Description                                        |
+| ------ | ------------------------ | ------ | -------------------------------------------------- |
+| POST   | `/auth/token`            | Public | Sign in with `{ identifier, password }`. 200       |
+| POST   | `/auth/token/refresh`    | Public | Swap `{ refreshToken }` for a new pair. 200        |
+| POST   | `/auth/token/revoke`     | Public | Sign out this device, with `{ refreshToken }`. 204 |
+| POST   | `/auth/token/revoke-all` | Token  | Sign out every device of the caller. 204           |
 
-- the account is closed, by the member or by an admin;
-- the password is changed or reset after the token was signed. A member who
-  changes their own password logs in again with the new one.
+Signing in and refreshing both answer
+`{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`. The paths
+and the keys are the ones the NestJS docs use.
+
+A member holds two tokens:
+
+- **The access token** is a JWT. It goes with every request as
+  `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
+  that lifetime in seconds. It holds the member's id, their username and the
+  id of their session, and nothing else.
+- **The refresh token** is 43 random characters, not a JWT. It goes to
+  `POST /auth/token/refresh` only, and lasts 7 days. The database keeps a hash
+  of it, never the token.
+
+One sign-in is one session. A session lasts as long as the member keeps
+refreshing, and 30 days at most.
+
+**A refresh token works once.** Swapping it returns a new pair, and the client
+keeps the new refresh token. A client must send one refresh at a time for a
+session. If a refresh token is used a second time, two parties hold it, so the
+whole session ends and the member signs in again.
+
+On every request the server reads the member and their session from the
+database. So the role is always the current one, and a client that needs it
+asks `GET /users/me`. The same read is why a session ends at once, access token
+included, with 401 `TOKEN_INVALID`, when:
+
+- the member signs out, on that device or on every device;
+- one of the session's refresh tokens is used twice;
+- the password is changed or reset. Every session of the member ends, and they
+  sign in again with the new password;
+- the account is closed, by the member or by an admin.
+
+A refresh token that cannot be swapped gets 401 `REFRESH_TOKEN_INVALID`,
+whatever the reason. The client sends the member to sign in.
 
 A member who is no longer an admin gets 403 on admin routes from the next
 request, with the same token.
-
-There is no logout route yet. The server does not store a login token, so it
-cannot end one token and leave the member's others. Logout comes with refresh
-tokens.
 
 The sign-up body is
 `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`.
@@ -216,15 +246,14 @@ response does not say which usernames and emails have an account.
 `MAIL_*` defaults send to the Mailpit container, which shows every email at
 http://localhost:8025 and delivers none.
 
-A reset ends every login token signed before it, the same as a password change
-does.
+A reset ends every session of the member, the same as a password change does.
 
 ### Rate limits
 
 | Route                        | Limit           | Counted per                |
 | ---------------------------- | --------------- | -------------------------- |
 | Every route                  | 100 a minute    | IP address                 |
-| `POST /auth/login`           | 5 in 15 minutes | identifier and IP together |
+| `POST /auth/token`           | 5 in 15 minutes | identifier and IP together |
 | `POST /auth/forgot-password` | 3 in 15 minutes | email and IP together      |
 
 A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
@@ -313,11 +342,11 @@ so a member who changes it sees the new one on their old abidings at once.
 
 - [x] PostgreSQL + MongoDB via Docker Compose
 - [x] User CRUD with roles (admin seeded)
-- [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
+- [x] JWT auth: sign up with `POST /auth/signup`, sign in with `POST /auth/token`
       by username or email
 - [x] Rate limiting on every route, tighter on login
 - [x] Forgot password: a reset link by email
-- [ ] Refresh tokens and logout
+- [x] Refresh tokens, sessions and sign-out
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)
