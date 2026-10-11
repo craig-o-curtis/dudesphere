@@ -70,6 +70,21 @@ describe("the app's own exception classes", () => {
       },
     ],
     [
+      "ValueTakenException for a display name",
+      () => new ValueTakenException("displayName"),
+      {
+        parent: ConflictException,
+        status: 409,
+        body: {
+          statusCode: 409,
+          message: "Display name already taken",
+          error: "Conflict",
+          errorCode: "DISPLAY_NAME_TAKEN",
+        },
+        errorCode: "DISPLAY_NAME_TAKEN",
+      },
+    ],
+    [
       "ValueTakenException with no field, from a database filter",
       () => new ValueTakenException(undefined, { cause }),
       {
