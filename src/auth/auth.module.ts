@@ -24,6 +24,12 @@ import { PasswordResetService } from "./password-reset.service.js";
 // could not go in AuthModule's own imports for PasswordResetService.
 const authConfigModule = ConfigModule.forFeature(authConfig);
 
+// The one algorithm tokens are signed and checked with: an HMAC with SHA-256,
+// keyed by JWT_SECRET. Named for both directions, so the allowed list is this
+// app's rule and not whatever the library allows by default. A token whose
+// header names any other algorithm, or "none", is refused.
+const JWT_ALGORITHM = "HS256";
+
 @Module({
   controllers: [AuthController],
   providers: [AuthService, PasswordResetService],
@@ -45,15 +51,19 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
       inject: [authConfig.KEY],
       // Set once here for signing and verifying. AuthService and JwtAuthGuard
       // then call signAsync and verifyAsync with no options of their own, and
-      // the guard rejects a token with the wrong audience or issuer.
+      // the guard rejects a token with the wrong audience, issuer or
+      // algorithm. A call that does pass options has them laid over these, so
+      // it still gets every one it does not replace.
       useFactory: (auth: ConfigType<typeof authConfig>) => ({
         secret: auth.secret,
         signOptions: {
+          algorithm: JWT_ALGORITHM,
           expiresIn: auth.expiresIn,
           audience: auth.audience,
           issuer: auth.issuer,
         },
         verifyOptions: {
+          algorithms: [JWT_ALGORITHM],
           audience: auth.audience,
           issuer: auth.issuer,
         },
