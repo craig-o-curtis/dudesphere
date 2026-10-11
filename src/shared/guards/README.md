@@ -129,6 +129,9 @@ every signed-in request, by two small queries that run side by side:
 A token from `pnpm dev:token` names no session and skips the second query.
 Only the app can sign one.
 
+[reference/TOKENS_AND_SESSIONS.md](../../../reference/TOKENS_AND_SESSIONS.md)
+explains the two tokens and the session from the start.
+
 | What happened after login         | What the same token gets            |
 | --------------------------------- | ----------------------------------- |
 | The member signed out             | 401 `TOKEN_INVALID`                 |
