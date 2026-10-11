@@ -108,7 +108,7 @@ export class UsersService {
     // compare still does the work before answering false. Both failures then
     // take about the same time, which keeps the response from revealing which
     // usernames and emails have an account.
-    const matches = await this.hashingProvider.compare(password, user?.password);
+    const matches = await this.hashingProvider.comparePassword(password, user?.password);
     if (!user || !matches) {
       return null;
     }
@@ -137,7 +137,7 @@ export class UsersService {
           username: createUserDto.username,
           email: createUserDto.email,
           // Only the hash is stored. The password itself is never written.
-          password: await this.hashingProvider.hash(createUserDto.password),
+          password: await this.hashingProvider.hashPassword(createUserDto.password),
         }),
       );
 
@@ -166,7 +166,7 @@ export class UsersService {
       }
 
       const user = await this.usersRepository.findOne({ where: { id: userId } });
-      const matches = await this.hashingProvider.compare(currentPassword, user?.password);
+      const matches = await this.hashingProvider.comparePassword(currentPassword, user?.password);
       if (!user) {
         throw new NotFoundException(`My User #${userId} not found`);
       }
@@ -214,7 +214,7 @@ export class UsersService {
     // A new password arrives as plain text and is stored as a hash, the same
     // as on sign-up. update() below runs no entity hooks, so it is done here.
     if (userFields.password !== undefined) {
-      userFields.password = await this.hashingProvider.hash(userFields.password);
+      userFields.password = await this.hashingProvider.hashPassword(userFields.password);
     }
 
     // deletedAt: IsNull() because update() does not apply the soft-delete

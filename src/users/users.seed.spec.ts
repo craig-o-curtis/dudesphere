@@ -14,14 +14,16 @@ describe("UsersSeedService", () => {
     save: vi.fn(),
   };
 
-  const hashingProvider = { hash: vi.fn(), compare: vi.fn() };
+  const hashingProvider = { hashPassword: vi.fn(), comparePassword: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
     usersRepository.create.mockImplementation((values: object) => values);
     // The real save() returns the row with the id the database gave it.
     usersRepository.save.mockImplementation((user: object) => Promise.resolve({ id: 7, ...user }));
-    hashingProvider.hash.mockImplementation((plain: string) => Promise.resolve(`hashed(${plain})`));
+    hashingProvider.hashPassword.mockImplementation((plain: string) =>
+      Promise.resolve(`hashed(${plain})`),
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -63,7 +65,7 @@ describe("UsersSeedService", () => {
   it("does nothing, and returns null, when the email or the password is not set", async () => {
     await expect(seedService.seed("admin@dude.com", "")).resolves.toBeNull();
 
-    expect(hashingProvider.hash).not.toHaveBeenCalled();
+    expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
     expect(usersRepository.save).not.toHaveBeenCalled();
   });
 

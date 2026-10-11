@@ -12,13 +12,14 @@ const MAX_PASSWORD_BYTES = 72;
 
 @Injectable()
 export class BcryptProvider implements HashingProvider {
-  // Made on first use and then reused. compare() checks against it when there
-  // is no real hash, so that path costs the same as a real compare.
+  // Made on first use and then reused. comparePassword() checks against it
+  // when there is no real hash, so that path costs the same as a real compare.
   private dummyHash?: Promise<string>;
 
   // bcrypt.hash makes a random salt and stores it inside the returned string,
-  // along with the cost. That is why compare() needs nothing but the hash.
-  hash(plain: string): Promise<string> {
+  // along with the cost. That is why comparePassword() needs nothing but the
+  // hash.
+  hashPassword(plain: string): Promise<string> {
     // bcrypt reads the first 72 bytes and ignores the rest. The sign-up DTO
     // already rejects longer input; this catches a caller that skips the DTO,
     // such as the seed, before it stores a hash of only part of a password.
@@ -30,7 +31,7 @@ export class BcryptProvider implements HashingProvider {
     return bcrypt.hash(plain, ROUNDS);
   }
 
-  async compare(plain: string, hash: string | undefined): Promise<boolean> {
+  async comparePassword(plain: string, hash: string | undefined): Promise<boolean> {
     if (hash === undefined) {
       this.dummyHash ??= bcrypt.hash("no-account-has-this-password", ROUNDS);
       await bcrypt.compare(plain, await this.dummyHash);
