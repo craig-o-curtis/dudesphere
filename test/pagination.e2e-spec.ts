@@ -85,10 +85,10 @@ describe("Pagination (e2e)", () => {
       const { sent, user } = await signUp(app);
       authorId = user.id;
       const login = await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/auth/token")
         .send({ identifier: sent.email, password: sent.password })
-        .expect(201);
-      authorToken = (login.body as { token: string }).token;
+        .expect(200);
+      authorToken = (login.body as { accessToken: string }).accessToken;
 
       // One at a time, so "posted later" and "newer" mean the same thing.
       for (const message of ["first", "second", "third"]) {
@@ -323,13 +323,13 @@ describe("Pagination (e2e)", () => {
     async function signUpAndLogIn(): Promise<Account> {
       const { sent, user } = await signUp(app);
       const login = await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/auth/token")
         .send({ identifier: sent.email, password: sent.password })
-        .expect(201);
+        .expect(200);
       return {
         id: user.id,
         profileId: user.profile.id,
-        token: (login.body as { token: string }).token,
+        token: (login.body as { accessToken: string }).accessToken,
       };
     }
 

@@ -6,10 +6,12 @@ import { ThrottleByAccount } from "../shared/guards/throttle-by-account.decorato
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { AuthService } from "./auth.service.js";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
-import { LoginDto } from "./dto/login.dto.js";
 import { ResetPasswordDto } from "./dto/reset-password.dto.js";
 import { PasswordResetService } from "./password-reset.service.js";
 
+// Sign up and the forgotten-password routes. Signing in, and everything else
+// to do with tokens, is in TokensController.
+@Public()
 @Controller("auth")
 export class AuthController {
   constructor(
@@ -17,27 +19,9 @@ export class AuthController {
     private readonly passwordResetService: PasswordResetService,
   ) {}
 
-  @Public()
   @Post("signup")
   signup(@Body() signupDto: CreateUserDto) {
     return this.authService.signup(signupDto);
-  }
-
-  // Public, and it has to be: this is the route that issues the token every
-  // other route needs.
-  //
-  // 5 tries in 15 minutes for one account from one IP address, right or
-  // wrong. That is slow enough to make guessing a password pointless, and a
-  // person who mistypes theirs a few times is not shut out for long. The
-  // sixth gets a 429 with a Retry-After header.
-  //
-  // The 100 a minute every route has still counts here, by IP address alone.
-  // It stops one address from trying a few passwords on every account.
-  @Public()
-  @ThrottleByAccount("identifier", { limit: 5, ttl: minutes(15) })
-  @Post("login")
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
   }
 
   // 202 Accepted, with no body, every time. The work is started and not
@@ -49,7 +33,6 @@ export class AuthController {
   // 3 in 15 minutes for one email from one IP address, which also keeps
   // anyone from flooding a member's inbox. The 100 a minute by IP address
   // alone counts here too, however many emails a caller names.
-  @Public()
   @ThrottleByAccount("email", { limit: 3, ttl: minutes(15) })
   @Post("forgot-password")
   @HttpCode(202)
@@ -63,7 +46,6 @@ export class AuthController {
   //
   // No limit of its own. A guessed token costs one lookup, and there are
   // 2^256 of them.
-  @Public()
   @Post("reset-password")
   @HttpCode(204)
   resetPassword(@Body() { token, password }: ResetPasswordDto): Promise<void> {

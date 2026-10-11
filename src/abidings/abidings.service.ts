@@ -102,12 +102,12 @@ export class AbidingsService {
     createAbidingDto: CreateAbidingDto,
     caller: AuthUser,
   ): Promise<AbidingResponseDto> {
-    // Looked up before the write, not after. A token proves who logged in, not
-    // that the account still exists: it stays valid until it expires, even
-    // after the user is deleted. A user and their profile are deleted
-    // together, so getProfileByUserId throws a 404 for a user who is deleted
-    // or was never there, and no abiding is written for an author nobody can
-    // find.
+    // Looked up before the write, not after. JwtAuthGuard already refuses a
+    // token whose user is deleted, so this is a second lock: an account can
+    // be closed in the moment between the guard and this line. A user and
+    // their profile are deleted together, so getProfileByUserId throws a 404
+    // for a user who is deleted or was never there, and no abiding is written
+    // for an author nobody can find.
     const author = await this.profilesService.getProfileByUserId(caller.userId);
 
     if (createAbidingDto.replyToId) {

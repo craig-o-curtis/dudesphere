@@ -1,17 +1,16 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 
 import { ErrorCode } from "../shared/error-codes.js";
-import { jwtPayloadFor } from "../shared/guards/auth-user.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
 import { LoginDto } from "./dto/login.dto.js";
+import { type TokenPair, TokenService } from "./token.service.js";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
+    private readonly tokenService: TokenService,
   ) {}
 
   async signup(signupDto: CreateUserDto) {
@@ -19,22 +18,45 @@ export class AuthService {
     return await this.usersService.createUser(signupDto);
   }
 
-  async login(loginDto: LoginDto) {
-    const user = await this.usersService.getUserByCredentials(
+  // Signs a member in: checks who they are, starts a session, and returns
+  // its first pair of tokens. Three steps.
+  //
+  // 1. Is this the member, and is that their password? UsersService decides.
+  // 2. TokenService starts the session and makes the tokens.
+  // 3. Is what step 1 checked still true? Checking a password takes about a
+  //    tenth of a second, on purpose. If the password was changed or the
+  //    account closed in that time, the change ended the member's sessions
+  //    before this one existed, and this one would outlive it. So the
+  //    session is ended here, and the caller gets the same 401 as for a
+  //    wrong password. See UsersService.credentialsStillHold.
+  async signIn(loginDto: LoginDto): Promise<TokenPair> {
+    const checked = await this.usersService.getUserByCredentials(
       loginDto.identifier,
       loginDto.password,
     );
-
-    // One message for every case, so the response doesn't reveal which
-    // usernames and emails have an account.
-    if (!user) {
-      throw new UnauthorizedException("Invalid username, email or password", {
-        errorCode: ErrorCode.BAD_CREDENTIALS,
-      });
+    if (!checked) {
+      throw this.badCredentials();
     }
 
-    const token = await this.jwtService.signAsync(jwtPayloadFor(user));
+    const pair = await this.tokenService.issue(checked.user);
 
-    return { token, userId: user.id, name: user.username };
+    const stillHold = await this.usersService.credentialsStillHold(
+      checked.user.id,
+      checked.passwordHash,
+    );
+    if (!stillHold) {
+      await this.tokenService.revoke(pair.refreshToken);
+      throw this.badCredentials();
+    }
+
+    return pair;
+  }
+
+  // One message for every case, so the response doesn't reveal which
+  // usernames and emails have an account.
+  private badCredentials(): UnauthorizedException {
+    return new UnauthorizedException("Invalid username, email or password", {
+      errorCode: ErrorCode.BAD_CREDENTIALS,
+    });
   }
 }

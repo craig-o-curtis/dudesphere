@@ -1,9 +1,11 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
+import { isValidUtc } from "@northguild/gmt";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -21,6 +23,7 @@ describe("UsersService", () => {
     findOne: vi.fn(),
     create: vi.fn(),
     save: vi.fn(),
+    update: vi.fn(),
     softDelete: vi.fn(),
     restore: vi.fn(),
   };
@@ -30,11 +33,21 @@ describe("UsersService", () => {
     transaction: vi.fn((callback: (m: typeof manager) => unknown) => callback(manager)),
   };
 
+  // One query builder stands for every createQueryBuilder() call. Each step
+  // returns it, as TypeORM's does, and getOne() is what a test sets.
+  const queryBuilder = {
+    select: vi.fn(),
+    where: vi.fn(),
+    andWhere: vi.fn(),
+    getOne: vi.fn(),
+  };
+
   const usersRepository = {
     find: vi.fn(),
     findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
+    createQueryBuilder: vi.fn(),
   };
 
   const profilesService = {
@@ -48,6 +61,10 @@ describe("UsersService", () => {
     softDeleteForUser: vi.fn(),
     restoreForUser: vi.fn(),
   };
+
+  // Ends a member's sessions. UsersService calls it when a password is set
+  // and when an account is closed.
+  const refreshTokens = { revokeAllForUser: vi.fn() };
 
   // A fake hasher, so no test here runs bcrypt. hashPassword() wraps its
   // input, which makes a stored hash easy to tell from the password it came
@@ -63,6 +80,10 @@ describe("UsersService", () => {
     hashingProvider.hashPassword.mockImplementation((plain: string) =>
       Promise.resolve(`hashed(${plain})`),
     );
+    queryBuilder.select.mockReturnValue(queryBuilder);
+    queryBuilder.where.mockReturnValue(queryBuilder);
+    queryBuilder.andWhere.mockReturnValue(queryBuilder);
+    usersRepository.createQueryBuilder.mockReturnValue(queryBuilder);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -74,6 +95,7 @@ describe("UsersService", () => {
         { provide: HashingProvider, useValue: hashingProvider },
         // The real one. It has no dependencies, and getUsers is tested through it.
         PaginationProvider,
+        { provide: RefreshTokensService, useValue: refreshTokens },
       ],
     }).compile();
 
@@ -117,6 +139,87 @@ describe("UsersService", () => {
     });
   });
 
+  // What JwtAuthGuard calls on every signed-in request. The SQL itself is
+  // proved against the real database, in test/authorization.e2e-spec.ts and
+  // test/delete-me.e2e-spec.ts. These cases cover what the method does with
+  // the answer.
+  describe("getUserForToken", () => {
+    it("returns who the user is now, in the shape the guards read", async () => {
+      queryBuilder.getOne.mockResolvedValue({ id: 25, username: "walter", role: UserRole.ADMIN });
+
+      const user = await service.getUserForToken(25, 1_800_000_000);
+
+      expect(user).toEqual({ userId: 25, username: "walter", role: UserRole.ADMIN });
+      expect(queryBuilder.where).toHaveBeenCalledWith("user.id = :id", { id: 25 });
+    });
+
+    // Three columns and no join, because this runs on every request.
+    it("reads only the id, the username and the role", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.select).toHaveBeenCalledWith(["user.id", "user.username", "user.role"]);
+    });
+
+    it("leaves soft-deleted users out", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith("user.deletedAt IS NULL");
+    });
+
+    // The time the token was signed goes to the query, where Postgres
+    // compares it with passwordChangedAt. test/passwords.e2e-spec.ts proves
+    // the comparison itself.
+    it("hands the query the time the token was signed", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining("passwordChangedAt"),
+        { issuedAt: 1_800_000_000 },
+      );
+    });
+
+    // Null, not a 404. The guard turns it into a 401.
+    it("returns null when there is no such user", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(service.getUserForToken(2_000_000_000, 1_800_000_000)).resolves.toBeNull();
+    });
+  });
+
+  // What TokenService.refresh asks before it hands out a new pair.
+  describe("getLiveUser", () => {
+    it("returns who the member is now, in the shape the guards read", async () => {
+      usersRepository.findOne.mockResolvedValue({
+        id: 25,
+        username: "walter",
+        role: UserRole.USER,
+      });
+
+      await expect(service.getLiveUser(25)).resolves.toEqual({
+        userId: 25,
+        username: "walter",
+        role: UserRole.USER,
+      });
+      expect(usersRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 25 },
+        select: { id: true, username: true, role: true },
+      });
+    });
+
+    // findOne leaves soft-deleted rows out, so a closed account is null too.
+    it("returns null when the account is closed or was never there", async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getLiveUser(25)).resolves.toBeNull();
+    });
+  });
+
   // GET /users/:id. The answer carries the email and the role, so only that
   // user and an admin may read it.
   describe("getUserForCaller", () => {
@@ -151,7 +254,7 @@ describe("UsersService", () => {
       await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
     });
 
-    // The role in the token decides, not the role of the user being read:
+    // The caller's own role decides, not the role of the user being read:
     // a member may not read an admin's record either.
     it("throws 403 when a member asks for an admin", async () => {
       usersRepository.findOne.mockResolvedValue({ ...storedUser, id: 1, role: UserRole.ADMIN });
@@ -236,8 +339,11 @@ describe("UsersService", () => {
       expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { email: "w@x.com" } });
       // The typed password first, the stored hash second.
       expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", "hashed(secret1)");
-      expect(result).toMatchObject({ id: 4, username: "walter" });
-      expect(result?.password).toBeUndefined();
+      expect(result?.user).toMatchObject({ id: 4, username: "walter" });
+      expect(result?.user.password).toBeUndefined();
+      // The hash that was checked comes back beside the member, for
+      // credentialsStillHold. It is not part of the member.
+      expect(result?.passwordHash).toBe("hashed(secret1)");
     });
 
     it("searches by username when the identifier has no @", async () => {
@@ -248,7 +354,7 @@ describe("UsersService", () => {
 
       expect(usersRepository.findOne).toHaveBeenCalledTimes(1);
       expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { username: "walter" } });
-      expect(result).toMatchObject({ id: 4, username: "walter" });
+      expect(result?.user).toMatchObject({ id: 4, username: "walter" });
     });
 
     // The casing is passed on as typed. The columns are citext, so Postgres
@@ -283,6 +389,40 @@ describe("UsersService", () => {
         expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", undefined);
       },
     );
+  });
+
+  // What sign-in asks straight after it has started a session: is the
+  // password that was checked still the member's password?
+  describe("credentialsStillHold", () => {
+    it("is true when the live user still has that hash", async () => {
+      manager.findOne.mockResolvedValue({ id: 4 });
+
+      await expect(service.credentialsStillHold(4, "hashed(secret1)")).resolves.toBe(true);
+    });
+
+    // The password was changed, or the account closed, while the old
+    // password was being checked. findOne leaves soft-deleted rows out.
+    it("is false when no live user has that hash any more", async () => {
+      manager.findOne.mockResolvedValue(null);
+
+      await expect(service.credentialsStillHold(4, "hashed(secret1)")).resolves.toBe(false);
+    });
+
+    // FOR SHARE makes the read wait for a password change that is in flight,
+    // so it cannot see the old hash a moment before the commit. A lock needs
+    // a transaction.
+    it("reads the row with a share lock, inside a transaction", async () => {
+      manager.findOne.mockResolvedValue({ id: 4 });
+
+      await service.credentialsStillHold(4, "hashed(secret1)");
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(manager.findOne).toHaveBeenCalledWith(User, {
+        where: { id: 4, password: "hashed(secret1)" },
+        select: { id: true },
+        lock: { mode: "pessimistic_read" },
+      });
+    });
   });
 
   describe("createUser", () => {
@@ -473,16 +613,17 @@ describe("UsersService", () => {
 
     it("sets a new password when the current one is right", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       hashingProvider.comparePassword.mockResolvedValue(true);
 
       await service.updateMyUser(3, { password: "secret2", currentPassword: "secret1" });
 
       expect(hashingProvider.comparePassword).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       // currentPassword is not a column, so it must not reach the update.
-      expect(usersRepository.update).toHaveBeenCalledWith(
+      expect(manager.update).toHaveBeenCalledWith(
+        User,
         { id: 3, deletedAt: IsNull() },
-        { password: "hashed(secret2)" },
+        { password: "hashed(secret2)", passwordChangedAt: expect.any(String) },
       );
     });
 
@@ -522,34 +663,134 @@ describe("UsersService", () => {
     // update() does not apply the soft-delete filter that find() does, so the
     // criteria has to carry it or a deleted row gets mutated behind a 404.
     it("scopes the update to rows that are not soft-deleted", async () => {
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue({
         id: 3,
         username: "dude",
-        email: "d@x.com",
+        email: "dude@example.com",
         role: "user",
       });
 
       await service.updateUser(3, { password: "secret2" });
 
-      expect(usersRepository.update).toHaveBeenCalledWith(
+      expect(manager.update).toHaveBeenCalledWith(
+        User,
         { id: 3, deletedAt: IsNull() },
         {
           password: "hashed(secret2)",
+          passwordChangedAt: expect.any(String),
         },
       );
     });
 
     it("stores a new password as a hash", async () => {
-      usersRepository.update.mockResolvedValue({ affected: 1 });
-      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude", email: "d@x.com" });
+      manager.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
 
       await service.updateUser(3, { password: "secret2" });
 
       expect(hashingProvider.hashPassword).toHaveBeenCalledWith("secret2");
-      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), {
+      expect(manager.update).toHaveBeenCalledWith(User, expect.anything(), {
         password: "hashed(secret2)",
+        passwordChangedAt: expect.any(String),
       });
+    });
+
+    // The stamp is what ends the access tokens signed with the old password.
+    // See getUserForToken.
+    it("stamps passwordChangedAt with the current UTC time when a password is set", async () => {
+      manager.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
+
+      await service.updateUser(3, { password: "secret2" });
+
+      const [, , written] = manager.update.mock.calls[0] as [
+        unknown,
+        unknown,
+        Record<string, string>,
+      ];
+      expect(isValidUtc(written.passwordChangedAt)).toBe(true);
+    });
+
+    // Whoever was signed in with the old password signs in again with the
+    // new one: the member on another device, or someone who should not be
+    // there at all.
+    describe("a new password ends the member's sessions", () => {
+      beforeEach(() => {
+        usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
+      });
+
+      // One transaction for the two writes, through the same manager. If
+      // they were separate and the second failed, the old refresh tokens
+      // would outlive the password they were issued under.
+      it("stores the password and ends the sessions in one transaction", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
+
+        await service.updateUser(3, { password: "secret2" });
+
+        expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+        expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+        // The password write does not go round the transaction.
+        expect(usersRepository.update).not.toHaveBeenCalled();
+      });
+
+      // The user row first. That holds a lock on it until the commit, which
+      // credentialsStillHold waits on.
+      it("writes the user row before it ends the sessions", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
+
+        await service.updateUser(3, { password: "secret2" });
+
+        expect(manager.update.mock.invocationCallOrder[0]).toBeLessThan(
+          refreshTokens.revokeAllForUser.mock.invocationCallOrder[0],
+        );
+      });
+
+      // The error has to escape the transaction callback: that is what tells
+      // TypeORM to undo the password. The caller gets the failure and tries
+      // again, with nothing half done.
+      it("rejects when ending the sessions fails, so the password rolls back", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
+        const failure = new Error("connection lost");
+        refreshTokens.revokeAllForUser.mockRejectedValueOnce(failure);
+
+        await expect(service.updateUser(3, { password: "secret2" })).rejects.toBe(failure);
+      });
+
+      it("ends no session when the user is not found", async () => {
+        manager.update.mockResolvedValue({ affected: 0 });
+
+        await expect(service.updateUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+
+        expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+      });
+    });
+
+    it("ends no session when the body has no password", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "donny@example.com" });
+
+      await service.updateUser(3, { username: "donny" });
+
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+      // No second write to keep in step with, so no transaction either.
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    // Changing a username must not sign anybody out.
+    it("leaves passwordChangedAt alone when the body has no password", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "donny@example.com" });
+
+      await service.updateUser(3, { username: "donny" });
+
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
 
     it("does not hash anything when the body has no password", async () => {
@@ -569,10 +810,14 @@ describe("UsersService", () => {
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 
+    // The path with no password, which writes outside a transaction. The
+    // path with one is covered above, under "a new password ends the
+    // member's sessions".
     it("throws 404 when the user is already soft-deleted", async () => {
+      usersRepository.findOne.mockResolvedValueOnce(null);
       usersRepository.update.mockResolvedValue({ affected: 0 });
 
-      await expect(service.updateUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
+      await expect(service.updateUser(3, { username: "donny" })).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -661,6 +906,39 @@ describe("UsersService", () => {
 
       expect(profilesService.softDeleteForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    // A closed account has no sessions. Through the same manager, so the
+    // account cannot be closed with its sessions left alive.
+    it("ends every session of the member in the same transaction", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+
+      await service.deleteUser(3);
+
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+    });
+
+    // Mongo stays last: it is outside the transaction and cannot be rolled
+    // back, so everything that can fail in Postgres goes before it.
+    it("ends the sessions before it touches the abidings", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+
+      await service.deleteUser(3);
+
+      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
+        userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("rejects when ending the sessions fails, and leaves the abidings alone", async () => {
+      manager.softDelete.mockResolvedValue({ affected: 1 });
+      const failure = new Error("connection lost");
+      refreshTokens.revokeAllForUser.mockRejectedValueOnce(failure);
+
+      await expect(service.deleteUser(3)).rejects.toBe(failure);
+
+      expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
     });
 
     // As with createUser: the error has to escape the transaction callback,
@@ -701,6 +979,19 @@ describe("UsersService", () => {
       );
       // The response is the restored user, read back after the transaction.
       expect(result).toMatchObject(restoredUser);
+    });
+
+    // Nobody is signed in to a restored account until they sign in to it.
+    it("ends every session of the member, in the same transaction", async () => {
+      manager.restore.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
+
+      await service.restoreUser(3);
+
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
+        userAbidingsService.restoreForUser.mock.invocationCallOrder[0],
+      );
     });
 
     it("throws 404 and leaves the profile alone when the user is not soft-deleted", async () => {

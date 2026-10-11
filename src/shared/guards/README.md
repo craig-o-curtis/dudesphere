@@ -24,7 +24,8 @@ beside the guard that reads it, and each decorator file holds its own key.
 Also here:
 
 - `auth-user.ts` holds `AuthUser`, the user `JwtAuthGuard` puts on the
-  request, and `JwtPayload`, what login signs into the token.
+  request, and `JwtPayload`, what signing in puts in the access token: the
+  member's id, their username and the session's id, and no role.
 - `current-user.decorator.ts` holds `@CurrentUser()`, which hands that user to
   a route handler.
 - `route-access.spec.ts` fails when a route carries no label, or two.
@@ -61,12 +62,18 @@ Take `DELETE /users/7`, which carries `@Auth(UserRole.ADMIN)`.
 1. **`AuthThrottlerGuard` counts the request.** Over 100 a minute from one IP
    address, it answers 429. It goes first so that a request with a guessed
    token is counted before it is turned away.
-2. **`JwtAuthGuard` checks the token.** It asks `Reflector` whether the route
-   carries `@Public()`. This one does not, so a token is required.
+2. **`JwtAuthGuard` checks the token, then loads its user.** It asks
+   `Reflector` whether the route carries `@Public()`. This one does not, so a
+   token is required.
    - No `Authorization: Bearer` header: 401 `TOKEN_MISSING`.
-   - A token that is forged, expired or for another audience: 401
-     `TOKEN_INVALID`.
-   - A good token: it puts `{ userId, username, role }` on `request.user`.
+   - A token that is forged, expired, for another audience or signed with
+     another algorithm: 401 `TOKEN_INVALID`.
+   - A real token whose user is gone, or whose password changed after it was
+     signed: 401 `TOKEN_INVALID`.
+   - A real token whose session has ended: 401 `TOKEN_INVALID`.
+   - A good token for a live user: it puts `{ userId, username, role }` on
+     `request.user`. The id comes from the token. The username and the role
+     come from the database.
 3. **`RolesGuard` checks the role.** It asks `Reflector` for the list `@Auth`
    stored, here `["admin"]`, and compares it with `request.user.role`.
    - The role is in the list: the request passes.
@@ -106,6 +113,48 @@ reads it. On a public route the token is optional:
 
 So `@CurrentUser()` can be `undefined` on a public route.
 
+## Why the guard reads the database
+
+A token cannot change once it is signed. It is a snapshot of the moment the
+member logged in. So it is trusted for two things only: which member it was
+signed for, and which session it belongs to. Everything else is read fresh on
+every signed-in request, by two small queries that run side by side:
+
+- `UsersService.getUserForToken` reads who the member is now.
+- `RefreshTokensService.isSessionLive` reads whether the session is still
+  going. The access token names its session in its `sid` claim. The session
+  is the family of refresh tokens that one sign-in started, kept in the
+  `refresh_token` table. `src/auth/token.service.ts` has the rules.
+
+A token from `pnpm dev:token` names no session and skips the second query.
+Only the app can sign one.
+
+[reference/TOKENS_AND_SESSIONS.md](../../../reference/TOKENS_AND_SESSIONS.md)
+explains the two tokens and the session from the start.
+
+| What happened after login         | What the same token gets            |
+| --------------------------------- | ----------------------------------- |
+| The member signed out             | 401 `TOKEN_INVALID`                 |
+| A refresh token was used twice    | 401 `TOKEN_INVALID`                 |
+| The account was closed            | 401 `TOKEN_INVALID`                 |
+| The password was changed or reset | 401 `TOKEN_INVALID`                 |
+| An admin was made a plain member  | 403 `ROLE_REQUIRED` on admin routes |
+| A member was made an admin        | Admin routes open                   |
+| The username was changed          | The new name on `request.user`      |
+
+The token carries no role, so there is nothing for a caller to change and
+nothing for a client to read that could be out of date. A client asks
+`GET /users/me`.
+
+What stops a caller from signing their own token is `JWT_SECRET`. The app
+will not start with one shorter than 32 characters, and only tokens signed
+with HS256 are accepted. Both rules are in `src/config/env.validate.ts` and
+`src/auth/auth.module.ts`.
+
+The cost is two small queries for each signed-in request. They are not
+cached. A cache would bring back the window in which a closed account or an
+ended session still works.
+
 ## What is not a guard here
 
 "This user or an admin" rules are checked in the services, not in a guard.
@@ -121,4 +170,11 @@ before a row that belongs to someone else answers 403. See
 - `test/route-access.e2e-spec.ts` reads every route from the controllers and
   checks, over HTTP: 401 with no token on every route that is not public, and
   403 with the wrong role on every route limited to a role.
+- `test/tokens.e2e-spec.ts` proves the session check: an access token stops
+  on the next request once its session is signed out, reused, or past its end.
+- `test/authorization.e2e-spec.ts` sends tokens someone has tampered with: a
+  role written into the payload, another member's id, no signature, the wrong
+  algorithm. It also demotes an admin and checks the same token gets 403.
+- `test/passwords.e2e-spec.ts` and `test/password-reset.e2e-spec.ts` check
+  that an older token is refused after the password changes.
 - `test/rate-limit.e2e-spec.ts` covers the 429s.
