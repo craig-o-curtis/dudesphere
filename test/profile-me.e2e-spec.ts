@@ -6,6 +6,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { signIn } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
 // Needs the databases running and the admin user seeded (`pnpm seed:run`).
@@ -29,12 +30,9 @@ describe("GET /profiles/me (e2e)", () => {
     await app.close();
   });
 
-  async function login(): Promise<{ token: string; userId: number }> {
-    const response = await request(app.getHttpServer())
-      .post("/auth/login")
-      .send({ identifier: process.env.EMAIL, password: process.env.PASSWORD })
-      .expect(201);
-    return response.body as { token: string; userId: number };
+  // The seeded admin, by EMAIL and PASSWORD from .env.
+  function login(): Promise<{ token: string; userId: number }> {
+    return signIn(app, process.env.EMAIL ?? "", process.env.PASSWORD ?? "");
   }
 
   it("returns the profile of the user who logged in", async () => {
@@ -73,7 +71,7 @@ describe("GET /profiles/me (e2e)", () => {
 
   it("returns 401 when the password is wrong", async () => {
     await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: process.env.EMAIL, password: "not-the-password" })
       .expect(401);
   });

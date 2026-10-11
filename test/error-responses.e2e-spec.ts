@@ -78,10 +78,10 @@ describe("Error responses (e2e)", () => {
   it("404 names the resource", async () => {
     // GET /users/:id needs a token, so log in first.
     const login = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: credentials.email, password: credentials.password })
-      .expect(201);
-    const { token } = login.body as { token: string };
+      .expect(200);
+    const { accessToken: token } = login.body as { accessToken: string };
 
     // 2147483647 is the largest id the DTO accepts, so it passes validation
     // and reaches the service, which has no such row.

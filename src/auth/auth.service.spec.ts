@@ -1,5 +1,4 @@
 import { UnauthorizedException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
@@ -10,17 +9,12 @@ describe("AuthService", () => {
   let service: AuthService;
 
   const usersService = { createUser: vi.fn(), getUserByCredentials: vi.fn() };
-  const jwtService = { signAsync: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        { provide: UsersService, useValue: usersService },
-        { provide: JwtService, useValue: jwtService },
-      ],
+      providers: [AuthService, { provide: UsersService, useValue: usersService }],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
@@ -65,56 +59,36 @@ describe("AuthService", () => {
 
       await expect(service.signup(signupDto)).rejects.toBe(taken);
     });
-
-    it("signs no token", async () => {
-      usersService.createUser.mockResolvedValue({ id: 25 });
-
-      await service.signup(signupDto);
-
-      expect(jwtService.signAsync).not.toHaveBeenCalled();
-    });
   });
 
-  describe("login", () => {
-    it("signs a token that carries the user's own id", async () => {
-      usersService.getUserByCredentials.mockResolvedValue({
-        id: 25,
-        username: "walter",
-        role: "user",
-      });
-      jwtService.signAsync.mockResolvedValue("signed.jwt.token");
+  // The first half of signing in. It checks who the caller is and hands the
+  // member back. Making the tokens is TokenService's job.
+  describe("verifyCredentials", () => {
+    const walter = { id: 25, username: "walter", role: "user" };
 
-      const result = await service.login({ identifier: "w@x.com", password: "secret1" });
+    it("returns the member when the identifier and password match", async () => {
+      usersService.getUserByCredentials.mockResolvedValue(walter);
+
+      const user = await service.verifyCredentials({ identifier: "w@x.com", password: "secret1" });
 
       expect(usersService.getUserByCredentials).toHaveBeenCalledWith("w@x.com", "secret1");
-      // `sub` is what JwtAuthGuard later reads back as the logged-in user.
-      // No role: the guard reads that from the database on every request.
-      expect(jwtService.signAsync).toHaveBeenCalledWith({
-        sub: 25,
-        username: "walter",
-      });
-      expect(result).toEqual({ token: "signed.jwt.token", userId: 25, name: "walter" });
+      expect(user).toBe(walter);
     });
 
     // Which column to search is UsersService's choice. AuthService hands the
     // identifier over as it came.
     it("passes a username on in the same way as an email", async () => {
-      usersService.getUserByCredentials.mockResolvedValue({
-        id: 25,
-        username: "walter",
-        role: "user",
-      });
-      jwtService.signAsync.mockResolvedValue("signed.jwt.token");
+      usersService.getUserByCredentials.mockResolvedValue(walter);
 
-      await service.login({ identifier: "walter", password: "secret1" });
+      await service.verifyCredentials({ identifier: "walter", password: "secret1" });
 
       expect(usersService.getUserByCredentials).toHaveBeenCalledWith("walter", "secret1");
     });
 
-    it("throws 401 and signs nothing when the identifier or password is wrong", async () => {
+    it("throws 401 when the identifier or password is wrong", async () => {
       usersService.getUserByCredentials.mockResolvedValue(null);
 
-      const attempt = service.login({ identifier: "w@x.com", password: "wrong-one" });
+      const attempt = service.verifyCredentials({ identifier: "w@x.com", password: "wrong-one" });
 
       await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
       // One message whatever was wrong, so it names no field.
@@ -122,8 +96,6 @@ describe("AuthService", () => {
         message: "Invalid username, email or password",
         errorCode: "BAD_CREDENTIALS",
       });
-
-      expect(jwtService.signAsync).not.toHaveBeenCalled();
     });
   });
 });

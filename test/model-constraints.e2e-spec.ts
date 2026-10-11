@@ -51,10 +51,10 @@ describe("Model constraints (e2e)", () => {
 
     const { sent } = await signUp(app);
     const login = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: sent.email, password: sent.password })
-      .expect(201);
-    token = (login.body as { token: string }).token;
+      .expect(200);
+    token = (login.body as { accessToken: string }).accessToken;
   });
 
   afterAll(async () => {

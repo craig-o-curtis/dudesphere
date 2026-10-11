@@ -28,7 +28,7 @@ describe("Rate limiting (e2e)", () => {
 
   function login(identifier: string, withPassword = "not-the-password") {
     return request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier, password: withPassword });
   }
 
