@@ -56,19 +56,21 @@ describe("createDevToken", () => {
   });
 
   describe("what is signed", () => {
-    // The same claims login signs, built by the same function, so the guards
-    // cannot tell a dev token from a login token.
-    it("is the payload login would sign for that user", async () => {
+    // Built by the same function that builds a sign-in token's claims. One
+    // thing differs: a sign-in token also names its session, in `sid`, and a
+    // dev token belongs to none. The guard skips its session check for it.
+    it("is the payload sign-in would sign for that user, with no session", async () => {
       getUserByIdentifier.mockResolvedValue(walter);
 
       await createDevToken(jwtService, usersService, { ...development, identifier: "walter" });
 
       expect(signAsync).toHaveBeenCalledTimes(1);
       expect(signAsync.mock.calls[0][0]).toEqual(jwtPayloadFor(walter));
+      // No role. JwtAuthGuard reads it from the database on each request,
+      // so a 30-day token cannot keep a role its member has lost.
       expect(signAsync.mock.calls[0][0]).toEqual({
         sub: 25,
         username: "walter",
-        role: UserRole.USER,
       });
     });
 

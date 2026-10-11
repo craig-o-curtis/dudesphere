@@ -6,7 +6,11 @@ export default registerAs("auth", () => {
   const env = validateEnv(process.env);
   return {
     secret: env.JWT_SECRET,
+    // All three lifetimes are in seconds: the access token, one refresh
+    // token, and a whole session.
     expiresIn: env.JWT_EXPIRES_IN,
+    refreshExpiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
+    sessionExpiresIn: env.SESSION_EXPIRES_IN,
     audience: env.JWT_AUDIENCE,
     issuer: env.JWT_ISSUER,
     // For the password reset email: where its link points, and how long the

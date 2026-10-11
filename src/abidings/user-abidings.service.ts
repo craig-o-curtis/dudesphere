@@ -1,9 +1,8 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { getUtcNow } from "@northguild/gmt";
 import { Model } from "mongoose";
 
-import { ErrorCode } from "../shared/error-codes.js";
+import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 
 // Soft-deletes and restores all of one user's abidings. UsersService calls
@@ -22,14 +21,10 @@ export class UserAbidingsService {
   constructor(@InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>) {}
 
   async softDeleteForUser(userId: number): Promise<void> {
-    // getUtcNow returns "" on failure. Throwing rolls back the user delete
-    // instead of hiding the abidings with a blank timestamp.
-    const deletedAt = getUtcNow();
-    if (!deletedAt) {
-      throw new ServiceUnavailableException("Could not read the current UTC time", {
-        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
-      });
-    }
+    // utcNowOrThrow throws a 503 when the clock cannot be read. Throwing rolls
+    // back the user delete instead of hiding the abidings with a blank
+    // timestamp.
+    const deletedAt = utcNowOrThrow();
     // deletedAt: null so abidings already deleted keep their first timestamp.
     await this.abidingModel.updateMany({ userId, deletedAt: null }, { $set: { deletedAt } }).exec();
   }

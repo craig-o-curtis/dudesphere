@@ -161,7 +161,7 @@ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test &&
 ```
 
 - **Versions** are pinned in two places: `.node-version` sets the Node version, and `packageManager` in `package.json` sets the pnpm version. Both CI and fnm read `.node-version`, so one file covers local and CI. To upgrade either, change it there.
-- **E2E tests (`test:e2e`) run in CI against real databases.** Both are service containers that start empty and are thrown away when the job ends. To run them locally you need `docker compose up -d` and `pnpm seed:run` first. Locally they write to your dev databases and delete what they wrote: see "End-to-End Tests" in [DEVELOPMENT.md](DEVELOPMENT.md).
+- **E2E tests (`test:e2e`) run in CI against real databases.** Both are service containers that start empty and are thrown away when the job ends. To run them locally you need `docker compose up -d` and `pnpm migration:run` first. Locally they write to your dev databases and delete what they wrote: see "End-to-End Tests" in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **No secrets are needed.** The databases exist only for the length of the run, and every value the e2e job sets, including the Nest Observe keys, is a placeholder written in the workflow file.
 
 ## API Endpoints
@@ -208,18 +208,21 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint              | Description                      |
-| ------ | --------------------- | -------------------------------- |
-| POST   | /auth/signup          | Sign up                          |
-| POST   | /auth/login           | Log in with username or email    |
-| POST   | /auth/forgot-password | Email a password reset link      |
-| POST   | /auth/reset-password  | Set a new password with the link |
+| Method | Endpoint               | Description                         |
+| ------ | ---------------------- | ----------------------------------- |
+| POST   | /auth/signup           | Sign up                             |
+| POST   | /auth/token            | Sign in with username or email      |
+| POST   | /auth/token/refresh    | Swap a refresh token for a new pair |
+| POST   | /auth/token/revoke     | Sign out this device                |
+| POST   | /auth/token/revoke-all | Sign out every device               |
+| POST   | /auth/forgot-password  | Email a password reset link         |
+| POST   | /auth/reset-password   | Set a new password with the link    |
 
 Sign up with `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`. The username is for logging in and only you and admins see it. The display name is what other members see, on your profile and on your abidings. It must be unique, and letter case does not count.
 
 To try a route by hand, in Thunder Client or with curl, see [Try the API by hand](DEVELOPMENT.md#try-the-api-by-hand). `pnpm dev:token` prints a token for local use.
 
-Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
+Sign in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces. The answer is `{ accessToken, refreshToken, expiresIn }`: the access token lasts 15 minutes, and the refresh token is swapped, once, for a new pair. [context/overview.md](context/overview.md) has the full rules.
 
 Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.
 

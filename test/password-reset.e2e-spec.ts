@@ -9,6 +9,7 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { MailProvider, type MailMessage } from "./../src/mail/mail.provider.js";
+import { bearer, signedAMinuteEarlier } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp as signUpUser } from "./sign-up.js";
 
@@ -61,7 +62,7 @@ describe("Password reset (e2e)", () => {
   }
 
   function login(identifier: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/login").send({ identifier, password });
+    return request(app.getHttpServer()).post("/auth/token").send({ identifier, password });
   }
 
   function emailsTo(address: string): MailMessage[] {
@@ -155,10 +156,10 @@ describe("Password reset (e2e)", () => {
 
     it("sends nothing to a user who closed their account", async () => {
       const closed = await signUp();
-      const { body: session } = await login(closed.email, oldPassword).expect(201);
+      const { body: session } = await login(closed.email, oldPassword).expect(200);
       await request(app.getHttpServer())
         .delete("/users/me")
-        .set({ authorization: `Bearer ${(session as { token: string }).token}` })
+        .set({ authorization: `Bearer ${(session as { accessToken: string }).accessToken}` })
         .expect(204);
 
       await forgot(closed.email).expect(202);
@@ -184,9 +185,55 @@ describe("Password reset (e2e)", () => {
 
       expect(response.text).toBe("");
       await login(user.email, oldPassword).expect(401);
-      await login(user.email, newPassword).expect(201);
+      await login(user.email, newPassword).expect(200);
       // By username too: it is the same account.
-      await login(user.username, newPassword).expect(201);
+      await login(user.username, newPassword).expect(200);
+    });
+
+    // A member resets a password because they forgot it, or because someone
+    // else has it. Either way, whoever was signed in before is signed out.
+    it("ends the access tokens that were signed before the reset", async () => {
+      const user = await signUp();
+      const { body: session } = await login(user.email, oldPassword).expect(200);
+      const earlier = await signedAMinuteEarlier(
+        app,
+        (session as { accessToken: string }).accessToken,
+      );
+      await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
+
+      await reset(await requestToken(user.email)).expect(204);
+
+      const refused = await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer(earlier))
+        .expect(401);
+      expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+
+      const { body: fresh } = await login(user.email, newPassword).expect(200);
+      await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer((fresh as { accessToken: string }).accessToken))
+        .expect(200);
+    });
+
+    // The sessions go with the old password, so a refresh token from before
+    // the reset cannot be swapped for a new pair.
+    it("ends the sessions that were open before the reset", async () => {
+      const user = await signUp();
+      const { body: session } = await login(user.email, oldPassword).expect(200);
+      const { accessToken, refreshToken } = session as {
+        accessToken: string;
+        refreshToken: string;
+      };
+
+      await reset(await requestToken(user.email)).expect(204);
+
+      await request(app.getHttpServer()).get("/users/me").set(bearer(accessToken)).expect(401);
+      const refused = await request(app.getHttpServer())
+        .post("/auth/token/refresh")
+        .send({ refreshToken })
+        .expect(401);
+      expect(refused.body).toMatchObject({ errorCode: "REFRESH_TOKEN_INVALID" });
     });
 
     it("stores the new password as a bcrypt hash, as sign-up does", async () => {
@@ -211,7 +258,7 @@ describe("Password reset (e2e)", () => {
 
       expect(body).toEqual(refused);
       // The second try changed nothing.
-      await login(user.email, newPassword).expect(201);
+      await login(user.email, newPassword).expect(200);
     });
 
     it("leaves no token behind once it is used", async () => {
@@ -245,7 +292,7 @@ describe("Password reset (e2e)", () => {
       const { body } = await reset(token).expect(400);
 
       expect(body).toEqual(refused);
-      await login(user.email, oldPassword).expect(201);
+      await login(user.email, oldPassword).expect(200);
     });
 
     it("asking again kills the earlier link", async () => {
@@ -261,10 +308,10 @@ describe("Password reset (e2e)", () => {
     it("400 for a user who closed their account after the email was sent", async () => {
       const user = await signUp();
       const token = await requestToken(user.email);
-      const { body: session } = await login(user.email, oldPassword).expect(201);
+      const { body: session } = await login(user.email, oldPassword).expect(200);
       await request(app.getHttpServer())
         .delete("/users/me")
-        .set({ authorization: `Bearer ${(session as { token: string }).token}` })
+        .set({ authorization: `Bearer ${(session as { accessToken: string }).accessToken}` })
         .expect(204);
 
       const { body } = await reset(token).expect(400);
@@ -292,7 +339,7 @@ describe("Password reset (e2e)", () => {
       const token = await requestToken(user.email);
 
       await reset(token, "short").expect(400);
-      await login(user.email, oldPassword).expect(201);
+      await login(user.email, oldPassword).expect(200);
     });
 
     // The stub this route replaced took an email and no token. With that
@@ -308,11 +355,7 @@ describe("Password reset (e2e)", () => {
       expect((body as { message: string[] }).message).toEqual(
         expect.arrayContaining(["property email should not exist"]),
       );
-      await login(user.email, oldPassword).expect(201);
+      await login(user.email, oldPassword).expect(200);
     });
-  });
-
-  it("POST /auth/logout is gone until refresh tokens exist", async () => {
-    await request(app.getHttpServer()).post("/auth/logout").expect(404);
   });
 });

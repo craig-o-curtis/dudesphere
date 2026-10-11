@@ -25,16 +25,17 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 
 ### PostgreSQL — `user` table
 
-| Column      | Type                   | Description                                                                                         |
-| ----------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `id`        | serial PK              | Auto-increment                                                                                      |
-| `username`  | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only |
-| `email`     | citext UNIQUE          | Up to 100 characters. A login name                                                                  |
-| `password`  | varchar(255)           | bcrypt hash; never returned                                                                         |
-| `role`      | enum `admin` or `user` | Defaults to `user`                                                                                  |
-| `createdAt` | timestamptz            | Set by the database when the row is created                                                         |
-| `updatedAt` | timestamptz            | Moved by TypeORM on every update                                                                    |
-| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                                            |
+| Column              | Type                   | Description                                                                                                |
+| ------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`                | serial PK              | Auto-increment                                                                                             |
+| `username`          | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only        |
+| `email`             | citext UNIQUE          | Up to 100 characters. A login name                                                                         |
+| `password`          | varchar(255)           | bcrypt hash; never returned                                                                                |
+| `role`              | enum `admin` or `user` | Defaults to `user`                                                                                         |
+| `passwordChangedAt` | timestamptz, nullable  | When the password was last changed or reset. Null means never. An access token signed before it is refused |
+| `createdAt`         | timestamptz            | Set by the database when the row is created                                                                |
+| `updatedAt`         | timestamptz            | Moved by TypeORM on every update                                                                           |
+| `deletedAt`         | timestamptz, nullable  | Soft delete. Null means the user is live                                                                   |
 
 ### PostgreSQL — `password_reset_token` table
 
@@ -49,6 +50,27 @@ One row for each password reset link that can still be used.
 | `createdAt` | timestamptz        | Set by the database when the row is created               |
 
 A row is deleted when its link is used, so there is no "used" column.
+
+### PostgreSQL — `refresh_token` table
+
+One row for each refresh token handed out. The rows of one sign-in share a
+`familyId`, and that family is the session.
+[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) explains
+how they are used.
+
+| Column            | Type                  | Description                                           |
+| ----------------- | --------------------- | ----------------------------------------------------- |
+| `id`              | varchar(64) PK        | SHA-256 of the refresh token. The token is not stored |
+| `familyId`        | uuid                  | The session. Indexed together with `revoked`          |
+| `userId`          | int, FK to `user`     | `ON DELETE CASCADE`. Indexed                          |
+| `expiresAt`       | timestamptz           | This one token stops working at this instant          |
+| `familyExpiresAt` | timestamptz           | The session ends at this instant. Indexed             |
+| `usedAt`          | timestamptz, nullable | When the token was swapped for its successor          |
+| `revoked`         | boolean               | True once the session was ended on purpose            |
+| `createdAt`       | timestamptz           | Set by the database when the row is created           |
+
+Rows are kept until their session's end, then deleted the next time anyone
+signs in or refreshes.
 
 ### PostgreSQL — `profile` table
 
@@ -143,8 +165,8 @@ Costs accepted with this design:
 
 ## API Endpoints
 
-Every route needs a token unless it is marked public. A token comes from
-`POST /auth/login`.
+Every route needs an access token unless it is marked public. An access token
+comes from `POST /auth/token`.
 
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
@@ -157,13 +179,59 @@ full shape.
 | Method | Endpoint                | Access | Description                             |
 | ------ | ----------------------- | ------ | --------------------------------------- |
 | POST   | `/auth/signup`          | Public | Sign up. Creates the user and a profile |
-| POST   | `/auth/login`           | Public | Log in and get a JWT token              |
 | POST   | `/auth/forgot-password` | Public | Email a password reset link. Always 202 |
 | POST   | `/auth/reset-password`  | Public | Set a new password with the link. 204   |
 
-There is no logout route yet. A login token is a signed JWT the server does not
-store, so there is nothing for the server to end. Logout comes with refresh
-tokens.
+### Tokens and sessions
+
+| Method | Endpoint                 | Access | Description                                        |
+| ------ | ------------------------ | ------ | -------------------------------------------------- |
+| POST   | `/auth/token`            | Public | Sign in with `{ identifier, password }`. 200       |
+| POST   | `/auth/token/refresh`    | Public | Swap `{ refreshToken }` for a new pair. 200        |
+| POST   | `/auth/token/revoke`     | Public | Sign out this device, with `{ refreshToken }`. 204 |
+| POST   | `/auth/token/revoke-all` | Token  | Sign out every device of the caller. 204           |
+
+Signing in and refreshing both answer
+`{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`. The paths
+and the keys are the ones the NestJS docs use.
+[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) walks
+through each flow step by step, with the reasons for the design.
+
+A member holds two tokens:
+
+- **The access token** is a JWT. It goes with every request as
+  `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
+  that lifetime in seconds. It holds the member's id, their username and the
+  id of their session, and nothing else.
+- **The refresh token** is 43 random characters, not a JWT. It goes to two
+  routes only, `POST /auth/token/refresh` and `POST /auth/token/revoke`, and
+  lasts 7 days. The database keeps a hash
+  of it, never the token.
+
+One sign-in is one session. A session lasts as long as the member keeps
+refreshing, and 30 days at most.
+
+**A refresh token works once.** Swapping it returns a new pair, and the client
+keeps the new refresh token. A client must send one refresh at a time for a
+session. If a refresh token is used a second time, two parties hold it, so the
+whole session ends and the member signs in again.
+
+On every request the server reads the member and their session from the
+database. So the role is always the current one, and a client that needs it
+asks `GET /users/me`. The same read is why a session ends at once, access token
+included, with 401 `TOKEN_INVALID`, when:
+
+- the member signs out, on that device or on every device;
+- one of the session's refresh tokens is used twice;
+- the password is changed or reset. Every session of the member ends, and they
+  sign in again with the new password;
+- the account is closed, by the member or by an admin.
+
+A refresh token that cannot be swapped gets 401 `REFRESH_TOKEN_INVALID`,
+whatever the reason. The client sends the member to sign in.
+
+A member who is no longer an admin gets 403 on admin routes from the next
+request, with the same token.
 
 The sign-up body is
 `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`.
@@ -203,15 +271,14 @@ response does not say which usernames and emails have an account.
 `MAIL_*` defaults send to the Mailpit container, which shows every email at
 http://localhost:8025 and delivers none.
 
-A reset does not end a login token that is already out. It stays good until it
-expires, an hour by default. That closes when refresh tokens arrive.
+A reset ends every session of the member, the same as a password change does.
 
 ### Rate limits
 
 | Route                        | Limit           | Counted per                |
 | ---------------------------- | --------------- | -------------------------- |
 | Every route                  | 100 a minute    | IP address                 |
-| `POST /auth/login`           | 5 in 15 minutes | identifier and IP together |
+| `POST /auth/token`           | 5 in 15 minutes | identifier and IP together |
 | `POST /auth/forgot-password` | 3 in 15 minutes | email and IP together      |
 
 A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
@@ -300,11 +367,11 @@ so a member who changes it sees the new one on their old abidings at once.
 
 - [x] PostgreSQL + MongoDB via Docker Compose
 - [x] User CRUD with roles (admin seeded)
-- [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
+- [x] JWT auth: sign up with `POST /auth/signup`, sign in with `POST /auth/token`
       by username or email
 - [x] Rate limiting on every route, tighter on login
 - [x] Forgot password: a reset link by email
-- [ ] Refresh tokens and logout
+- [x] Refresh tokens, sessions and sign-out
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)

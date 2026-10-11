@@ -30,7 +30,7 @@ describe("Login (e2e)", () => {
 
   function login(identifier: unknown, withPassword: string = password) {
     return request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier, password: withPassword });
   }
 
@@ -68,11 +68,22 @@ describe("Login (e2e)", () => {
       ["the email with a space after it", () => `${email} `],
       ["the username with spaces around it", () => `  ${username}  `],
     ])("with %s", async (_what, identifier) => {
-      const { body } = await login(identifier()).expect(201);
+      const { body } = await login(identifier()).expect(200);
 
-      // `name` is the username as it was typed at sign up, whatever casing
-      // the caller logged in with.
-      expect(body).toEqual({ token: expect.any(String), userId, name: username });
+      // The answer says nothing about the member. A client asks GET /users/me.
+      // test/tokens.e2e-spec.ts covers the tokens themselves.
+      expect(body).toEqual({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        expiresIn: expect.any(Number),
+      });
+
+      // And the token is that member's, whatever casing the caller typed.
+      const me = await request(app.getHttpServer())
+        .get("/users/me")
+        .set({ authorization: `Bearer ${(body as { accessToken: string }).accessToken}` })
+        .expect(200);
+      expect(me.body).toMatchObject({ id: userId, username });
     });
   });
 
@@ -115,7 +126,7 @@ describe("Login (e2e)", () => {
   describe("400 for a body that is not a login", () => {
     it("the old shape, with email in place of identifier", async () => {
       const { body } = await request(app.getHttpServer())
-        .post("/auth/login")
+        .post("/auth/token")
         .send({ email, password })
         .expect(400);
 
@@ -131,7 +142,7 @@ describe("Login (e2e)", () => {
       ["no password", { identifier: email }],
       ["a password longer than 72 bytes", { identifier: email, password: "a".repeat(73) }],
     ])("%s", async (_what, body) => {
-      await request(app.getHttpServer()).post("/auth/login").send(body).expect(400);
+      await request(app.getHttpServer()).post("/auth/token").send(body).expect(400);
     });
   });
 
@@ -172,11 +183,11 @@ describe("Login (e2e)", () => {
 
     // The same rule on the way to changing a username later.
     it("400 when a user tries to change their username to one with an @", async () => {
-      const { body: session } = await login(email).expect(201);
+      const { body: session } = await login(email).expect(200);
 
       await request(app.getHttpServer())
         .patch("/users/me")
-        .set({ authorization: `Bearer ${(session as { token: string }).token}` })
+        .set({ authorization: `Bearer ${(session as { accessToken: string }).accessToken}` })
         .send({ username: `e2e-${tag}@x.com` })
         .expect(400);
     });

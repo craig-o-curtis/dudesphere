@@ -6,10 +6,16 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { UserRole } from "./../src/users/user.entity.js";
+import { signedInAs } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 
-// Needs the databases running and the admin user seeded (`pnpm seed:run`).
-// It logs in as the admin from .env and only reads data.
+// Needs the databases running. It signs up one throwaway e2e- member and
+// reads their profile. test/global-setup.ts deletes them when the run ends.
+//
+// It used to sign in as the seeded admin. Every sign-in saves a refresh
+// token row, and the admin is not an e2e- user, so the cleanup never removed
+// that row. A member of its own leaves nothing behind.
 describe("GET /profiles/me (e2e)", () => {
   let app: INestApplication<App>;
 
@@ -29,16 +35,8 @@ describe("GET /profiles/me (e2e)", () => {
     await app.close();
   });
 
-  async function login(): Promise<{ token: string; userId: number }> {
-    const response = await request(app.getHttpServer())
-      .post("/auth/login")
-      .send({ identifier: process.env.EMAIL, password: process.env.PASSWORD })
-      .expect(201);
-    return response.body as { token: string; userId: number };
-  }
-
-  it("returns the profile of the user who logged in", async () => {
-    const { token, userId } = await login();
+  it("returns the profile of the member who signed in", async () => {
+    const { token, userId } = await signedInAs(app, UserRole.USER);
 
     const response = await request(app.getHttpServer())
       .get("/profiles/me")
@@ -49,16 +47,15 @@ describe("GET /profiles/me (e2e)", () => {
   });
 
   // The user comes from the token, not from a fixed id. A token for a user
-  // with no profile must not fall back to someone else's.
-  it("returns 404 for a token whose user has no profile", async () => {
-    const token = await app
-      .get(JwtService)
-      .signAsync({ sub: 2_000_000_000, username: "nobody", role: "user" });
+  // who does not exist must not fall back to someone else's profile. The
+  // guard looks the user up, finds nobody, and refuses the token.
+  it("returns 401 for a token whose user does not exist", async () => {
+    const token = await app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "nobody" });
 
     await request(app.getHttpServer())
       .get("/profiles/me")
       .set("Authorization", `Bearer ${token}`)
-      .expect(404);
+      .expect(401);
   });
 
   it("returns 401 without a token", async () => {
@@ -69,13 +66,6 @@ describe("GET /profiles/me (e2e)", () => {
     await request(app.getHttpServer())
       .get("/profiles/me")
       .set("Authorization", "Bearer MY_TOKEN")
-      .expect(401);
-  });
-
-  it("returns 401 when the password is wrong", async () => {
-    await request(app.getHttpServer())
-      .post("/auth/login")
-      .send({ identifier: process.env.EMAIL, password: "not-the-password" })
       .expect(401);
   });
 });

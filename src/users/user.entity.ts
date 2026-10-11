@@ -5,6 +5,7 @@ import { Profile } from "../profiles/profile.entity.js";
 import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
 import { SoftDeleteUtcColumn } from "../shared/decorators/soft-delete-utc-column.decorator.js";
 import { UpdateUtcColumn } from "../shared/decorators/update-utc-column.decorator.js";
+import { UtcColumn } from "../shared/decorators/utc-column.decorator.js";
 
 export enum UserRole {
   ADMIN = "admin",
@@ -44,6 +45,17 @@ export class User {
 
   @Column({ type: "simple-enum", enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  // When the password was last changed or reset. Null for a member who still
+  // has the password they signed up with.
+  //
+  // An access token issued before this moment is refused, so changing a
+  // password signs out every device that was signed in with the old one,
+  // including one a thief is using. UsersService.updateUser sets it and
+  // UsersService.getUserForToken checks it.
+  @UtcColumn({ nullable: true })
+  @Exclude()
+  passwordChangedAt: string | null;
 
   @OneToOne(() => Profile, (profile) => profile.user) // one-to-one relation with Profile entity, Profile is the owner of the relation
   // THe SQL equivalent here is `FOREIGN KEY (profileId) REFERENCES profile(id) ON DELETE CASCADE`

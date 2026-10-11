@@ -33,13 +33,18 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/login with a username or email, and a password.
-  //   2. Backend validates credentials and returns a signed JWT token.
-  //   3. Frontend stores the token and sends it on every protected request:
-  //        Authorization: Bearer <token>
-  //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
-  //      then populates request.user with { userId, username, role }.
+  //   1. Frontend calls POST /auth/token with a username or email, and a password.
+  //   2. Backend checks the credentials and returns an access token (a
+  //      signed JWT) and a refresh token.
+  //   3. Frontend stores both and sends the access token on every protected
+  //      request:
+  //        Authorization: Bearer <accessToken>
+  //   4. JwtAuthGuard verifies the token's signature and expiry, then reads
+  //      the member and their session from the database, and populates
+  //      request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
+  //   6. When the access token runs out, the frontend swaps the refresh
+  //      token for a new pair at POST /auth/token/refresh.
   @Auth()
   @Get("me")
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {

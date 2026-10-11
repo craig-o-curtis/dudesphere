@@ -5,9 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, IsNull, Not, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository, type UpdateResult } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
@@ -21,11 +22,29 @@ import {
 import type { AuthUser } from "../shared/guards/auth-user.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
+import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { User, UserRole } from "./user.entity.js";
+
+// For getUserForToken. True for a user whose password has never changed, and
+// for a token signed in the same second as the change or later. `issuedAt`
+// is in whole seconds, so one second is added before comparing.
+const TOKEN_NOT_OLDER_THAN_PASSWORD = `(
+  user.passwordChangedAt IS NULL
+  OR user.passwordChangedAt < to_timestamp(:issuedAt) + interval '1 second'
+)`;
+
+/**
+ * A member whose password has just been checked, and the stored hash it was
+ * checked against. See UsersService.getUserByCredentials.
+ */
+export interface CheckedCredentials {
+  user: UserResponseDto;
+  passwordHash: string;
+}
 
 @Injectable()
 export class UsersService {
@@ -36,6 +55,7 @@ export class UsersService {
     private readonly userAbidingsService: UserAbidingsService,
     private readonly hashingProvider: HashingProvider,
     private readonly paginationProvider: PaginationProvider,
+    private readonly refreshTokens: RefreshTokensService,
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
@@ -62,6 +82,60 @@ export class UsersService {
       throw new NotFoundException(`User #${id} not found`);
     }
     return this.toResponseDto(user, user.profile);
+  }
+
+  // For JwtAuthGuard, which calls this on every signed-in request. `id` is
+  // the user id from a token that has already passed verification, and
+  // `issuedAt` is when that token was signed, in seconds since 1970 (its
+  // `iat` claim).
+  //
+  // Returns who that user is now, or null when the token should be refused:
+  //
+  // - There is no such user. A soft-deleted user is not found, so closing an
+  //   account ends its tokens at once.
+  // - The password was changed or reset after the token was signed. Whoever
+  //   holds that token logged in with the old password.
+  //
+  // The username and the role are the current ones, so a demoted admin is a
+  // plain user on their very next request.
+  //
+  // Selects three columns and joins nothing: this runs far more often than
+  // any other query in the app.
+  async getUserForToken(id: number, issuedAt: number): Promise<AuthUser | null> {
+    const user = await this.usersRepository
+      .createQueryBuilder("user")
+      .select(["user.id", "user.username", "user.role"])
+      .where("user.id = :id", { id })
+      // The query builder already leaves soft-deleted rows out. Said here as
+      // well, because this line is the reason a closed account's token stops.
+      .andWhere("user.deletedAt IS NULL")
+      // A token only records the second it was signed in, not the
+      // millisecond. So a token signed in the same second as the password
+      // change is let through: it is far more often the member logging in
+      // straight after a reset than an old token. Any token from an earlier
+      // second is refused. Postgres does the comparison, so there is no date
+      // arithmetic here.
+      .andWhere(TOKEN_NOT_OLDER_THAN_PASSWORD, { issuedAt })
+      .getOne();
+
+    return user ? { userId: user.id, username: user.username, role: user.role } : null;
+  }
+
+  // For TokenService.refresh, before it hands a new pair of tokens to
+  // whoever holds a refresh token. Who that member is now, or null when the
+  // account is closed or gone.
+  //
+  // No password check here, unlike getUserForToken. A password change ends
+  // the member's sessions in the same transaction that stores the new
+  // password, in updateUser, so a refresh token from before it is already
+  // refused.
+  async getLiveUser(id: number): Promise<AuthUser | null> {
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      select: { id: true, username: true, role: true },
+    });
+
+    return user ? { userId: user.id, username: user.username, role: user.role } : null;
   }
 
   // For GET /users/:id. `caller` is who is asking: an admin reads any user,
@@ -97,13 +171,18 @@ export class UsersService {
     return user ? this.toResponseDto(user) : null;
   }
 
-  // For login. `identifier` is a username or an email. Returns null for an
-  // unknown identifier and for a wrong password alike, so the caller can't
-  // tell which it was. A soft-deleted user is not found, so they can't log in.
+  // For signing in. `identifier` is a username or an email. Returns null for
+  // an unknown identifier and for a wrong password alike, so the caller can't
+  // tell which it was. A soft-deleted user is not found, so they can't sign
+  // in.
+  //
+  // With the member comes the stored hash their password was checked against.
+  // AuthService hands it straight back to credentialsStillHold below, and
+  // must do nothing else with it: it is never returned, logged or kept.
   async getUserByCredentials(
     identifier: string,
     password: string,
-  ): Promise<UserResponseDto | null> {
+  ): Promise<CheckedCredentials | null> {
     const user = await this.findByIdentifier(identifier);
     // The column holds a hash, so the two are compared by the hasher, never
     // with ===. For an unknown identifier user?.password is undefined, and
@@ -114,7 +193,34 @@ export class UsersService {
     if (!user || !matches) {
       return null;
     }
-    return this.toResponseDto(user);
+    return { user: this.toResponseDto(user), passwordHash: user.password };
+  }
+
+  // For signing in, straight after the session is started. True when the
+  // member's account is still open and `passwordHash` is still their stored
+  // hash: that is, when what getUserByCredentials checked is still true.
+  //
+  // It closes a gap of about a tenth of a second. Checking a password takes
+  // that long, on purpose. If the password is changed, or the account is
+  // closed, while a sign-in with the old password is being checked, that
+  // change ends the member's sessions before this sign-in has started its
+  // own. The new session would then outlive the change. AuthService asks
+  // here after it has the session, and ends it when the answer is no.
+  //
+  // The row is read with a share lock (FOR SHARE). A password change holds a
+  // lock on the row from its UPDATE until it commits, so this read waits for
+  // one that is in flight and then sees the new hash. Without the lock it
+  // could read the old hash a moment before the commit. A lock needs a
+  // transaction, which is the only reason for one here.
+  async credentialsStillHold(userId: number, passwordHash: string): Promise<boolean> {
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id: userId, password: passwordHash },
+        select: { id: true },
+        lock: { mode: "pessimistic_read" },
+      });
+      return user !== null;
+    });
   }
 
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -217,20 +323,56 @@ export class UsersService {
     // as on sign-up. update() below runs no entity hooks, so it is done here.
     // The hash goes into a new object, so the caller's DTO keeps what the
     // caller sent.
+    //
+    // A new password also stamps passwordChangedAt, which ends every login
+    // token signed before now. See getUserForToken. This is the one place a
+    // password is set after sign-up: updateMyUser, the admin's PATCH and the
+    // password reset all come through here.
     const { password, ...otherFields } = updateUserDto;
     const userFields =
       password === undefined
         ? otherFields
-        : { ...otherFields, password: await this.hashingProvider.hashPassword(password) };
+        : {
+            ...otherFields,
+            password: await this.hashingProvider.hashPassword(password),
+            passwordChangedAt: this.passwordChangedNow(),
+          };
 
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and
     // the caller still gets a 404 from getUserById below.
-    const result = await this.usersRepository.update({ id, deletedAt: IsNull() }, userFields);
+    const liveUser = { id, deletedAt: IsNull() };
+
+    if (password === undefined) {
+      this.assertFound(await this.usersRepository.update(liveUser, userFields), id);
+      return this.getUserById(id);
+    }
+
+    // A new password signs the member out everywhere: every session they
+    // have is ended, on the device that changed the password too. Whoever
+    // was signed in with the old password, the member or someone else, signs
+    // in again with the new one.
+    //
+    // One transaction for the two writes. If ending the sessions failed after
+    // the password was stored, the old refresh tokens would go on working,
+    // which is the one thing a password change must stop. Here either both
+    // happen or neither does, and the caller can simply try again.
+    //
+    // The user row is written first. That holds a lock on it until the
+    // commit, which credentialsStillHold waits on.
+    await this.dataSource.transaction(async (manager) => {
+      this.assertFound(await manager.update(User, liveUser, userFields), id);
+      await this.refreshTokens.revokeAllForUser(id, manager);
+    });
+    return this.getUserById(id);
+  }
+
+  // An update that matched no row means there is no such live user: a 404.
+  // Thrown inside the transaction above, it also rolls the transaction back.
+  private assertFound(result: UpdateResult, id: number): void {
     if (result.affected === 0) {
       throw new NotFoundException(`User #${id} not found`);
     }
-    return this.getUserById(id);
   }
 
   async deleteUser(id: number): Promise<void> {
@@ -255,9 +397,14 @@ export class UsersService {
         throw new NotFoundException(`User #${id} not found`);
       }
       await this.profilesService.softDeleteForUser(manager, id);
+      // A closed account has no sessions. In this transaction, so the account
+      // cannot be closed with its sessions left alive: if this fails, the
+      // account stays open and the caller tries again. The sessions stay
+      // ended if the account is restored, and the member signs in again.
+      await this.refreshTokens.revokeAllForUser(id, manager);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
-      // failure throws and rolls back the user and profile.
+      // failure throws and rolls back the user, the profile and the sessions.
       await this.userAbidingsService.softDeleteForUser(id);
     });
   }
@@ -279,10 +426,27 @@ export class UsersService {
         throw new NotFoundException(`Deleted user #${id} not found`);
       }
       await this.profilesService.restoreForUser(manager, id);
+      // An account comes back with no sessions, whatever it had when it was
+      // closed. deleteUser ended them already. This makes the same true of a
+      // session that slipped in around the delete, so nobody is signed in to
+      // a restored account until they sign in to it.
+      await this.refreshTokens.revokeAllForUser(id, manager);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });
     return this.getUserById(id);
+  }
+
+  // The moment a password change is recorded at. It comes from the app's
+  // clock, not the database's, because the app's clock is also what writes
+  // the `iat` of a token. Two clocks a second apart would refuse a member's
+  // new token straight after they reset their password.
+  //
+  // A password must not change without the stamp, or the old tokens would
+  // outlive it. utcNowOrThrow throws a 503 when the clock cannot be read, and
+  // nothing is written.
+  private passwordChangedNow(): string {
+    return utcNowOrThrow();
   }
 
   // The one place that decides whether an identifier is a username or an

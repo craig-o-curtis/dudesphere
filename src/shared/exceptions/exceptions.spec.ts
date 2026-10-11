@@ -10,10 +10,12 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 
+import { ClockUnavailableException } from "./clock-unavailable.exception.js";
 import { DatabaseFaultException } from "./database-fault.exception.js";
 import { DatabaseUnavailableException } from "./database-unavailable.exception.js";
 import { InvalidValueException } from "./invalid-value.exception.js";
 import { NotOwnerException } from "./not-owner.exception.js";
+import { RefreshTokenInvalidException } from "./refresh-token-invalid.exception.js";
 import { ResetTokenInvalidException } from "./reset-token-invalid.exception.js";
 import { TimeLimitExceededException } from "./time-limit-exceeded.exception.js";
 import { TokenMissingException } from "./token-missing.exception.js";
@@ -179,6 +181,36 @@ describe("the app's own exception classes", () => {
         status: 500,
         body: { statusCode: 500, message: "Internal server error" },
         cause,
+      },
+    ],
+    [
+      "ClockUnavailableException",
+      () => new ClockUnavailableException(),
+      {
+        parent: ServiceUnavailableException,
+        status: 503,
+        body: {
+          statusCode: 503,
+          message: "Could not read the current UTC time",
+          error: "Service Unavailable",
+          errorCode: "CLOCK_UNAVAILABLE",
+        },
+        errorCode: "CLOCK_UNAVAILABLE",
+      },
+    ],
+    [
+      "RefreshTokenInvalidException",
+      () => new RefreshTokenInvalidException(),
+      {
+        parent: UnauthorizedException,
+        status: 401,
+        body: {
+          statusCode: 401,
+          message: "Invalid or expired refresh token",
+          error: "Unauthorized",
+          errorCode: "REFRESH_TOKEN_INVALID",
+        },
+        errorCode: "REFRESH_TOKEN_INVALID",
       },
     ],
     [

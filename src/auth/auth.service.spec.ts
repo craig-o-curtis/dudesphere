@@ -1,16 +1,20 @@
 import { UnauthorizedException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { UsersService } from "../users/users.service.js";
 import { AuthService } from "./auth.service.js";
+import { TokenService } from "./token.service.js";
 
 describe("AuthService", () => {
   let service: AuthService;
 
-  const usersService = { createUser: vi.fn(), getUserByCredentials: vi.fn() };
-  const jwtService = { signAsync: vi.fn() };
+  const usersService = {
+    createUser: vi.fn(),
+    getUserByCredentials: vi.fn(),
+    credentialsStillHold: vi.fn(),
+  };
+  const tokenService = { issue: vi.fn(), revoke: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -19,7 +23,7 @@ describe("AuthService", () => {
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
-        { provide: JwtService, useValue: jwtService },
+        { provide: TokenService, useValue: tokenService },
       ],
     }).compile();
 
@@ -65,56 +69,45 @@ describe("AuthService", () => {
 
       await expect(service.signup(signupDto)).rejects.toBe(taken);
     });
-
-    it("signs no token", async () => {
-      usersService.createUser.mockResolvedValue({ id: 25 });
-
-      await service.signup(signupDto);
-
-      expect(jwtService.signAsync).not.toHaveBeenCalled();
-    });
   });
 
-  describe("login", () => {
-    it("signs a token that carries the user's own id", async () => {
-      usersService.getUserByCredentials.mockResolvedValue({
-        id: 25,
-        username: "walter",
-        role: "user",
-      });
-      jwtService.signAsync.mockResolvedValue("signed.jwt.token");
+  describe("signIn", () => {
+    const walter = { id: 25, username: "walter", role: "user" };
+    const checked = { user: walter, passwordHash: "hashed(secret1)" };
+    const pair = { accessToken: "a.b.c", refreshToken: "r".repeat(43), expiresIn: 900 };
 
-      const result = await service.login({ identifier: "w@x.com", password: "secret1" });
+    beforeEach(() => {
+      usersService.getUserByCredentials.mockResolvedValue(checked);
+      usersService.credentialsStillHold.mockResolvedValue(true);
+      tokenService.issue.mockResolvedValue(pair);
+    });
 
-      expect(usersService.getUserByCredentials).toHaveBeenCalledWith("w@x.com", "secret1");
-      // `sub` is what JwtAuthGuard later reads back as the logged-in user.
-      expect(jwtService.signAsync).toHaveBeenCalledWith({
-        sub: 25,
-        username: "walter",
-        role: "user",
+    it("checks the credentials, starts a session and returns its tokens", async () => {
+      const result = await service.signIn({
+        identifier: "walter@example.com",
+        password: "secret1",
       });
-      expect(result).toEqual({ token: "signed.jwt.token", userId: 25, name: "walter" });
+
+      expect(usersService.getUserByCredentials).toHaveBeenCalledWith(
+        "walter@example.com",
+        "secret1",
+      );
+      expect(tokenService.issue).toHaveBeenCalledWith(walter);
+      expect(result).toBe(pair);
     });
 
     // Which column to search is UsersService's choice. AuthService hands the
     // identifier over as it came.
     it("passes a username on in the same way as an email", async () => {
-      usersService.getUserByCredentials.mockResolvedValue({
-        id: 25,
-        username: "walter",
-        role: "user",
-      });
-      jwtService.signAsync.mockResolvedValue("signed.jwt.token");
-
-      await service.login({ identifier: "walter", password: "secret1" });
+      await service.signIn({ identifier: "walter", password: "secret1" });
 
       expect(usersService.getUserByCredentials).toHaveBeenCalledWith("walter", "secret1");
     });
 
-    it("throws 401 and signs nothing when the identifier or password is wrong", async () => {
+    it("throws 401 and starts no session when the identifier or password is wrong", async () => {
       usersService.getUserByCredentials.mockResolvedValue(null);
 
-      const attempt = service.login({ identifier: "w@x.com", password: "wrong-one" });
+      const attempt = service.signIn({ identifier: "walter@example.com", password: "wrong-one" });
 
       await expect(attempt).rejects.toBeInstanceOf(UnauthorizedException);
       // One message whatever was wrong, so it names no field.
@@ -122,8 +115,42 @@ describe("AuthService", () => {
         message: "Invalid username, email or password",
         errorCode: "BAD_CREDENTIALS",
       });
+      expect(tokenService.issue).not.toHaveBeenCalled();
+    });
 
-      expect(jwtService.signAsync).not.toHaveBeenCalled();
+    // Checking a password takes about a tenth of a second. If the password
+    // is changed, or the account closed, inside that time, the change ends
+    // the member's sessions before this one exists. So sign-in asks again
+    // once it has the session.
+    describe("when the password changed while the old one was being checked", () => {
+      it("asks again after the session is started, with the hash that was checked", async () => {
+        await service.signIn({ identifier: "walter", password: "secret1" });
+
+        expect(usersService.credentialsStillHold).toHaveBeenCalledWith(25, "hashed(secret1)");
+        expect(usersService.credentialsStillHold.mock.invocationCallOrder[0]).toBeGreaterThan(
+          tokenService.issue.mock.invocationCallOrder[0],
+        );
+        expect(tokenService.revoke).not.toHaveBeenCalled();
+      });
+
+      it("ends the session it just started, and answers as for a wrong password", async () => {
+        usersService.credentialsStillHold.mockResolvedValue(false);
+
+        const attempt = service.signIn({ identifier: "walter", password: "secret1" });
+
+        await expect(attempt).rejects.toMatchObject({
+          message: "Invalid username, email or password",
+          errorCode: "BAD_CREDENTIALS",
+        });
+        expect(tokenService.revoke).toHaveBeenCalledWith(pair.refreshToken);
+      });
+    });
+
+    // The hash is for credentialsStillHold and nothing else.
+    it("returns the tokens only, with no trace of the stored hash", async () => {
+      const result = await service.signIn({ identifier: "walter", password: "secret1" });
+
+      expect(JSON.stringify(result)).not.toContain("hashed(secret1)");
     });
   });
 });

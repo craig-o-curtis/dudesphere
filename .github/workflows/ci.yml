@@ -114,7 +114,9 @@ jobs:
       PG_ADMIN_PW: ci
       PG_DATABASE: dudesphere_ci
       MONGO_URI: mongodb://localhost:27017/dude-abidings
-      JWT_SECRET: ci-only-not-a-secret
+      # Not a secret: it signs tokens only inside this job. It is this long
+      # because the app will not start with fewer than 32 characters.
+      JWT_SECRET: ci-only-not-a-real-secret-just-long-enough
       EMAIL: ci-admin@example.com
       PASSWORD: ci-admin-password
       DUDE_OBSERVE_APP_KEY: ci
@@ -129,8 +131,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Create the schema
         run: pnpm migration:run
-      # profile-me and authorization both log in, and the admin-only cases need
-      # a real admin row.
+      # No e2e suite needs the admin: each makes its own users. This step is
+      # here to prove that `pnpm seed:run` still starts and runs.
       - name: Seed the admin user
         run: pnpm seed:run
       - run: pnpm test:e2e

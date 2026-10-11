@@ -18,9 +18,10 @@ import { accessOf, findRoutes, type Route } from "./routes.js";
 // The routes come from the controllers, so a new route is covered with no
 // case to add here.
 //
-// Needs the databases running. It writes nothing. A guard runs before the
-// pipes and the handler, so a refused request never reaches either, and the
-// public routes are called with no body, which their validation turns away.
+// Needs the databases running. It signs up one e2e- member for each role it
+// needs a token for, and writes nothing else. A guard runs before the pipes
+// and the handler, so a refused request never reaches either, and the public
+// routes are called with no body, which their validation turns away.
 
 const routes = await findRoutes();
 
