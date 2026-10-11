@@ -47,7 +47,10 @@ services:
     container_name: dude-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      # The pgAdmin login. Read from .env, like every other credential here,
+      # so no address is written in this file. It is the same EMAIL the seed
+      # uses for the app's admin. pgAdmin will not start while it is empty.
+      PGADMIN_DEFAULT_EMAIL: ${EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PW}
     ports:
       - "5050:80"

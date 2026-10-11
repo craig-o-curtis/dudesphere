@@ -115,7 +115,7 @@ jobs:
       PG_DATABASE: dudesphere_ci
       MONGO_URI: mongodb://localhost:27017/dude-abidings
       JWT_SECRET: ci-only-not-a-secret
-      EMAIL: admin@example.com
+      EMAIL: ci-admin@example.com
       PASSWORD: ci-admin-password
       DUDE_OBSERVE_APP_KEY: ci
       DUDE_OBSERVE_APP_SECRET: ci

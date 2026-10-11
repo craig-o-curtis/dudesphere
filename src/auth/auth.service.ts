@@ -4,7 +4,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ErrorCode } from "../shared/error-codes.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
-import type { JwtPayload } from "./auth-user.js";
+import { jwtPayloadFor } from "./auth-user.js";
 import { LoginDto } from "./dto/login.dto.js";
 
 @Injectable()
@@ -33,8 +33,7 @@ export class AuthService {
       });
     }
 
-    const payload: JwtPayload = { sub: user.id, username: user.username, role: user.role };
-    const token = await this.jwtService.signAsync(payload);
+    const token = await this.jwtService.signAsync(jwtPayloadFor(user));
 
     return { token, userId: user.id, name: user.username };
   }

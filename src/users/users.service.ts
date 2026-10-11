@@ -86,6 +86,17 @@ export class UsersService {
     return this.toResponseDto(user);
   }
 
+  // For the dev token command, `pnpm dev:token`. `identifier` is a username or an
+  // email, read the way login reads it. Returns null when nobody has it. A
+  // soft-deleted user is not found.
+  //
+  // It asks for no password, so it must never sit behind a route. Login goes
+  // through getUserByCredentials below.
+  async getUserByIdentifier(identifier: string): Promise<UserResponseDto | null> {
+    const user = await this.findByIdentifier(identifier);
+    return user ? this.toResponseDto(user) : null;
+  }
+
   // For login. `identifier` is a username or an email. Returns null for an
   // unknown identifier and for a wrong password alike, so the caller can't
   // tell which it was. A soft-deleted user is not found, so they can't log in.
@@ -93,11 +104,7 @@ export class UsersService {
     identifier: string,
     password: string,
   ): Promise<UserResponseDto | null> {
-    // An "@" means an email. CreateUserDto and a CHECK on the table both keep
-    // "@" out of usernames, so one identifier can never match two accounts.
-    // Both columns are citext, so either lookup ignores case.
-    const where = identifier.includes("@") ? { email: identifier } : { username: identifier };
-    const user = await this.usersRepository.findOne({ where });
+    const user = await this.findByIdentifier(identifier);
     // The column holds a hash, so the two are compared by the hasher, never
     // with ===. For an unknown identifier user?.password is undefined, and
     // compare still does the work before answering false. Both failures then
@@ -276,6 +283,15 @@ export class UsersService {
       await this.userAbidingsService.restoreForUser(id);
     });
     return this.getUserById(id);
+  }
+
+  // The one place that decides whether an identifier is a username or an
+  // email. An "@" means an email. CreateUserDto and a CHECK on the table both
+  // keep "@" out of usernames, so one identifier can never match two accounts.
+  // Both columns are citext, so either lookup ignores case.
+  private findByIdentifier(identifier: string): Promise<User | null> {
+    const where = identifier.includes("@") ? { email: identifier } : { username: identifier };
+    return this.usersRepository.findOne({ where });
   }
 
   private toResponseDto(user: User, profile?: Profile | null): UserResponseDto {

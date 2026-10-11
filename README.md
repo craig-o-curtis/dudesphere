@@ -72,10 +72,19 @@ docker compose down -v
 
 ### Database Credentials
 
-Credentials are configured in `.env`:
+No username or password is written in this repo. Each one is set in your own
+`.env`, which git ignores:
 
-- **PostgreSQL**: `dude` / `your-postgres-password`
-- **MongoDB**: `dude` / `your-mongo-password`
+| Service       | Username                 | Password      |
+| ------------- | ------------------------ | ------------- |
+| PostgreSQL    | `PG_ADMIN_USER`          | `PG_ADMIN_PW` |
+| MongoDB       | `MG_ADMIN_USER`          | `MG_ADMIN_PW` |
+| pgAdmin       | `EMAIL`                  | `PG_ADMIN_PW` |
+| Mongo Express | `MG_ADMIN_USER`          | `MG_ADMIN_PW` |
+| The app admin | `EMAIL`, set by the seed | `PASSWORD`    |
+
+`.env.example` lists every variable. Pick your own values, and do not reuse a
+password you use anywhere else.
 
 ## Development Commands
 
@@ -207,6 +216,8 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 | POST   | /auth/reset-password  | Set a new password with the link |
 
 Sign up with `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`. The username is for logging in and only you and admins see it. The display name is what other members see, on your profile and on your abidings. It must be unique, and letter case does not count.
+
+To try a route by hand, in Thunder Client or with curl, see [Try the API by hand](DEVELOPMENT.md#try-the-api-by-hand). `pnpm dev:token` prints a token for local use.
 
 Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
 
