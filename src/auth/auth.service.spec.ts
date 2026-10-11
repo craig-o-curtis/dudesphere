@@ -88,10 +88,10 @@ describe("AuthService", () => {
 
       expect(usersService.getUserByCredentials).toHaveBeenCalledWith("w@x.com", "secret1");
       // `sub` is what JwtAuthGuard later reads back as the logged-in user.
+      // No role: the guard reads that from the database on every request.
       expect(jwtService.signAsync).toHaveBeenCalledWith({
         sub: 25,
         username: "walter",
-        role: "user",
       });
       expect(result).toEqual({ token: "signed.jwt.token", userId: 25, name: "walter" });
     });

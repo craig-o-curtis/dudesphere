@@ -31,8 +31,10 @@ export interface DevTokenRequest {
  * the lifetime is passed here: @nestjs/jwt lays the options of one call over
  * the module's.
  *
- * The user is read from the database, so the token names a real id and that
- * member's real role.
+ * The user is read from the database, so the token names a real id. It
+ * carries no role: JwtAuthGuard reads the role from the database on every
+ * request, so this token is worth whatever its member is at that moment, and
+ * nothing once the account is closed.
  *
  * It throws a plain Error, with a message a person can act on, when it will
  * not sign. Nothing is signed in that case.

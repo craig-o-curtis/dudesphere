@@ -16,11 +16,23 @@ export interface RequestWithUser {
   user?: AuthUser;
 }
 
-/** What login signs into the token. `sub` is the user's id. */
+/**
+ * What login signs into the token. `sub` is the user's id.
+ *
+ * No role. A token cannot change once it is signed, so a role in it would be
+ * a copy that goes stale the moment an admin is demoted. JwtAuthGuard reads
+ * the role from the database on every request, and a client that wants to
+ * know it asks GET /users/me.
+ */
 export interface JwtPayload {
   sub: number; // sub is for "subject", the user id
   username: string;
-  role: UserRole;
+}
+
+/** A payload read back from a token that passed verification. */
+export interface VerifiedJwtPayload extends JwtPayload {
+  // "Issued at", in seconds since 1970. The library writes it when it signs.
+  iat: number;
 }
 
 /**
@@ -28,6 +40,6 @@ export interface JwtPayload {
  * here: login, and the dev token command in src/dev. A dev token then carries
  * exactly what a login token does, and the guards treat the two alike.
  */
-export function jwtPayloadFor(user: { id: number; username: string; role: UserRole }): JwtPayload {
-  return { sub: user.id, username: user.username, role: user.role };
+export function jwtPayloadFor(user: { id: number; username: string }): JwtPayload {
+  return { sub: user.id, username: user.username };
 }

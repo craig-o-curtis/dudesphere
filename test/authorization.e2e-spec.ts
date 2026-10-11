@@ -7,7 +7,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { UserRole } from "./../src/users/user.entity.js";
-import { bearer } from "./auth-helpers.js";
+import { bearer, setRole, signedInAs, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, signUpBody } from "./sign-up.js";
 
@@ -16,9 +16,9 @@ import { signUp, signUpBody } from "./sign-up.js";
 // Test.createTestingModule({ controllers: [...] }) never registers those, so a
 // 401 or 403 is unreachable there.
 //
-// Needs the databases running and the admin user seeded (`pnpm seed:run`).
-// Creates throwaway e2e- users and their abidings. test/global-setup.ts
-// deletes them when the run ends.
+// Needs the databases running. Creates throwaway e2e- users and their
+// abidings, one of them an admin. test/global-setup.ts deletes them when the
+// run ends.
 describe("Authorization (e2e)", () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
@@ -28,17 +28,6 @@ describe("Authorization (e2e)", () => {
   let stranger: { token: string; userId: number };
   let adminToken: string;
   let ownersAbidingId: string;
-
-  async function registerAndLogin(): Promise<{ token: string; userId: number }> {
-    const { sent } = await signUp(app);
-
-    const login = await request(app.getHttpServer())
-      .post("/auth/login")
-      .send({ identifier: sent.email, password: sent.password })
-      .expect(201);
-    const { token, userId } = login.body as { token: string; userId: number };
-    return { token, userId };
-  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -52,16 +41,13 @@ describe("Authorization (e2e)", () => {
     await listenOnLoopback(app);
     jwt = app.get(JwtService);
 
-    owner = await registerAndLogin();
-    stranger = await registerAndLogin();
+    owner = await signedInAs(app, UserRole.USER);
+    stranger = await signedInAs(app, UserRole.USER);
 
-    // Signed here rather than logged in, so the suite does not depend on the
-    // seeded admin's password. Same technique as profile-me.e2e-spec.ts.
-    adminToken = await jwt.signAsync({
-      sub: owner.userId,
-      username: "e2e-admin",
-      role: UserRole.ADMIN,
-    });
+    // A real admin, and a third person: neither the owner nor the stranger.
+    // A token that only claimed the role would be refused, because the guard
+    // reads the role from the database.
+    adminToken = await tokenFor(app, UserRole.ADMIN);
 
     const posted = await request(app.getHttpServer())
       .post("/abidings")
@@ -321,27 +307,126 @@ describe("Authorization (e2e)", () => {
       expect((posted.body as { userId: number }).userId).toBe(stranger.userId);
     });
 
-    // Signed by this app, so the guard lets it through, but no user has this
-    // id. The abiding would have an author nobody can find.
-    it("404 when the token's user does not exist", async () => {
-      const token = await jwt.signAsync({
-        sub: 2_000_000_000,
-        username: "e2e-nobody",
-        role: UserRole.USER,
-      });
+    // Signed by this app, so the signature is good, but no user has this id.
+    // The guard looks the user up and finds nobody.
+    it("401 when the token's user does not exist", async () => {
+      const token = await jwt.signAsync({ sub: 2_000_000_000, username: "e2e-nobody" });
 
-      await request(app.getHttpServer())
+      const response = await request(app.getHttpServer())
         .post("/abidings")
         .set(bearer(token))
         .send({ message: "posted by nobody" })
-        .expect(404);
+        .expect(401);
+
+      expect(response.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
     });
   });
 
-  it("rejects a forged token", async () => {
-    await request(app.getHttpServer())
-      .get("/users/me")
-      .set({ authorization: "Bearer not.a.real.token" })
-      .expect(401);
+  // A token's payload is only base64. Anyone can read it and write a new one.
+  // What they cannot do is sign it, and these are the ways someone might try
+  // to get around that.
+  describe("a token someone has tampered with", () => {
+    /** The three parts of a token: header, payload, signature. */
+    function partsOf(token: string): [string, string, string] {
+      const [header, payload, signature] = token.split(".");
+      return [header, payload, signature];
+    }
+
+    function encode(value: object): string {
+      return Buffer.from(JSON.stringify(value)).toString("base64url");
+    }
+
+    function decode(part: string): Record<string, unknown> {
+      return JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Record<string, unknown>;
+    }
+
+    async function expectRefused(token: string) {
+      const response = await request(app.getHttpServer())
+        .get("/users")
+        .set(bearer(token))
+        .expect(401);
+
+      expect(response.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+    }
+
+    it("401 for text that is not a token at all", async () => {
+      await expectRefused("not.a.real.token");
+    });
+
+    // The attack itself: a member takes their own token, writes "admin" into
+    // it and keeps the old signature. The signature no longer matches.
+    it("401 for a real token with a role written into its payload", async () => {
+      const [header, payload, signature] = partsOf(owner.token);
+      const edited = encode({ ...decode(payload), role: UserRole.ADMIN });
+
+      await expectRefused([header, edited, signature].join("."));
+    });
+
+    // The same, aimed at the id: a member writes the admin's id over theirs.
+    it("401 for a real token with another user's id written into it", async () => {
+      const [header, payload, signature] = partsOf(owner.token);
+      const edited = encode({ ...decode(payload), sub: stranger.userId });
+
+      await expectRefused([header, edited, signature].join("."));
+    });
+
+    // "none" is a real JWT algorithm: no signature at all. A library that
+    // honoured the header would accept anything.
+    it("401 for an unsigned token that names the algorithm 'none'", async () => {
+      const [, payload] = partsOf(owner.token);
+      const unsigned = [encode({ alg: "none", typ: "JWT" }), payload, ""].join(".");
+
+      await expectRefused(unsigned);
+    });
+
+    // Signed with the app's real key, so only the pinned algorithm in
+    // AuthModule refuses it.
+    it("401 for a token signed with an algorithm other than HS256", async () => {
+      const token = await jwt.signAsync(
+        { sub: owner.userId, username: "e2e" },
+        { algorithm: "HS512" },
+      );
+
+      await expectRefused(token);
+    });
+  });
+
+  // The role comes from the database on every request. Nothing in a token
+  // can grant one, and a token does not keep one its member has lost.
+  describe("the database decides the role, not the token", () => {
+    // Signed by the app itself, as a leaked key or an old token would be.
+    // The claim is simply not read.
+    it("403 on an admin route for a signed token that claims admin for a plain user", async () => {
+      const token = await jwt.signAsync({
+        sub: owner.userId,
+        username: "e2e",
+        role: UserRole.ADMIN,
+      });
+
+      const response = await request(app.getHttpServer())
+        .get("/users")
+        .set(bearer(token))
+        .expect(403);
+
+      expect(response.body).toMatchObject({ errorCode: "ROLE_REQUIRED" });
+    });
+
+    it("a demoted admin loses admin on the next request, with the same token", async () => {
+      const admin = await signedInAs(app, UserRole.ADMIN);
+      await request(app.getHttpServer()).get("/users").set(bearer(admin.token)).expect(200);
+
+      await setRole(app, admin.userId, UserRole.USER);
+
+      await request(app.getHttpServer()).get("/users").set(bearer(admin.token)).expect(403);
+    });
+
+    it("a member made admin gains it on the next request, with the same token", async () => {
+      const member = await signedInAs(app, UserRole.USER);
+      await request(app.getHttpServer()).get("/users").set(bearer(member.token)).expect(403);
+
+      await setRole(app, member.userId, UserRole.ADMIN);
+
+      await request(app.getHttpServer()).get("/users").set(bearer(member.token)).expect(200);
+    });
   });
 });
