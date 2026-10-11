@@ -10,7 +10,7 @@ const required = {
   PG_ADMIN_USER: "walter",
   PG_ADMIN_PW: "over-the-line",
   PG_DATABASE: "lebowski",
-  JWT_SECRET: "the-rug-tied-the-room-together",
+  JWT_SECRET: "the-rug-really-tied-the-room-together",
   DUDE_OBSERVE_APP_KEY: "observe-key",
   DUDE_OBSERVE_APP_SECRET: "observe-secret",
 };
@@ -154,6 +154,19 @@ describe("validateEnv", () => {
 
   it("throws when MONGO_URI is not a mongodb address", () => {
     expect(() => validateEnv({ ...required, MONGO_URI: "localhost:27017" })).toThrow(/MONGO_URI/);
+  });
+
+  // A short key can be guessed from one real token. See env.validate.ts.
+  describe("JWT_SECRET", () => {
+    it("throws when it is 31 characters", () => {
+      expect(() => validateEnv({ ...required, JWT_SECRET: "a".repeat(31) })).toThrow(
+        /JWT_SECRET must be at least 32 characters/,
+      );
+    });
+
+    it("accepts 32 characters", () => {
+      expect(validateEnv({ ...required, JWT_SECRET: "a".repeat(32) }).JWT_SECRET).toHaveLength(32);
+    });
   });
 
   it("names every bad variable in one error", () => {
