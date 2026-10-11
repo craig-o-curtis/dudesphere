@@ -136,6 +136,17 @@ Public. What a visitor sees first.
   identifier is and ignores its letter case, so the form does neither.
 - The sign up form says a username cannot hold `@` or spaces. The API answers
   400 for one that does.
+- "Forgot password?" on the login page opens `/forgot-password`: one email
+  input. It posts to a Nitro route that calls `POST /auth/forgot-password`. The
+  API answers 202 whether or not the address has an account, so the page
+  always says "If that address has an account, we sent it a link."
+- The emailed link opens `/reset-password?token=...`. The page reads `token`
+  from the URL and asks for the new password twice. Its Nitro route calls
+  `POST /auth/reset-password` with `{ token, password, confirmPassword }`. On
+  204 it sends the visitor to `/login`. On 400 `RESET_TOKEN_INVALID` it says
+  the link no longer works and offers `/forgot-password` again.
+- A 429 from login or forgot password carries `Retry-After`, in seconds. The
+  form shows how long to wait.
 - The token goes into a cookie named `session` through Nitro's `setCookie`:
   `httpOnly`, `secure`, `sameSite: 'lax'`, `path: '/'`, lifetime matching
   the JWT's expiry. `server/api/session.delete.ts` clears it for log out.

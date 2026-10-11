@@ -15,7 +15,8 @@
 // throws this. The clock cannot in fact fail, and gmt 1.19.0 takes "" out of
 // the contract (https://github.com/northguild/gmt/issues/303). When that
 // version is installed, remove this code, each check that throws it
-// (UserAbidingsService.softDeleteForUser, HashtagsService.deleteBySlug), the
+// (UserAbidingsService.softDeleteForUser, HashtagsService.deleteBySlug,
+// PasswordResetService.sendLink), the
 // matching check in HashtagsService.registerTags, and the vi.mock of gmt in
 // hashtags.service.spec.ts.
 export enum ErrorCode {
@@ -23,6 +24,7 @@ export enum ErrorCode {
   USERNAME_TAKEN = "USERNAME_TAKEN", // 409 Conflict
   VALUE_TAKEN = "VALUE_TAKEN", // 409 Conflict, from the database filters on a race
   BAD_CREDENTIALS = "BAD_CREDENTIALS", // 401 Unauthorized, on login
+  RESET_TOKEN_INVALID = "RESET_TOKEN_INVALID", // 400 Bad Request, a password reset link that is wrong, used or expired
   TOKEN_MISSING = "TOKEN_MISSING", // 401 Unauthorized
   TOKEN_INVALID = "TOKEN_INVALID", // 401 Unauthorized, bad signature or expired
   WRONG_PASSWORD = "WRONG_PASSWORD", // 403 Forbidden, current password check on a password change

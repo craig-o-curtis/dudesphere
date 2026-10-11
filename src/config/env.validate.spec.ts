@@ -43,9 +43,11 @@ describe("validateEnv", () => {
     expect(env.MAIL_USER).toBeUndefined();
     expect(env.MAIL_PASSWORD).toBeUndefined();
     expect(env.MAIL_FROM).toBe("Dudesphere <no-reply@dudesphere.local>");
+    expect(env.FRONTEND_URL).toBe("http://localhost:3000");
+    expect(env.PASSWORD_RESET_EXPIRES_IN).toBe(1800);
   });
 
-  it("reads the mail settings when they are set", () => {
+  it("reads the mail and password reset settings when they are set", () => {
     const env = validateEnv({
       ...required,
       MAIL_HOST: "smtp.example.com",
@@ -53,17 +55,25 @@ describe("validateEnv", () => {
       MAIL_USER: "apikey",
       MAIL_PASSWORD: "s3cret",
       MAIL_FROM: "The Dude <dude@example.com>",
+      FRONTEND_URL: "https://dudesphere.example.com",
+      PASSWORD_RESET_EXPIRES_IN: "900",
     });
 
     expect(env.MAIL_HOST).toBe("smtp.example.com");
     expect(env.MAIL_PORT).toBe(587);
     expect(env.MAIL_USER).toBe("apikey");
     expect(env.MAIL_FROM).toBe("The Dude <dude@example.com>");
+    expect(env.FRONTEND_URL).toBe("https://dudesphere.example.com");
+    expect(env.PASSWORD_RESET_EXPIRES_IN).toBe(900);
   });
 
   it.each([
+    ["FRONTEND_URL", "dudesphere.example.com"],
+    ["FRONTEND_URL", "ftp://dudesphere.example.com"],
     ["MAIL_PORT", "0"],
     ["MAIL_PORT", "70000"],
+    // Under a minute, every link would be dead before it was opened.
+    ["PASSWORD_RESET_EXPIRES_IN", "59"],
   ])("throws when %s is %s", (name, value) => {
     expect(() => validateEnv({ ...required, [name]: value })).toThrow(new RegExp(name));
   });

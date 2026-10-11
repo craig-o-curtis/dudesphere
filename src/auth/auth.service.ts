@@ -5,9 +5,7 @@ import { ErrorCode } from "../shared/error-codes.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
 import type { JwtPayload } from "./auth-user.js";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
 import { LoginDto } from "./dto/login.dto.js";
-import { ResetPasswordDto } from "./dto/reset-password.dto.js";
 
 @Injectable()
 export class AuthService {
@@ -40,10 +38,4 @@ export class AuthService {
 
     return { token, userId: user.id, name: user.username };
   }
-
-  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {}
-
-  async resetPassword(resetPasswordDto: ResetPasswordDto) {}
-
-  async logout() {}
 }

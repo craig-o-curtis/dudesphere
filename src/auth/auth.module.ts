@@ -1,12 +1,16 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, type ConfigType } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
+import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { MailModule } from "../mail/mail.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
+import { PasswordResetToken } from "./password-reset-token.entity.js";
+import { PasswordResetService } from "./password-reset.service.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
 // that injects authConfig.KEY has to import it: AuthModule for its own
@@ -15,9 +19,12 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
+  providers: [AuthService, PasswordResetService, JwtAuthGuard],
   imports: [
     UsersModule,
+    // For PasswordResetService: the mail it sends and the table it keeps.
+    MailModule,
+    TypeOrmModule.forFeature([PasswordResetToken]),
     authConfigModule,
     // global: JwtAuthGuard needs JwtService in whichever feature uses the
     // guard, and those features can't import AuthModule (see the guard).

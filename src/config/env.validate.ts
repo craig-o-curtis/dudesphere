@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
   Min,
@@ -111,6 +112,17 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   MAIL_FROM: string = "Dudesphere <no-reply@dudesphere.local>";
+
+  // Where the web app is served. The password reset email links to
+  // /reset-password on it. require_tld is off so localhost passes.
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
+  FRONTEND_URL: string = "http://localhost:3000";
+
+  // How long a password reset link works, in seconds. At least a minute, so
+  // a typo cannot make every link dead on arrival.
+  @IntFromDigits()
+  @Min(60)
+  PASSWORD_RESET_EXPIRES_IN: number = 1800;
 
   @IsString()
   @IsNotEmpty()
