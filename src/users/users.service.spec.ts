@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { DataSource, In, IsNull, Not } from "typeorm";
+import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
 import type { AuthUser } from "../auth/auth-user.js";
@@ -168,28 +168,6 @@ describe("UsersService", () => {
       usersRepository.findOne.mockResolvedValue(null);
 
       await expect(service.getUserForCaller(999, caller)).rejects.toBeInstanceOf(NotFoundException);
-    });
-  });
-
-  describe("getUsersByIds", () => {
-    it("loads only the requested users in one query", async () => {
-      usersRepository.find.mockResolvedValue([
-        { id: 4, username: "walter", email: "w@x.com", role: "user" },
-      ]);
-
-      const result = await service.getUsersByIds([4]);
-
-      // withDeleted: a soft-deleted author still gets their name shown.
-      expect(usersRepository.find).toHaveBeenCalledWith({
-        where: { id: In([4]) },
-        withDeleted: true,
-      });
-      expect(result.map((u) => u.username)).toEqual(["walter"]);
-    });
-
-    it("skips the query when there are no ids", async () => {
-      await expect(service.getUsersByIds([])).resolves.toEqual([]);
-      expect(usersRepository.find).not.toHaveBeenCalled();
     });
   });
 

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, In, IsNull, Not, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
 import type { AuthUser } from "../auth/auth-user.js";
@@ -53,17 +53,6 @@ export class UsersService {
     return { items: items.map((user) => this.toResponseDto(user)), total };
   }
 
-  async getMyUser(userId: number): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-      relations: { profile: true },
-    });
-    if (!user) {
-      throw new NotFoundException(`My User #${userId} not found`);
-    }
-    return this.toResponseDto(user, user.profile);
-  }
-
   async getUserById(id: number): Promise<UserResponseDto> {
     const user = await this.usersRepository.findOne({
       where: { id },
@@ -87,16 +76,6 @@ export class UsersService {
       throw new NotOwnerException("Not authorized to read this user");
     }
     return user;
-  }
-
-  async getUsersByIds(ids: number[]): Promise<UserResponseDto[]> {
-    if (ids.length === 0) {
-      return [];
-    }
-    // withDeleted: callers use this to name the author of existing content.
-    // A soft-deleted user still wrote what they wrote.
-    const users = await this.usersRepository.find({ where: { id: In(ids) }, withDeleted: true });
-    return users.map((user) => this.toResponseDto(user));
   }
 
   async getUserByEmail(email: string): Promise<UserResponseDto | null> {

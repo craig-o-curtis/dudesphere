@@ -226,6 +226,85 @@ describe("Display names (e2e)", () => {
     });
   });
 
+  // A username is a login name. No other member may see it, so nothing an
+  // anonymous caller or another member can read may carry one.
+  describe("an abiding names its author by display name, never by username", () => {
+    let maude: { sent: SignUpBody; token: string; userId: number; displayName: string };
+    let abidingId: string;
+
+    /** True when the username appears anywhere in the body, under any key. */
+    function mentionsUsername(body: unknown): boolean {
+      return JSON.stringify(body).includes(maude.sent.username);
+    }
+
+    beforeAll(async () => {
+      const displayName = freshName();
+      const { sent } = await signUp(app, { profile: { displayName } });
+      maude = { sent, displayName, ...(await logIn(sent)) };
+    });
+
+    it("POST /abidings answers with the display name", async () => {
+      const { body } = await request(app.getHttpServer())
+        .post("/abidings")
+        .set(bearer(maude.token))
+        .send({ message: "the dude abides" })
+        .expect(201);
+      abidingId = (body as { id: string }).id;
+
+      expect(body).toMatchObject({ userId: maude.userId, displayName: maude.displayName });
+      expect(body).not.toHaveProperty("username");
+      expect(mentionsUsername(body)).toBe(false);
+    });
+
+    it("GET /abidings/:id shows it to an anonymous caller, with no username", async () => {
+      const { body } = await request(app.getHttpServer()).get(`/abidings/${abidingId}`).expect(200);
+
+      expect(body).toMatchObject({ displayName: maude.displayName });
+      expect(body).not.toHaveProperty("username");
+      expect(mentionsUsername(body)).toBe(false);
+    });
+
+    it("GET /abidings shows it on every item, with no username", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/abidings?userId=${maude.userId}`)
+        .expect(200);
+      const { data } = body as { data: Record<string, unknown>[] };
+
+      expect(data.length).toBeGreaterThan(0);
+      for (const item of data) {
+        expect(item).toMatchObject({ displayName: maude.displayName });
+        expect(item).not.toHaveProperty("username");
+      }
+      expect(mentionsUsername(body)).toBe(false);
+    });
+
+    it("a profile read by another member carries no username either", async () => {
+      const { body } = await request(app.getHttpServer())
+        .get(`/profiles/user/${maude.userId}`)
+        .set(bearer(walter.token))
+        .expect(200);
+
+      expect(body).toMatchObject({ displayName: maude.displayName });
+      expect(body).not.toHaveProperty("username");
+      expect(mentionsUsername(body)).toBe(false);
+    });
+
+    // The name is read from the profile on each request, not copied onto the
+    // abiding, so an abiding written under the old name shows the new one.
+    it("shows a new display name on an old abiding at once", async () => {
+      const renamed = freshName();
+      await request(app.getHttpServer())
+        .patch("/profiles/me")
+        .set(bearer(maude.token))
+        .send({ displayName: renamed })
+        .expect(200);
+
+      const { body } = await request(app.getHttpServer()).get(`/abidings/${abidingId}`).expect(200);
+
+      expect((body as { displayName: string }).displayName).toBe(renamed);
+    });
+  });
+
   describe("the old name fields are gone", () => {
     it("a profile carries displayName, and no firstName or lastName", async () => {
       const { body } = await request(app.getHttpServer())

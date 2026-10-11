@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { EntityManager, IsNull, Not, QueryFailedError, Repository } from "typeorm";
+import { EntityManager, In, IsNull, Not, QueryFailedError, Repository } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -49,6 +49,24 @@ export class ProfilesService {
       throw new NotFoundException(`Profile for user #${userId} not found`);
     }
     return ProfileResponseDto.fromEntity(profile);
+  }
+
+  // The display name of each of these users, keyed by user id. AbidingsService
+  // calls it to name the authors of a page: one query, however many abidings
+  // they wrote. A user with no profile is simply not in the map.
+  //
+  // withDeleted: callers use this to name the author of existing content. A
+  // soft-deleted member still wrote what they wrote.
+  async getDisplayNamesByUserIds(userIds: number[]): Promise<Map<number, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+    const profiles = await this.profileRepository.find({
+      where: { userId: In(userIds) },
+      select: { userId: true, displayName: true },
+      withDeleted: true,
+    });
+    return new Map(profiles.map((profile) => [profile.userId, profile.displayName]));
   }
 
   // Called by UsersService inside its transaction.

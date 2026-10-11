@@ -5,6 +5,7 @@ import { Model, type QueryFilter } from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -14,7 +15,6 @@ import {
   normalizeHashtag,
 } from "../shared/utils/hashtag.js";
 import { UserRole } from "../users/user.entity.js";
-import { UsersService } from "../users/users.service.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
@@ -37,7 +37,7 @@ export class AbidingsService {
   constructor(
     @InjectModel(Abiding.name) private readonly abidingModel: Model<AbidingDocument>,
     private readonly hashtagsService: HashtagsService,
-    private readonly usersService: UsersService,
+    private readonly profilesService: ProfilesService,
     private readonly paginationProvider: PaginationProvider,
   ) {}
 
@@ -86,7 +86,7 @@ export class AbidingsService {
     if (!abiding) {
       throw new NotFoundException("Abiding not found");
     }
-    return this.withUsername(this.toResponseDto(abiding));
+    return this.withDisplayName(this.toResponseDto(abiding));
   }
 
   async getAbidingsByUserId(
@@ -104,10 +104,11 @@ export class AbidingsService {
   ): Promise<AbidingResponseDto> {
     // Looked up before the write, not after. A token proves who logged in, not
     // that the account still exists: it stays valid until it expires, even
-    // after the user is deleted. getMyUser throws a 404 for a user who is
-    // deleted or was never there, so no abiding is written for an author
-    // nobody can find.
-    const author = await this.usersService.getMyUser(caller.userId);
+    // after the user is deleted. A user and their profile are deleted
+    // together, so getProfileByUserId throws a 404 for a user who is deleted
+    // or was never there, and no abiding is written for an author nobody can
+    // find.
+    const author = await this.profilesService.getProfileByUserId(caller.userId);
 
     if (createAbidingDto.replyToId) {
       await this.assertReplyTargetExists(createAbidingDto.replyToId);
@@ -133,10 +134,10 @@ export class AbidingsService {
       await this.hashtagsService.registerTags(hashtags);
     }
 
-    // The author was read above, so the response can carry the username and
-    // the controller has nothing to add.
+    // The author was read above, so the response can carry their display name
+    // and the controller has nothing to add.
     const response = this.toResponseDto(newAbiding);
-    response.username = author.username;
+    response.displayName = author.displayName;
     return response;
   }
 
@@ -202,7 +203,7 @@ export class AbidingsService {
       }
     }
 
-    return this.withUsername(this.toResponseDto(updatedAbiding));
+    return this.withDisplayName(this.toResponseDto(updatedAbiding));
   }
 
   async deleteAbiding(abidingId: string, caller: AuthUser): Promise<void> {
@@ -262,7 +263,7 @@ export class AbidingsService {
   //
   // paginateMongoModel runs the page and the count. Its comment says what the
   // count costs. This method adds the three things only abidings know: the
-  // sort, the response class, and each author's username.
+  // sort, the response class, and each author's display name.
   private async findPage(
     filter: QueryFilter<AbidingDocument>,
     pageRequest: PageRequest,
@@ -274,28 +275,30 @@ export class AbidingsService {
       { createdAt: -1, _id: -1 },
     );
     const abidings = items.map((abiding) => this.toResponseDto(abiding));
-    return { items: await this.withUsernames(abidings), total };
+    return { items: await this.withDisplayNames(abidings), total };
   }
 
-  // Puts each author's current username on the abidings it is given. The
+  // Puts each author's current display name on the abidings it is given. The
   // names live in Postgres and the abidings in Mongo, so this is the join:
   // one query for the distinct authors, however many abidings they wrote.
   //
-  // getUsersByIds includes soft-deleted users, so their name still shows.
-  // "Unknown" covers an author whose row is gone altogether.
-  private async withUsernames(abidings: AbidingResponseDto[]): Promise<AbidingResponseDto[]> {
+  // The display name, never the username. A username is a login name and no
+  // other member sees it.
+  //
+  // getDisplayNamesByUserIds includes soft-deleted profiles, so their name
+  // still shows. "Unknown" covers an author whose profile is gone altogether.
+  private async withDisplayNames(abidings: AbidingResponseDto[]): Promise<AbidingResponseDto[]> {
     const authorIds = [...new Set(abidings.map((abiding) => abiding.userId))];
-    const users = await this.usersService.getUsersByIds(authorIds);
-    const usernames = new Map(users.map((user) => [user.id, user.username]));
+    const displayNames = await this.profilesService.getDisplayNamesByUserIds(authorIds);
     for (const abiding of abidings) {
-      abiding.username = usernames.get(abiding.userId) || "Unknown";
+      abiding.displayName = displayNames.get(abiding.userId) || "Unknown";
     }
     return abidings;
   }
 
   // The same, for one abiding.
-  private async withUsername(abiding: AbidingResponseDto): Promise<AbidingResponseDto> {
-    await this.withUsernames([abiding]);
+  private async withDisplayName(abiding: AbidingResponseDto): Promise<AbidingResponseDto> {
+    await this.withDisplayNames([abiding]);
     return abiding;
   }
 
