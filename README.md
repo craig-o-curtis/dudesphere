@@ -199,12 +199,18 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint     | Description                   |
-| ------ | ------------ | ----------------------------- |
-| POST   | /auth/signup | Sign up                       |
-| POST   | /auth/login  | Log in with username or email |
+| Method | Endpoint              | Description                      |
+| ------ | --------------------- | -------------------------------- |
+| POST   | /auth/signup          | Sign up                          |
+| POST   | /auth/login           | Log in with username or email    |
+| POST   | /auth/forgot-password | Email a password reset link      |
+| POST   | /auth/reset-password  | Set a new password with the link |
 
 Log in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces.
+
+Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.
+
+Login allows 5 tries in 15 minutes for one account. After that it answers 429 with a `Retry-After` header.
 
 ## Database Usage
 

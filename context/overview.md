@@ -36,6 +36,20 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 | `updatedAt` | timestamptz            | Moved by TypeORM on every update                                               |
 | `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                       |
 
+### PostgreSQL — `password_reset_token` table
+
+One row for each password reset link that can still be used.
+
+| Column      | Type               | Description                                               |
+| ----------- | ------------------ | --------------------------------------------------------- |
+| `id`        | serial PK          | Auto-increment                                            |
+| `userId`    | int, FK to `user`  | `ON DELETE CASCADE`. Indexed                              |
+| `tokenHash` | varchar(64) UNIQUE | SHA-256 of the token in the link. The token is not stored |
+| `expiresAt` | timestamptz        | The link stops working at this instant                    |
+| `createdAt` | timestamptz        | Set by the database when the row is created               |
+
+A row is deleted when its link is used, so there is no "used" column.
+
 ### PostgreSQL — `profile` table
 
 One per user, created in the same transaction as the user.
@@ -136,9 +150,12 @@ full shape.
 | ------ | ----------------------- | ------ | --------------------------------------- |
 | POST   | `/auth/signup`          | Public | Sign up. Creates the user and a profile |
 | POST   | `/auth/login`           | Public | Log in and get a JWT token              |
-| POST   | `/auth/forgot-password` | Public | Not built yet. Answers with nothing     |
-| POST   | `/auth/reset-password`  | Public | Not built yet. Answers with nothing     |
-| POST   | `/auth/logout`          | Public | Not built yet. Answers with nothing     |
+| POST   | `/auth/forgot-password` | Public | Email a password reset link. Always 202 |
+| POST   | `/auth/reset-password`  | Public | Set a new password with the link. 204   |
+
+There is no logout route yet. A login token is a signed JWT the server does not
+store, so there is nothing for the server to end. Logout comes with refresh
+tokens.
 
 The login body is `{ "identifier": "...", "password": "..." }`. `identifier` is
 a username or an email. A value with `@` is looked up as an email, and any
@@ -152,12 +169,36 @@ is what lets login tell the two apart, and cannot hold whitespace.
 Every failed login answers 401 `BAD_CREDENTIALS` with one message, so the
 response does not say which usernames and emails have an account.
 
+### Forgot password
+
+1. `POST /auth/forgot-password` with `{ "email": "..." }` answers 202 with no
+   body, every time. It starts the work and does not wait for it, so the answer
+   is the same, and as fast, whether or not the address has an account.
+2. If a live user has that email, they are sent a link to
+   `<FRONTEND_URL>/reset-password?token=<token>`. It works once, for
+   `PASSWORD_RESET_EXPIRES_IN` seconds, 30 minutes by default. Asking again
+   kills the earlier link.
+3. `POST /auth/reset-password` with `{ "token", "password", "confirmPassword" }`
+   answers 204 and sets the password. `password` follows the sign-up rules and
+   `confirmPassword` must equal it.
+4. A token that is wrong, used or expired gets one answer: 400
+   `RESET_TOKEN_INVALID`, "Invalid or expired link".
+
+`PasswordResetService` in `src/auth/` does this. Mail goes out through
+`MailProvider` in `src/mail/`, over SMTP with Nodemailer. In development the
+`MAIL_*` defaults send to the Mailpit container, which shows every email at
+http://localhost:8025 and delivers none.
+
+A reset does not end a login token that is already out. It stays good until it
+expires, an hour by default. That closes when refresh tokens arrive.
+
 ### Rate limits
 
-| Route              | Limit           | Counted per                |
-| ------------------ | --------------- | -------------------------- |
-| Every route        | 100 a minute    | IP address                 |
-| `POST /auth/login` | 5 in 15 minutes | identifier and IP together |
+| Route                        | Limit           | Counted per                |
+| ---------------------------- | --------------- | -------------------------- |
+| Every route                  | 100 a minute    | IP address                 |
+| `POST /auth/login`           | 5 in 15 minutes | identifier and IP together |
+| `POST /auth/forgot-password` | 3 in 15 minutes | email and IP together      |
 
 A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
 the seconds to wait. Login counts every try, right or wrong. The identifier is
@@ -231,6 +272,8 @@ turns it off, which only the e2e suite does.
 - [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
       by username or email
 - [x] Rate limiting on every route, tighter on login
+- [x] Forgot password: a reset link by email
+- [ ] Refresh tokens and logout
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)

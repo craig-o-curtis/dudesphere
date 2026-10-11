@@ -115,6 +115,39 @@ describe("Rate limiting (e2e)", () => {
     });
   });
 
+  // An address with no account, so nothing is sent. The limit counts the
+  // request, not the email.
+  describe("forgot-password allows 3 requests in 15 minutes for one email", () => {
+    function forgot(email: string) {
+      return request(app.getHttpServer()).post("/auth/forgot-password").send({ email });
+    }
+
+    it("answers 429 to the fourth", async () => {
+      const email = `e2e-flood-${tag}@example.com`;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await forgot(email).expect(202);
+      }
+
+      const response = await forgot(email).expect(429);
+
+      expect(response.body).toEqual(refused);
+      expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);
+    });
+
+    it("counts the same email in capitals as the same one", async () => {
+      const email = `e2e-floodcase-${tag}@example.com`;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await forgot(email).expect(202);
+      }
+
+      await forgot(email.toUpperCase()).expect(429);
+    });
+
+    it("still lets another email through from the same address", async () => {
+      await forgot(`e2e-floodother-${tag}@example.com`).expect(202);
+    });
+  });
+
   describe("a route with no limit of its own", () => {
     it("is not held to login's 5: ten requests in a row all pass", async () => {
       for (let attempt = 0; attempt < 10; attempt += 1) {

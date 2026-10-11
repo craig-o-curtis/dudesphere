@@ -51,6 +51,7 @@ more file to keep in step with the code.
 | `InvalidValueException`        | `BadRequestException`          | 400    | none                                           |
 | `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                           |
 | `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                           |
+| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                          |
 
 Who throws each one:
 
@@ -64,11 +65,12 @@ Who throws each one:
 - `DatabaseUnavailableException`: all three exception filters.
 - `InvalidValueException`, `DatabaseFaultException`: both database filters.
 - `TimeLimitExceededException`: both database filters and `TimeoutInterceptor`.
+- `ResetTokenInvalidException`: `PasswordResetService`, when a password reset link is wrong, already used, or expired.
 
 The four the filters throw take the driver's error as their one argument and
 keep it as `cause`. `AllExceptionsFilter` logs a cause; it is never returned.
 
-`exceptions.spec.ts` holds one table for all seven. Each row pins the status,
+`exceptions.spec.ts` holds one table for all eight. Each row pins the status,
 the whole body and the error code.
 
 ## One code that has no class
