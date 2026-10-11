@@ -1,5 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
+// EDITED BY HAND: this whole migration is written by hand, not generated, so
+// the two columns are converted in place and existing rows are checked first.
+//
 // Makes "user"."username" and "user"."email" ignore letter case, and stops a
 // username from holding "@" or whitespace.
 //

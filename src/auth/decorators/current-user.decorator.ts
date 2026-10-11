@@ -7,8 +7,8 @@ import type { AuthUser } from "../auth-user.js";
  * guard is what puts the user on the request.
  */
 export const CurrentUser = createParamDecorator((_data: unknown, context: ExecutionContext) => {
-  // the context is the
-  // the switchToHttp does the magic of getting the request object from the context.
+  // The context holds the current request. switchToHttp() gives the HTTP
+  // view of it, and getRequest() the request object itself.
   const request = context.switchToHttp().getRequest<{ user: AuthUser }>();
   return request.user;
 });

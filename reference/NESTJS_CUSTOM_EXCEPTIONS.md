@@ -297,7 +297,7 @@ Nest then answers with status 429 and `{ "statusCode": 429, "message": "Slow dow
 
 ## One code that has no class
 
-`CLOCK_UNAVAILABLE` is thrown from two places, so by the rule it would get a
+`CLOCK_UNAVAILABLE` is thrown from three places, so by the rule it would get a
 class. It does not, because it is temporary. The note in
 [src/shared/error-codes.ts](../src/shared/error-codes.ts) says when it goes
 away.

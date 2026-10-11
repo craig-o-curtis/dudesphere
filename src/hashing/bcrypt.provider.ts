@@ -3,11 +3,10 @@ import * as bcrypt from "bcrypt";
 
 import { HashingProvider } from "./hashing.provider.js";
 
-// The cost. bcrypt runs 2^12 rounds, and each step up doubles the time one
-// hash takes. 12 is about a quarter of a second on current hardware: unnoticed
-// at login, slow for someone guessing passwords against a stolen table.
-// This is the rounds / exponent bcrypt uses 2^12, which is 4,096 rounds, it is
-// essentially the exponent
+// The cost. 12 is an exponent: bcrypt runs 2^12 rounds, which is 4,096, and
+// each step up doubles the time one hash takes. 12 is about a quarter of a
+// second on current hardware: unnoticed at login, slow for someone guessing
+// passwords against a stolen table.
 const COST = 12;
 
 const MAX_PASSWORD_BYTES = 72;
