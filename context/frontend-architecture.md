@@ -136,6 +136,10 @@ Public. What a visitor sees first.
   identifier is and ignores its letter case, so the form does neither.
 - The sign up form says a username cannot hold `@` or spaces. The API answers
   400 for one that does.
+- The sign up form also asks for a display name, and says that it is the name
+  other members see and that the username is only for logging in. It posts
+  `profile: { displayName }`. The API answers 409 `DISPLAY_NAME_TAKEN` for a
+  name in use, in any letter case, and the form shows that under the input.
 - "Forgot password?" on the login page opens `/forgot-password`: one email
   input. It posts to a Nitro route that calls `POST /auth/forgot-password`. The
   API answers 202 whether or not the address has an account, so the page
@@ -162,8 +166,10 @@ Public. What a visitor sees first.
   SSR, so pages and route middleware know who is signed in without reading
   the httpOnly cookie, which they cannot.
 - `app/middleware/auth.ts` is a route middleware. Pages opt in with
-  `definePageMeta({ middleware: 'auth' })`: `/feed`, `/dudes/me`,
-  `/sphere`, `/admin/*`. It sends anonymous visitors to `/login?next=`.
+  `definePageMeta({ middleware: 'auth' })`: `/feed`, `/dudes/:id`,
+  `/dudes/me`, `/sphere`, `/admin/*`. It sends anonymous visitors to
+  `/login?next=`. `/dudes/:id` is on the list because the API gives a profile
+  to signed-in callers only.
 - Every Nitro route that changes data re-checks `event.context.user`
   itself. Route middleware guards pages, not API calls.
 
@@ -190,8 +196,11 @@ The logged-in home. This is the Twitter part.
 
 The forum part. One abiding and the conversation under it.
 
-- The abiding from `GET /abidings/:id`, its author from `GET /users/:id` and
-  `GET /profiles/user/:id`.
+- The abiding from `GET /abidings/:id`, which is public and carries the
+  author's `displayName`. A signed-in visitor also gets the author's profile
+  from `GET /profiles/user/:id`. An anonymous visitor sees the abiding and
+  the display name only, because profiles need a token.
+- No page shows another member's username. The API does not send one.
 - Its replies, newest first. **Backend gap:** this needs
   `GET /abidings?replyToId=:id`, which does not exist yet.
 - The feed stays mounted behind the thread through
@@ -204,16 +213,20 @@ The forum part. One abiding and the conversation under it.
 
 A member's page.
 
-- `GET /users/:id`, `GET /profiles/user/:id` and
-  `GET /abidings?userId=:id`, paginated like the feed.
+- `GET /profiles/user/:id` and `GET /abidings?userId=:id`, paginated like
+  the feed. Both need a signed-in visitor here, the first because profiles
+  need a token.
+- The page is headed by the member's `displayName`, which the profile
+  carries. `/dudes/me` also shows the member their own username, from
+  `GET /users/me`.
 - `/dudes/me` adds edit forms that post to Nitro routes calling
   `PATCH /users/me` and `PATCH /profiles/me`, and a "Leave the sphere"
   button for `DELETE /users/me` with a confirm step.
 - `isDude` and `ordainedDate` show as a badge: "Ordained 12 March 2024".
   Dates format through `@northguild/gmt`, never a `Date`.
-- **Backend gap:** there is no lookup by username, so URLs carry the numeric
-  id for now. `/dudes/walter` wants `GET /users/by-username/:username` or
-  the same on profiles.
+- URLs carry the member's numeric id: `/dudes/42`. There is no lookup by
+  display name and none is planned. Never by username: that is a login name
+  and stays out of URLs.
 
 ### The Sphere `/sphere`
 
@@ -404,7 +417,6 @@ backend change and should land before the phase that needs it.
 | Gap                                     | Needed by       | Shape                                                          |
 | --------------------------------------- | --------------- | -------------------------------------------------------------- |
 | List replies to one abiding             | Thread, phase 4 | `GET /abidings?replyToId=:id`, same page shape                 |
-| Look up a user or profile by username   | Dude, phase 4   | `GET /users/by-username/:username`                             |
 | Reply count on an abiding               | Feed, phase 3   | `replyCount` on `AbidingResponseDto`, or a second call         |
 | List hidden hashtags for the admin page | Admin, phase 5  | `GET /hashtags?includeDeleted=true`, admin only                |
 | Set, change or clear my location        | Sphere, phase 6 | `PUT /profiles/me/location`, `DELETE /profiles/me/location`    |

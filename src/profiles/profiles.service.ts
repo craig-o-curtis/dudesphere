@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { EntityManager, IsNull, Not, Repository } from "typeorm";
+import { EntityManager, In, IsNull, Not, QueryFailedError, Repository } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
+import { UNIQUE_VIOLATION } from "../shared/filters/pg-error.filter.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
@@ -49,24 +51,58 @@ export class ProfilesService {
     return ProfileResponseDto.fromEntity(profile);
   }
 
+  // The display name of each of these users, keyed by user id. AbidingsService
+  // calls it to name the authors of a page: one query, however many abidings
+  // they wrote. A user with no profile is simply not in the map.
+  //
+  // withDeleted: callers use this to name the author of existing content. A
+  // soft-deleted member still wrote what they wrote.
+  async getDisplayNamesByUserIds(userIds: number[]): Promise<Map<number, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+    const profiles = await this.profileRepository.find({
+      where: { userId: In(userIds) },
+      select: { userId: true, displayName: true },
+      withDeleted: true,
+    });
+    return new Map(profiles.map((profile) => [profile.userId, profile.displayName]));
+  }
+
   // Called by UsersService inside its transaction.
   // It uses the `manager` it is given, NOT this.profileRepository,
   // so the insert is part of the same transaction as the user insert.
   async createProfileForUser(
     manager: EntityManager,
     userId: number,
-    dto?: CreateProfileDto,
+    dto: CreateProfileDto,
   ): Promise<Profile> {
     const profile = manager.create(Profile, {
       userId,
-      firstName: dto?.firstName ?? null,
-      lastName: dto?.lastName ?? null,
-      bio: dto?.bio ?? null,
-      profileImageUrl: dto?.profileImageUrl ?? null,
-      isDude: dto?.isDude ?? false,
-      ordainedDate: dto?.ordainedDate ?? null,
+      displayName: dto.displayName,
+      bio: dto.bio ?? null,
+      profileImageUrl: dto.profileImageUrl ?? null,
+      isDude: dto.isDude ?? false,
+      ordainedDate: dto.ordainedDate ?? null,
     });
     return manager.save(Profile, profile);
+  }
+
+  // Called by UsersService inside its transaction, before it writes anything,
+  // so a taken name is a 409 that says which field to change.
+  //
+  // Postgres does the comparing. The column is citext, so "the dude" finds
+  // "The Dude". Lower-casing here in JavaScript would not match what citext
+  // treats as equal.
+  //
+  // withDeleted: the unique constraint still covers soft-deleted profiles, so
+  // the check has to see them too. Without it a deleted member's name passes
+  // here and then fails on the constraint.
+  async assertDisplayNameFree(manager: EntityManager, displayName: string): Promise<void> {
+    const taken = await manager.exists(Profile, { where: { displayName }, withDeleted: true });
+    if (taken) {
+      throw new ValueTakenException("displayName");
+    }
   }
 
   // Called by UsersService inside its transaction, like createProfileForUser
@@ -102,10 +138,22 @@ export class ProfilesService {
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted profile gets edited and
     // the caller still gets a 404 from getProfileById below.
-    const result = await this.profileRepository.update(
-      { id, deletedAt: IsNull(), ...this.ownedBy(caller) },
-      updateProfileDto,
-    );
+    //
+    // No lookup for a taken display name before the write, unlike sign up. A
+    // lookup would run before the ownership rule in the criteria, so a
+    // stranger would be told "taken" where they should be told 403, and a
+    // missing profile would be a 409. The update is tried, and the unique
+    // constraint answers.
+    const result = await this.profileRepository
+      .update({ id, deletedAt: IsNull(), ...this.ownedBy(caller) }, updateProfileDto)
+      .catch((error: unknown) => {
+        // displayName is the only unique column this DTO can write, so a
+        // unique violation here can only mean that name is in use.
+        if (isUniqueViolation(error)) {
+          throw new ValueTakenException("displayName", { cause: error });
+        }
+        throw error;
+      });
     if (result.affected === 0) {
       // Nothing matched, which means the profile is missing or it is someone
       // else's. One extra read, on the failure path only, to tell those apart:
@@ -122,4 +170,12 @@ export class ProfilesService {
   private ownedBy(caller: AuthUser): { userId?: number } {
     return caller.role === UserRole.ADMIN ? {} : { userId: caller.userId };
   }
+}
+
+/** True for the error TypeORM throws when Postgres refuses a duplicate value. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error as QueryFailedError & { code?: string }).code === UNIQUE_VIOLATION
+  );
 }

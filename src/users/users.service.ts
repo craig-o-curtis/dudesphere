@@ -5,14 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, In, IsNull, Not, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { ErrorCode } from "../shared/error-codes.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   type TakenField,
   ValueTakenException,
@@ -23,7 +25,7 @@ import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
-import { User } from "./user.entity.js";
+import { User, UserRole } from "./user.entity.js";
 
 @Injectable()
 export class UsersService {
@@ -51,17 +53,6 @@ export class UsersService {
     return { items: items.map((user) => this.toResponseDto(user)), total };
   }
 
-  async getMyUser(userId: number): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-      relations: { profile: true },
-    });
-    if (!user) {
-      throw new NotFoundException(`My User #${userId} not found`);
-    }
-    return this.toResponseDto(user, user.profile);
-  }
-
   async getUserById(id: number): Promise<UserResponseDto> {
     const user = await this.usersRepository.findOne({
       where: { id },
@@ -73,14 +64,18 @@ export class UsersService {
     return this.toResponseDto(user, user.profile);
   }
 
-  async getUsersByIds(ids: number[]): Promise<UserResponseDto[]> {
-    if (ids.length === 0) {
-      return [];
+  // For GET /users/:id. `caller` is who is asking: an admin reads any user,
+  // and everyone else reads only their own. The answer carries the email and
+  // the role, so another member's is not theirs to read.
+  //
+  // The lookup comes first, so a missing user is a 404 for every caller. See
+  // NotOwnerException for why.
+  async getUserForCaller(id: number, caller: AuthUser): Promise<UserResponseDto> {
+    const user = await this.getUserById(id);
+    if (caller.role !== UserRole.ADMIN && caller.userId !== id) {
+      throw new NotOwnerException("Not authorized to read this user");
     }
-    // withDeleted: callers use this to name the author of existing content.
-    // A soft-deleted user still wrote what they wrote.
-    const users = await this.usersRepository.find({ where: { id: In(ids) }, withDeleted: true });
-    return users.map((user) => this.toResponseDto(user));
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<UserResponseDto | null> {
@@ -130,6 +125,9 @@ export class UsersService {
       if (existing) {
         throw new ValueTakenException(takenField(existing, createUserDto));
       }
+      // The display name is unique too, on the profile table. Checked here,
+      // before the password is hashed and before anything is written.
+      await this.profilesService.assertDisplayNameFree(manager, createUserDto.profile.displayName);
 
       const user = await manager.save(
         User,
@@ -183,14 +181,11 @@ export class UsersService {
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
-    // Profile fields are updated through PATCH /profiles/:id, not here.
-    const { profile: _profile, ...userFields } = updateUserDto;
-
     // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
     // that is not a QueryFailedError, so PgErrorFilter lets it through as
-    // a 500. Every field on UpdateUserDto is optional, so an empty body and a
-    // profile-only body both land here.
-    if (Object.keys(userFields).length === 0) {
+    // a 500. Every field on UpdateUserDto is optional, so an empty body lands
+    // here.
+    if (Object.keys(updateUserDto).length === 0) {
       throw new BadRequestException("No user fields to update");
     }
     // id: Not(id) leaves the caller's own row out. findOne returns one row, so
@@ -213,9 +208,13 @@ export class UsersService {
 
     // A new password arrives as plain text and is stored as a hash, the same
     // as on sign-up. update() below runs no entity hooks, so it is done here.
-    if (userFields.password !== undefined) {
-      userFields.password = await this.hashingProvider.hashPassword(userFields.password);
-    }
+    // The hash goes into a new object, so the caller's DTO keeps what the
+    // caller sent.
+    const { password, ...otherFields } = updateUserDto;
+    const userFields =
+      password === undefined
+        ? otherFields
+        : { ...otherFields, password: await this.hashingProvider.hashPassword(password) };
 
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and

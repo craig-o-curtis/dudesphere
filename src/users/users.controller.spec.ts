@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "./user.entity.js";
 import { UsersController } from "./users.controller.js";
@@ -15,6 +16,7 @@ describe("UsersController", () => {
   const usersService = {
     getUsers: vi.fn(),
     getUserById: vi.fn(),
+    getUserForCaller: vi.fn(),
     createUser: vi.fn(),
     updateUser: vi.fn(),
     updateMyUser: vi.fn(),
@@ -66,21 +68,55 @@ describe("UsersController", () => {
     });
   });
 
-  describe("getUserById", () => {
-    it("passes the id to the service and returns its result", async () => {
-      const user = { id: 7, username: "walter" };
+  describe("getMyUser", () => {
+    it("reads the user on the request", async () => {
+      const user = { id: 25, username: "dude" };
       usersService.getUserById.mockResolvedValue(user);
 
-      const result = await controller.getUserById({ id: 7 });
+      const result = await controller.getMyUser({
+        userId: 25,
+        username: "dude",
+        role: UserRole.USER,
+      });
 
-      expect(usersService.getUserById).toHaveBeenCalledWith(7);
+      expect(usersService.getUserById).toHaveBeenCalledWith(25);
       expect(result).toBe(user);
+    });
+  });
+
+  describe("getUserById", () => {
+    it("passes the id and the caller to the service and returns its result", async () => {
+      const user = { id: 7, username: "walter" };
+      const caller = { userId: 25, username: "dude", role: UserRole.USER };
+      usersService.getUserForCaller.mockResolvedValue(user);
+
+      const result = await controller.getUserById({ id: 7 }, caller);
+
+      // getUserForCaller, not getUserById: it is the one that checks who is
+      // asking. Calling getUserById here would hand any member any user.
+      expect(usersService.getUserForCaller).toHaveBeenCalledWith(7, caller);
+      expect(usersService.getUserById).not.toHaveBeenCalled();
+      expect(result).toBe(user);
+    });
+
+    it("lets the service's refusal through", async () => {
+      const refusal = new NotOwnerException("Not authorized to read this user");
+      usersService.getUserForCaller.mockRejectedValue(refusal);
+
+      await expect(
+        controller.getUserById({ id: 7 }, { userId: 25, username: "dude", role: UserRole.USER }),
+      ).rejects.toBe(refusal);
     });
   });
 
   describe("createUser", () => {
     it("passes the body to the service and returns its result", async () => {
-      const body = { username: "dude", email: "d@x.com", password: "secret1" };
+      const body = {
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile: { displayName: "The Dude" },
+      };
       const created = { id: 42, username: "dude", email: "d@x.com" };
       usersService.createUser.mockResolvedValue(created);
 

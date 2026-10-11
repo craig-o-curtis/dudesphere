@@ -3,11 +3,15 @@ import { ConflictException } from "@nestjs/common";
 import { ErrorCode } from "../error-codes.js";
 
 /** A field with a unique index that two callers can collide on. */
-export type TakenField = "email" | "username";
+export type TakenField = "email" | "username" | "displayName";
 
 const BY_FIELD: Record<TakenField, { message: string; errorCode: ErrorCode }> = {
   email: { message: "Email already registered", errorCode: ErrorCode.EMAIL_TAKEN },
   username: { message: "Username already taken", errorCode: ErrorCode.USERNAME_TAKEN },
+  displayName: {
+    message: "Display name already taken",
+    errorCode: ErrorCode.DISPLAY_NAME_TAKEN,
+  },
 };
 
 const FIELD_UNKNOWN = {

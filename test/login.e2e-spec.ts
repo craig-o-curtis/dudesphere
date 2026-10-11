@@ -8,6 +8,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUpBody } from "./sign-up.js";
 
 // Login takes a username or an email in one field, `identifier`, and ignores
 // letter case in both. The case part is Postgres's doing: the two columns are
@@ -36,7 +37,7 @@ describe("Login (e2e)", () => {
   function signup(body: { username: string; email: string }) {
     return request(app.getHttpServer())
       .post("/auth/signup")
-      .send({ ...body, password });
+      .send(signUpBody({ ...body, password }));
   }
 
   beforeAll(async () => {

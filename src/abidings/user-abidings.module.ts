@@ -4,18 +4,17 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { Abiding, AbidingSchema } from "./abiding.schema.js";
 import { UserAbidingsService } from "./user-abidings.service.js";
 
-// Split out of AbidingsModule so UsersModule can reach the Abiding model
-// without creating a circular dependency.
+// Holds only the Abiding model registration and UserAbidingsService, nothing
+// that depends on users or profiles. AbidingsModule and UsersModule both
+// import it. UsersModule needs it to soft-delete and restore a user's
+// abidings in UsersService.deleteUser and restoreUser.
 //
-// AbidingsModule imports UsersModule, to look up usernames for the
-// GET /abidings response. UsersModule now also needs the Abiding model, to
-// soft-delete and restore a user's abidings in UsersService.deleteUser and
-// restoreUser. If UsersModule imported AbidingsModule directly, that would be
-// AbidingsModule -> UsersModule -> AbidingsModule: a cycle.
-//
-// This module holds only the Abiding model registration and
-// UserAbidingsService, nothing that depends on users. AbidingsModule and
-// UsersModule both import it, and neither imports the other's module.
+// It was split out of AbidingsModule when AbidingsModule imported UsersModule,
+// to read the authors' usernames. UsersModule importing AbidingsModule back
+// would have been a cycle. AbidingsModule now reads display names from
+// ProfilesModule and no longer imports UsersModule, so that cycle is gone.
+// The split stays: UsersModule needs these two things and none of the abiding
+// routes.
 @Module({
   imports: [MongooseModule.forFeature([{ name: Abiding.name, schema: AbidingSchema }])],
   providers: [UserAbidingsService],

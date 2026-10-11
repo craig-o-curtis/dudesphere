@@ -1,14 +1,16 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { DataSource, In, IsNull, Not } from "typeorm";
+import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { User } from "./user.entity.js";
+import { User, UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
 describe("UsersService", () => {
@@ -36,6 +38,7 @@ describe("UsersService", () => {
   };
 
   const profilesService = {
+    assertDisplayNameFree: vi.fn(),
     createProfileForUser: vi.fn(),
     softDeleteForUser: vi.fn(),
     restoreForUser: vi.fn(),
@@ -114,25 +117,57 @@ describe("UsersService", () => {
     });
   });
 
-  describe("getUsersByIds", () => {
-    it("loads only the requested users in one query", async () => {
-      usersRepository.find.mockResolvedValue([
-        { id: 4, username: "walter", email: "w@x.com", role: "user" },
-      ]);
+  // GET /users/:id. The answer carries the email and the role, so only that
+  // user and an admin may read it.
+  describe("getUserForCaller", () => {
+    const storedUser = { id: 4, username: "walter", email: "w@x.com", role: UserRole.USER };
 
-      const result = await service.getUsersByIds([4]);
+    const walter: AuthUser = { userId: 4, username: "walter", role: UserRole.USER };
+    const donny: AuthUser = { userId: 5, username: "donny", role: UserRole.USER };
+    const admin: AuthUser = { userId: 1, username: "admin", role: UserRole.ADMIN };
 
-      // withDeleted: a soft-deleted author still gets their name shown.
-      expect(usersRepository.find).toHaveBeenCalledWith({
-        where: { id: In([4]) },
-        withDeleted: true,
-      });
-      expect(result.map((u) => u.username)).toEqual(["walter"]);
+    it("returns a user to that user", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserForCaller(4, walter);
+
+      expect(result).toMatchObject({ id: 4, email: "w@x.com", role: UserRole.USER });
     });
 
-    it("skips the query when there are no ids", async () => {
-      await expect(service.getUsersByIds([])).resolves.toEqual([]);
-      expect(usersRepository.find).not.toHaveBeenCalled();
+    it("returns any user to an admin", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const result = await service.getUserForCaller(4, admin);
+
+      expect(result).toMatchObject({ id: 4, email: "w@x.com", role: UserRole.USER });
+    });
+
+    it("throws 403 NOT_OWNER when a member asks for another member", async () => {
+      usersRepository.findOne.mockResolvedValue(storedUser);
+
+      const attempt = service.getUserForCaller(4, donny);
+
+      await expect(attempt).rejects.toBeInstanceOf(NotOwnerException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "NOT_OWNER" });
+    });
+
+    // The role in the token decides, not the role of the user being read:
+    // a member may not read an admin's record either.
+    it("throws 403 when a member asks for an admin", async () => {
+      usersRepository.findOne.mockResolvedValue({ ...storedUser, id: 1, role: UserRole.ADMIN });
+
+      await expect(service.getUserForCaller(1, donny)).rejects.toBeInstanceOf(NotOwnerException);
+    });
+
+    // 404 before 403, as everywhere else NotOwnerException is thrown: a
+    // missing user is "not found" for every caller.
+    it.each([
+      ["a member who would not own it", donny],
+      ["an admin", admin],
+    ])("throws 404 for a missing user, asked for by %s", async (_who, caller) => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getUserForCaller(999, caller)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -206,12 +241,16 @@ describe("UsersService", () => {
   });
 
   describe("createUser", () => {
+    // Sign up needs a profile with a display name. Most tests here are about
+    // the user, so they share this one.
+    const profile = { displayName: "The Dude" };
+
     it("creates the user and the profile using the SAME transaction manager", async () => {
       // By `SAME transaction manager` we mean the user insert and the profile
       // insert both run through the `manager` the transaction hands us, so they
       // commit or roll back together.
       const mockUserId = 42;
-      const mockProfile = { id: 1, userId: mockUserId, isDude: true };
+      const mockProfile = { id: 1, userId: mockUserId, displayName: "The Dude", isDude: true };
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: mockUserId, username: "dude", email: "d@x.com" });
       profilesService.createProfileForUser.mockResolvedValue(mockProfile);
@@ -220,7 +259,7 @@ describe("UsersService", () => {
         username: "dude",
         email: "d@x.com",
         password: "secret1",
-        profile: { firstName: "The" },
+        profile: { displayName: "The Dude", bio: "abides" },
       });
 
       // Both writes happen inside one transaction.
@@ -235,7 +274,8 @@ describe("UsersService", () => {
       });
       // The profile is created with that same manager, for the id the insert returned.
       expect(profilesService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
-        firstName: "The",
+        displayName: "The Dude",
+        bio: "abides",
       });
       // The response carries the new user and the profile created for it, and
       // never echoes the password back.
@@ -253,7 +293,7 @@ describe("UsersService", () => {
       profilesService.createProfileForUser.mockRejectedValue(new Error("profile insert failed"));
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toThrow("profile insert failed");
     });
 
@@ -261,7 +301,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ message: "Email already registered", errorCode: "EMAIL_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
@@ -272,7 +312,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ message: "Username already taken", errorCode: "USERNAME_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
@@ -284,7 +324,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
 
       await expect(
-        service.createUser({ username: "dude", email: "D@X.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "D@X.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
     });
 
@@ -292,7 +332,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
 
       await expect(
-        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ errorCode: "USERNAME_TAKEN" });
     });
 
@@ -303,7 +343,12 @@ describe("UsersService", () => {
       manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
       profilesService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
 
-      await service.createUser({ username: "dude", email: "d@x.com", password: "secret1" });
+      await service.createUser({
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile,
+      });
 
       expect(manager.findOne).toHaveBeenCalledWith(User, {
         where: [{ email: "d@x.com" }, { username: "dude" }],
@@ -320,10 +365,61 @@ describe("UsersService", () => {
       });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toBeInstanceOf(ValueTakenException);
 
       expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    // The display name is unique as well, on the profile table, so its check
+    // belongs to ProfilesService. It has to run inside the transaction, and
+    // before the slow hash and the first write.
+    it("checks the display name through the transaction's manager, before hashing", async () => {
+      manager.findOne.mockResolvedValue(null);
+      manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
+      profilesService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
+
+      await service.createUser({
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile,
+      });
+
+      expect(profilesService.assertDisplayNameFree).toHaveBeenCalledWith(manager, "The Dude");
+      expect(profilesService.assertDisplayNameFree.mock.invocationCallOrder[0]).toBeLessThan(
+        hashingProvider.hashPassword.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("throws 409 and creates nothing when the display name is taken", async () => {
+      manager.findOne.mockResolvedValue(null);
+      profilesService.assertDisplayNameFree.mockRejectedValue(
+        new ValueTakenException("displayName"),
+      );
+
+      await expect(
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
+      ).rejects.toMatchObject({
+        message: "Display name already taken",
+        errorCode: "DISPLAY_NAME_TAKEN",
+      });
+
+      expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
+      expect(profilesService.createProfileForUser).not.toHaveBeenCalled();
+    });
+
+    // One answer at a time, and the account fields first: a caller told
+    // "email taken" is not also told about the name.
+    it("does not check the display name when the email is already taken", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
+
+      await expect(
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
+      ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
+
+      expect(profilesService.assertDisplayNameFree).not.toHaveBeenCalled();
     });
   });
 
@@ -425,13 +521,6 @@ describe("UsersService", () => {
 
     it("throws 400 when the body carries no user fields", async () => {
       await expect(service.updateUser(3, {})).rejects.toBeInstanceOf(BadRequestException);
-      expect(usersRepository.update).not.toHaveBeenCalled();
-    });
-
-    it("throws 400 when the body carries only profile fields", async () => {
-      await expect(
-        service.updateUser(3, { profile: { firstName: "Dude" } }),
-      ).rejects.toBeInstanceOf(BadRequestException);
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 

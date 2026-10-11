@@ -55,12 +55,12 @@ describe("AbidingsController", () => {
 
   describe("getAbidings", () => {
     // The service returns each abiding as a response, with its hashtags and
-    // its author's username. The controller must hand those on as they are:
+    // its author's display name. The controller must hand those on as they are:
     // a copy would lose the class, and ClassSerializerInterceptor reads the
     // class to apply the DTO's rules.
     it("puts the service's abidings in data without copying them", async () => {
-      const first = { id: "a1", userId: 1, message: "easy #Sunday", username: "Admin" };
-      const second = { id: "a2", userId: 25, message: "second", username: "walter" };
+      const first = { id: "a1", userId: 1, message: "easy #Sunday", displayName: "Admin Dude" };
+      const second = { id: "a2", userId: 25, message: "second", displayName: "Walter" };
       abidingService.getAbidings.mockResolvedValue(pageOf([first, second]));
 
       const result = await controller.getAbidings({ ...firstPage });
@@ -179,7 +179,7 @@ describe("AbidingsController", () => {
 
   describe("getMyAbidings", () => {
     it("passes the id from the token, not a request param", async () => {
-      const mine = { id: "a1", userId: 25, message: "mine", username: "walter" };
+      const mine = { id: "a1", userId: 25, message: "mine", displayName: "Walter" };
       abidingService.getAbidingsByUserId.mockResolvedValue(pageOf([mine]));
       const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
 
@@ -202,10 +202,10 @@ describe("AbidingsController", () => {
   });
 
   describe("postAbiding", () => {
-    // The service checks that the author still exists and puts their username
+    // The service checks that the author still exists and puts their display name
     // on the response. Both are tested in abiding.service.spec.ts.
     it("passes the body and the caller to the service and returns its response", async () => {
-      const created = { id: "a1", userId: 25, message: "new", username: "walter" };
+      const created = { id: "a1", userId: 25, message: "new", displayName: "Walter" };
       abidingService.createAbiding.mockResolvedValue(created);
 
       const result = await controller.postAbiding({ message: "new" }, caller);
@@ -222,7 +222,7 @@ describe("AbidingsController", () => {
     // since pipes do not run on a direct method call like this one.
     it("passes the id as a string and returns the service's response", async () => {
       const id = new Types.ObjectId("6ac543e3d91134719299fe49");
-      const edited = { id: "a1", userId: 25, message: "edited", username: "walter" };
+      const edited = { id: "a1", userId: 25, message: "edited", displayName: "Walter" };
       abidingService.patchAbiding.mockResolvedValue(edited);
 
       const result = await controller.patchAbiding(id, { message: "edited" }, caller);

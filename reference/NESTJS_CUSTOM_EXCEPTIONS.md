@@ -105,15 +105,15 @@ a class for it would only be one more file to keep in step.
 
 All in [src/shared/exceptions/](../src/shared/exceptions/README.md).
 
-| Class                          | Status | Error code                                     | You pass          |
-| ------------------------------ | ------ | ---------------------------------------------- | ----------------- |
-| `ValueTakenException`          | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `VALUE_TAKEN` | The field, if any |
-| `NotOwnerException`            | 403    | `NOT_OWNER`                                    | The message       |
-| `TokenMissingException`        | 401    | `TOKEN_MISSING`                                | The message       |
-| `DatabaseUnavailableException` | 503    | `DATABASE_UNAVAILABLE`                         | The cause         |
-| `InvalidValueException`        | 400    | None                                           | The cause         |
-| `TimeLimitExceededException`   | 408    | None                                           | The cause         |
-| `DatabaseFaultException`       | 500    | None                                           | The cause         |
+| Class                          | Status | Error code                                                           | You pass          |
+| ------------------------------ | ------ | -------------------------------------------------------------------- | ----------------- |
+| `ValueTakenException`          | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `DISPLAY_NAME_TAKEN`, `VALUE_TAKEN` | The field, if any |
+| `NotOwnerException`            | 403    | `NOT_OWNER`                                                          | The message       |
+| `TokenMissingException`        | 401    | `TOKEN_MISSING`                                                      | The message       |
+| `DatabaseUnavailableException` | 503    | `DATABASE_UNAVAILABLE`                                               | The cause         |
+| `InvalidValueException`        | 400    | None                                                                 | The cause         |
+| `TimeLimitExceededException`   | 408    | None                                                                 | The cause         |
+| `DatabaseFaultException`       | 500    | None                                                                 | The cause         |
 
 The last column sorts them into three kinds. Each kind is shown below.
 
@@ -162,11 +162,15 @@ wording and the code, and that choice lives in the class.
 
 ```ts
 // src/shared/exceptions/value-taken.exception.ts
-export type TakenField = "email" | "username";
+export type TakenField = "email" | "username" | "displayName";
 
 const BY_FIELD: Record<TakenField, { message: string; errorCode: ErrorCode }> = {
   email: { message: "Email already registered", errorCode: ErrorCode.EMAIL_TAKEN },
   username: { message: "Username already taken", errorCode: ErrorCode.USERNAME_TAKEN },
+  displayName: {
+    message: "Display name already taken",
+    errorCode: ErrorCode.DISPLAY_NAME_TAKEN,
+  },
 };
 
 const FIELD_UNKNOWN = {
@@ -202,7 +206,8 @@ super.catch(new ValueTakenException(undefined, { cause: exception }), host);
 Before this class existed, a helper returned a message and a code, and each
 caller built the exception from them. The helper now returns only `"email"`
 or `"username"`. Working out the field is its job. Knowing what to say about
-it is the class's.
+it is the class's. `ProfilesService` passes `"displayName"` itself, because
+it only ever checks that one field.
 
 ## Traps
 

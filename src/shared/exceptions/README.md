@@ -42,25 +42,26 @@ more file to keep in step with the code.
 
 ## In this folder
 
-| Class                          | Extends                        | Status | Error code                                     |
-| ------------------------------ | ------------------------------ | ------ | ---------------------------------------------- |
-| `ValueTakenException`          | `ConflictException`            | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `VALUE_TAKEN` |
-| `NotOwnerException`            | `ForbiddenException`           | 403    | `NOT_OWNER`                                    |
-| `TokenMissingException`        | `UnauthorizedException`        | 401    | `TOKEN_MISSING`                                |
-| `DatabaseUnavailableException` | `ServiceUnavailableException`  | 503    | `DATABASE_UNAVAILABLE`                         |
-| `InvalidValueException`        | `BadRequestException`          | 400    | none                                           |
-| `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                           |
-| `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                           |
-| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                          |
+| Class                          | Extends                        | Status | Error code                                                           |
+| ------------------------------ | ------------------------------ | ------ | -------------------------------------------------------------------- |
+| `ValueTakenException`          | `ConflictException`            | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `DISPLAY_NAME_TAKEN`, `VALUE_TAKEN` |
+| `NotOwnerException`            | `ForbiddenException`           | 403    | `NOT_OWNER`                                                          |
+| `TokenMissingException`        | `UnauthorizedException`        | 401    | `TOKEN_MISSING`                                                      |
+| `DatabaseUnavailableException` | `ServiceUnavailableException`  | 503    | `DATABASE_UNAVAILABLE`                                               |
+| `InvalidValueException`        | `BadRequestException`          | 400    | none                                                                 |
+| `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                                                 |
+| `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                                                 |
+| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                                                |
 
 Who throws each one:
 
 - `ValueTakenException`: `UsersService`, when its own lookup finds the email
-  or username in use, and both database filters, when a unique index refuses
-  a write. Pass `"email"` or `"username"` when you know the field. Pass no
-  field when you do not, and the answer is the general `VALUE_TAKEN`.
-- `NotOwnerException`: `AbidingsService` and `ProfilesService`, when the thing
-  exists and is someone else's. Each passes its own message.
+  or username in use; `ProfilesService`, when a display name is in use; and
+  both database filters, when a unique index refuses a write. Pass `"email"`,
+  `"username"` or `"displayName"` when you know the field. Pass no field when
+  you do not, and the answer is the general `VALUE_TAKEN`.
+- `NotOwnerException`: `AbidingsService`, `ProfilesService` and `UsersService`,
+  when the thing exists and is someone else's. Each passes its own message.
 - `TokenMissingException`: `JwtAuthGuard` and `RolesGuard`.
 - `DatabaseUnavailableException`: all three exception filters.
 - `InvalidValueException`, `DatabaseFaultException`: both database filters.

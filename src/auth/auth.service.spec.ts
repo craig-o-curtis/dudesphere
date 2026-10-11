@@ -27,7 +27,12 @@ describe("AuthService", () => {
   });
 
   describe("signup", () => {
-    const signupDto = { username: "walter", email: "w@x.com", password: "secret1" };
+    const signupDto = {
+      username: "walter",
+      email: "w@x.com",
+      password: "secret1",
+      profile: { displayName: "Walter Sobchak" },
+    };
 
     it("creates the user through UsersService and returns what it returns", async () => {
       const created = { id: 25, username: "walter", email: "w@x.com", role: "user" };
@@ -40,8 +45,11 @@ describe("AuthService", () => {
       expect(result).toBe(created);
     });
 
-    it("passes the profile along when the caller sends one", async () => {
-      const withProfile = { ...signupDto, profile: { bio: "The Dude abides" } };
+    it("passes the whole profile along, not only its display name", async () => {
+      const withProfile = {
+        ...signupDto,
+        profile: { displayName: "Walter Sobchak", bio: "The Dude abides" },
+      };
       usersService.createUser.mockResolvedValue({ id: 25 });
 
       await service.signup(withProfile);

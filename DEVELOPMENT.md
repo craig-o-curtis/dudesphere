@@ -341,7 +341,8 @@ The cleanup can only delete what it can recognise. A suite that breaks one of
 these rules leaves rows behind on every run.
 
 - **Give every user an `e2e-` email at `example.com` and an `e2e-` username.**
-  Copy `registerAndLogin` in `authorization.e2e-spec.ts`.
+  Sign up through `signUp` or `signUpBody` in `test/sign-up.ts`, which does
+  both and gives each user a display name no other run has used.
 - **Post abidings as a user you registered.** `POST /abidings` takes the author
   from the token and answers 404 when that user is deleted or does not exist.
   So a forged token can only post when its `sub` is the id of a real user, and
