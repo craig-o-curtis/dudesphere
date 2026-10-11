@@ -2,10 +2,10 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { ParseObjectIdPipe } from "@nestjs/mongoose";
 import type { Types as MongooseTypes } from "mongoose";
 
-import type { AuthUser } from "../auth/auth-user.js";
-import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { Authenticated } from "../shared/decorators/authenticated.decorator.js";
-import { Public } from "../shared/decorators/public.decorator.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
+import { Auth } from "../shared/guards/auth.decorator.js";
+import { CurrentUser } from "../shared/guards/current-user.decorator.js";
+import { Public } from "../shared/guards/public.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -69,7 +69,7 @@ export class AbidingsController {
   //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
-  @Authenticated()
+  @Auth()
   @Get("me")
   public async getMyAbidings(
     @CurrentUser() user: AuthUser,
@@ -91,7 +91,7 @@ export class AbidingsController {
     return this.abidingsService.getAbidingById(id.toString());
   }
 
-  @Authenticated()
+  @Auth()
   @Post()
   public async postAbiding(
     @Body() createAbidingDto: CreateAbidingDto,
@@ -102,7 +102,7 @@ export class AbidingsController {
   }
 
   // Author or admin. The service enforces it, in the same filter as the write.
-  @Authenticated()
+  @Auth()
   @Patch(":id")
   public async patchAbiding(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
@@ -113,7 +113,7 @@ export class AbidingsController {
   }
 
   // Author or admin, same rule as PATCH above.
-  @Authenticated()
+  @Auth()
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   async deleteAbiding(

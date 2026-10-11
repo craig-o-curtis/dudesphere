@@ -83,7 +83,7 @@ export class EnvironmentVariables {
 
   // Rate limiting. On unless this is "false". The e2e suite turns it off,
   // because its files sign up and log in from one address far faster than a
-  // person would. See src/auth/guards/auth-throttler.guard.ts.
+  // person would. See src/shared/guards/auth-throttler.guard.ts.
   @IsIn(["true", "false"])
   THROTTLE_ENABLED: "true" | "false" = "true";
 

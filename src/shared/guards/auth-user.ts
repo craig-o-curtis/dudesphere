@@ -1,4 +1,4 @@
-import type { UserRole } from "../users/user.entity.js";
+import type { UserRole } from "../../users/user.entity.js";
 
 /** The logged-in user, as JwtAuthGuard puts it on the request. */
 export interface AuthUser {
@@ -7,6 +7,13 @@ export interface AuthUser {
   // UserRole, not string: RolesGuard compares this against the roles a route
   // asks for, and a plain string would let a typo through the type checker.
   role: UserRole;
+}
+
+/** The parts of a request the guards and @CurrentUser() read. */
+export interface RequestWithUser {
+  headers: { authorization?: string };
+  // Missing on a @Public() route when the caller sent no token, or a bad one.
+  user?: AuthUser;
 }
 
 /** What login signs into the token. `sub` is the user's id. */

@@ -2,9 +2,9 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
 import { ErrorCode } from "../shared/error-codes.js";
+import { jwtPayloadFor } from "../shared/guards/auth-user.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
-import { jwtPayloadFor } from "./auth-user.js";
 import { LoginDto } from "./dto/login.dto.js";
 
 @Injectable()
