@@ -185,6 +185,34 @@ describe("UsersService", () => {
     });
   });
 
+  // What TokenService.refresh asks before it hands out a new pair.
+  describe("getLiveUser", () => {
+    it("returns who the member is now, in the shape the guards read", async () => {
+      usersRepository.findOne.mockResolvedValue({
+        id: 25,
+        username: "walter",
+        role: UserRole.USER,
+      });
+
+      await expect(service.getLiveUser(25)).resolves.toEqual({
+        userId: 25,
+        username: "walter",
+        role: UserRole.USER,
+      });
+      expect(usersRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 25 },
+        select: { id: true, username: true, role: true },
+      });
+    });
+
+    // findOne leaves soft-deleted rows out, so a closed account is null too.
+    it("returns null when the account is closed or was never there", async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getLiveUser(25)).resolves.toBeNull();
+    });
+  });
+
   // GET /users/:id. The answer carries the email and the role, so only that
   // user and an admin may read it.
   describe("getUserForCaller", () => {

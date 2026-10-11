@@ -71,7 +71,12 @@ describe("Login (e2e)", () => {
       const { body } = await login(identifier()).expect(200);
 
       // The answer says nothing about the member. A client asks GET /users/me.
-      expect(body).toEqual({ accessToken: expect.any(String), expiresIn: 3600 });
+      // test/tokens.e2e-spec.ts covers the tokens themselves.
+      expect(body).toEqual({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        expiresIn: expect.any(Number),
+      });
 
       // And the token is that member's, whatever casing the caller typed.
       const me = await request(app.getHttpServer())

@@ -10,6 +10,7 @@ import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset.service.js";
+import { RefreshTokensModule } from "./refresh-tokens.module.js";
 import { TokenService } from "./token.service.js";
 import { TokensController } from "./tokens.controller.js";
 
@@ -40,6 +41,8 @@ const JWT_ALGORITHM = "HS256";
     // For PasswordResetService: the mail it sends and the table it keeps.
     MailModule,
     TypeOrmModule.forFeature([PasswordResetToken]),
+    // For TokenService: the refresh_token table and the service over it.
+    RefreshTokensModule,
     authConfigModule,
     // global: AppModule registers JwtAuthGuard as an APP_GUARD, and the guard
     // needs JwtService there. Global makes JwtService injectable in every

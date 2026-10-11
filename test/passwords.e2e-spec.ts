@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { INestApplication } from "@nestjs/common";
+import type { ConfigType } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
@@ -9,6 +10,7 @@ import { DataSource } from "typeorm";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import authConfig from "./../src/auth/config/auth.config.js";
 import { bearer, signedAMinuteEarlier } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUpBody } from "./sign-up.js";
@@ -248,7 +250,9 @@ describe("Passwords (e2e)", () => {
 
       expect(claims.aud).toBe("dudesphere-api");
       expect(claims.iss).toBe("dudesphere");
-      expect(Number(claims.exp) - Number(claims.iat)).toBe(3600);
+      // JWT_EXPIRES_IN: 900 seconds unless .env sets another value.
+      const { expiresIn } = app.get<ConfigType<typeof authConfig>>(authConfig.KEY);
+      expect(Number(claims.exp) - Number(claims.iat)).toBe(expiresIn);
     });
 
     // Signed with this app's own secret, so only the audience is wrong.

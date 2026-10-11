@@ -111,6 +111,22 @@ export class UsersService {
     return user ? { userId: user.id, username: user.username, role: user.role } : null;
   }
 
+  // For TokenService.refresh, before it hands a new pair of tokens to
+  // whoever holds a refresh token. Who that member is now, or null when the
+  // account is closed or gone.
+  //
+  // No password check here, unlike getUserForToken. A password change ends
+  // the member's sessions outright, in updateUser, so a refresh token from
+  // before it is already refused.
+  async getLiveUser(id: number): Promise<AuthUser | null> {
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      select: { id: true, username: true, role: true },
+    });
+
+    return user ? { userId: user.id, username: user.username, role: user.role } : null;
+  }
+
   // For GET /users/:id. `caller` is who is asking: an admin reads any user,
   // and everyone else reads only their own. The answer carries the email and
   // the role, so another member's is not theirs to read.

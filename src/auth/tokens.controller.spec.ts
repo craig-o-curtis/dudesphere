@@ -9,7 +9,7 @@ describe("TokensController", () => {
   let controller: TokensController;
 
   const authService = { verifyCredentials: vi.fn() };
-  const tokenService = { issue: vi.fn() };
+  const tokenService = { issue: vi.fn(), refresh: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -30,7 +30,7 @@ describe("TokensController", () => {
 
     it("checks the credentials, then answers with the tokens for that member", async () => {
       const walter = { id: 4, username: "walter" };
-      const tokens = { accessToken: "a.b.c", expiresIn: 900 };
+      const tokens = { accessToken: "a.b.c", refreshToken: "r".repeat(43), expiresIn: 900 };
       authService.verifyCredentials.mockResolvedValue(walter);
       tokenService.issue.mockResolvedValue(tokens);
 
@@ -47,6 +47,26 @@ describe("TokensController", () => {
       await expect(controller.issue(body)).rejects.toBe(refused);
 
       expect(tokenService.issue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("refresh", () => {
+    const refreshToken = "r".repeat(43);
+
+    it("hands the refresh token to TokenService and answers with the new pair", async () => {
+      const tokens = { accessToken: "a.b.c", refreshToken: "s".repeat(43), expiresIn: 900 };
+      tokenService.refresh.mockResolvedValue(tokens);
+
+      await expect(controller.refresh({ refreshToken })).resolves.toBe(tokens);
+
+      expect(tokenService.refresh).toHaveBeenCalledWith(refreshToken);
+    });
+
+    it("lets the service's 401 through", async () => {
+      const refused = new UnauthorizedException("Invalid or expired refresh token");
+      tokenService.refresh.mockRejectedValue(refused);
+
+      await expect(controller.refresh({ refreshToken })).rejects.toBe(refused);
     });
   });
 });

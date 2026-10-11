@@ -5,7 +5,8 @@ import { Public } from "../shared/guards/public.decorator.js";
 import { ThrottleByAccount } from "../shared/guards/throttle-by-account.decorator.js";
 import { AuthService } from "./auth.service.js";
 import { LoginDto } from "./dto/login.dto.js";
-import { type AccessTokenResult, TokenService } from "./token.service.js";
+import { RefreshTokenDto } from "./dto/refresh-token.dto.js";
+import { type TokenPair, TokenService } from "./token.service.js";
 
 // The routes that hand out tokens and take them back. The paths and the
 // answer are the ones the NestJS docs use: POST /auth/token signs in.
@@ -37,8 +38,28 @@ export class TokensController {
   @ThrottleByAccount("identifier", { limit: 5, ttl: minutes(15) })
   @Post()
   @HttpCode(200)
-  async issue(@Body() loginDto: LoginDto): Promise<AccessTokenResult> {
+  async issue(@Body() loginDto: LoginDto): Promise<TokenPair> {
     const user = await this.authService.verifyCredentials(loginDto);
     return this.tokenService.issue(user);
+  }
+
+  // Swaps a refresh token for a new pair, when the access token has expired
+  // or is about to. Public: the caller's access token may already be dead,
+  // and the refresh token in the body is the proof of who they are.
+  //
+  // The refresh token works once. A client must send one refresh at a time
+  // for a session and keep the new pair from the answer: a second request
+  // with the same token ends the session. See TokenService.refresh.
+  //
+  // An unknown, expired or used token gets a 401 REFRESH_TOKEN_INVALID, and
+  // the client sends the member to sign in again.
+  //
+  // No limit of its own. A guessed token costs one lookup, and there are
+  // 2^256 of them.
+  @Public()
+  @Post("refresh")
+  @HttpCode(200)
+  refresh(@Body() { refreshToken }: RefreshTokenDto): Promise<TokenPair> {
+    return this.tokenService.refresh(refreshToken);
   }
 }
