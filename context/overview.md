@@ -69,8 +69,10 @@ how they are used.
 | `revoked`         | boolean               | True once the session was ended on purpose            |
 | `createdAt`       | timestamptz           | Set by the database when the row is created           |
 
-Rows are kept until their session's end, then deleted the next time anyone
-signs in or refreshes.
+Rows are cleared out whenever anyone signs in or refreshes: every row of a
+session that has reached its end, and, in the session being renewed, the
+spent tokens whose own 7 days have passed. Rows of a signed-out session stay
+until the session's end.
 
 ### PostgreSQL — `profile` table
 

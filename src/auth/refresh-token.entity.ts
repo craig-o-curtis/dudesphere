@@ -74,6 +74,9 @@ export class RefreshToken {
 
   // When the token was swapped for its successor. Null until then. A token
   // with a value here that turns up again is being used a second time.
+  //
+  // A spent row is kept until its own expiresAt has passed, then cleared out
+  // at its session's next refresh. See RefreshTokensService.save.
   @UtcColumn({ nullable: true })
   usedAt: string | null;
 

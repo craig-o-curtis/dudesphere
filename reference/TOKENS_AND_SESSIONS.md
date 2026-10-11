@@ -435,10 +435,37 @@ covered, because the check is "is any row of this family revoked". And a
 revoked token can be told from one that never existed.
 
 **Who cleans the table up?**
-`RefreshTokensService.save` does, each time it adds a row: it deletes the
-rows of every session that has passed `familyExpiresAt`. So the table cleans
-itself whenever someone signs in or refreshes, which is also the only time it
-grows.
+`RefreshTokensService.save` does, each time it adds a row. Two kinds of row
+go:
+
+1. Every row of any session that has passed `familyExpiresAt`, whoever it
+   belongs to.
+2. In the session that is being renewed: the tokens that were spent and
+   whose own 7 days have passed.
+
+So the table cleans itself whenever someone signs in or refreshes, which is
+also the only time it grows.
+
+**Why does the second kind only look at one session?**
+A search for every spent, expired row in the table would have to read the
+whole table on each sign-in, or need another index. The rows of one session
+are found at once, through the index on `familyId`. And only a session that
+is being refreshed is growing. One that has gone quiet stays the size it is,
+and goes whole at its end.
+
+**How long is a spent token remembered?**
+For its own 7 days, as long as its session keeps being renewed. That is how
+long a second use of it ends the session. After its row is cleared out, the
+token is still refused, but as an unknown one, and the session carries on. A
+stolen token is used within minutes, not a week later, so little is lost.
+
+**Why are the rows of a signed-out session never trimmed?**
+Because they are what keeps it signed out. A session counts as ended when any
+of its rows is revoked. A refresh that is in flight at the moment of a
+sign-out can save one more row a moment after the others were marked, and
+that late row is not marked. If the older rows were deleted, the late row
+would be the only one left, and the session would come back to life. So the
+trim skips revoked rows, and they go with the rest at the session's end.
 
 **Does Postgres not delete old rows by itself?**
 No. Postgres has no setting to expire a row after a time, as Redis and a
@@ -452,12 +479,13 @@ need a scheduled job: `@nestjs/schedule` in the app, or `pg_cron` in the
 database.
 
 **Why does the session check not count rows?**
-A session gains a row with every refresh, and keeps them until its end. A
-client that refreshed every 15 minutes for 30 days would have about 2,900.
-The guard asks about the session on every request, so it must not read them
-all. `isSessionLive` asks two yes-or-no questions, each of which stops at the
-first row it finds: is any row of this session inside its time, and is any
-row revoked. One index, on `familyId` and `revoked` together, answers both.
+A session gains a row with every refresh, and keeps about a week of them. A
+client that refreshed every 15 minutes would have about 670. The guard asks
+about the session on every request, so it must not read them all.
+`isSessionLive` asks two yes-or-no questions: is any row of this session
+inside its time, and is any row revoked. One index, on `familyId` and
+`revoked` together, narrows both to the one session. The second is answered
+from the index alone, and the first reads one row and stops.
 
 **Where did the design come from?**
 The NestJS authentication docs describe it, and `TokenService` uses their
@@ -616,9 +644,9 @@ the app can sign one.
   session, so there is nothing to end. It lasts its 30 days unless the
   account is closed or its password changes. The command refuses to run in
   production, and does run on staging.
-- **Spent rows are kept for the whole session**, up to 30 days, though each
-  token lasted 7. That is what lets a very old token be recognised as used
-  when it comes back.
+- **A spent token is recognised as "used twice" for 7 days, not for ever.**
+  After that its row is cleared out. If it comes back then, it is refused as
+  unknown and its session carries on.
 
 ## Further reading
 
