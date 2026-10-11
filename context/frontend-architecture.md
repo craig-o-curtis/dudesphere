@@ -224,10 +224,9 @@ A member's page.
   button for `DELETE /users/me` with a confirm step.
 - `isDude` and `ordainedDate` show as a badge: "Ordained 12 March 2024".
   Dates format through `@northguild/gmt`, never a `Date`.
-- **Backend gap:** there is no lookup by display name, so URLs carry the
-  numeric id for now. A display name is unique, so `/dudes/the-dude` could
-  work with `GET /profiles/by-display-name/:name`. Not by username: that is
-  a login name and stays out of URLs.
+- URLs carry the member's numeric id: `/dudes/42`. There is no lookup by
+  display name and none is planned. Never by username: that is a login name
+  and stays out of URLs.
 
 ### The Sphere `/sphere`
 
@@ -418,7 +417,6 @@ backend change and should land before the phase that needs it.
 | Gap                                     | Needed by       | Shape                                                          |
 | --------------------------------------- | --------------- | -------------------------------------------------------------- |
 | List replies to one abiding             | Thread, phase 4 | `GET /abidings?replyToId=:id`, same page shape                 |
-| Look up a profile by display name       | Dude, phase 4   | `GET /profiles/by-display-name/:name`                          |
 | Reply count on an abiding               | Feed, phase 3   | `replyCount` on `AbidingResponseDto`, or a second call         |
 | List hidden hashtags for the admin page | Admin, phase 5  | `GET /hashtags?includeDeleted=true`, admin only                |
 | Set, change or clear my location        | Sphere, phase 6 | `PUT /profiles/me/location`, `DELETE /profiles/me/location`    |
