@@ -15,3 +15,12 @@ export interface JwtPayload {
   username: string;
   role: UserRole;
 }
+
+/**
+ * The claims for one user. Everything that signs a token builds its payload
+ * here: login, and the dev token command in src/dev. A dev token then carries
+ * exactly what a login token does, and the guards treat the two alike.
+ */
+export function jwtPayloadFor(user: { id: number; username: string; role: UserRole }): JwtPayload {
+  return { sub: user.id, username: user.username, role: user.role };
+}
