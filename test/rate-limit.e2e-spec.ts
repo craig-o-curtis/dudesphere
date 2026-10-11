@@ -9,6 +9,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import throttleConfig from "./../src/config/throttle.config.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp } from "./sign-up.js";
 
 // The only e2e file that runs with rate limiting on. vitest.config.e2e.ts
 // turns it off for the suite, and this file turns it back on for its own app.
@@ -80,10 +81,7 @@ describe("Rate limiting (e2e)", () => {
 
     it("refuses the right password too, once the account is blocked", async () => {
       const username = `e2e-right-${tag}`;
-      await request(app.getHttpServer())
-        .post("/auth/signup")
-        .send({ username, email: `${username}@example.com`, password })
-        .expect(201);
+      await signUp(app, { username, email: `${username}@example.com`, password });
       await failLogin(username, 5);
 
       await login(username, password).expect(429);

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
@@ -8,6 +6,7 @@ import type { App } from "supertest/types.js";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp, type SignUpBody } from "./sign-up.js";
 
 // The shape of an error response, end to end. Every other suite checks the
 // status only; this one reads the body, so a change to a message, an
@@ -16,7 +15,7 @@ import { listenOnLoopback } from "./listen-on-loopback.js";
 // Needs the databases running. Creates one throwaway user per run.
 describe("Error responses (e2e)", () => {
   let app: INestApplication<App>;
-  let credentials: { email: string; password: string; username: string };
+  let credentials: SignUpBody;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -28,14 +27,7 @@ describe("Error responses (e2e)", () => {
     configureApp(app);
     await listenOnLoopback(app);
 
-    // randomUUID, not Date.now(), which the gmt lint rules ban.
-    const tag = randomUUID().slice(0, 8);
-    credentials = {
-      email: `e2e-${tag}@example.com`,
-      password: "secret123",
-      username: `e2e-${tag}`,
-    };
-    await request(app.getHttpServer()).post("/auth/signup").send(credentials).expect(201);
+    ({ sent: credentials } = await signUp(app));
   });
 
   afterAll(async () => {

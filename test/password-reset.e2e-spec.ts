@@ -10,6 +10,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { MailProvider, type MailMessage } from "./../src/mail/mail.provider.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUp as signUpUser } from "./sign-up.js";
 
 // The whole forgot-password flow over real HTTP and the real database: ask
 // for a link, read the email, use the token, log in with the new password.
@@ -45,13 +46,8 @@ describe("Password reset (e2e)", () => {
 
   // A fresh user for each test, so no test reads another's email.
   async function signUp(): Promise<{ id: number; username: string; email: string }> {
-    const tag = randomUUID().slice(0, 8);
-    const user = { username: `e2e-${tag}`, email: `e2e-${tag}@example.com` };
-    const { body } = await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ ...user, password: oldPassword })
-      .expect(201);
-    return { ...user, id: (body as { id: number }).id };
+    const { sent, user } = await signUpUser(app, { password: oldPassword });
+    return { username: sent.username, email: sent.email, id: user.id };
   }
 
   function forgot(email: string) {

@@ -10,6 +10,7 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
+import { signUpBody } from "./sign-up.js";
 
 // Proves over real HTTP, with real bcrypt and the real database, that a
 // password is stored as a hash and checked against that hash. The unit specs
@@ -27,19 +28,14 @@ describe("Passwords (e2e)", () => {
   }
 
   async function register(password: string) {
-    // randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters
-    // keep the username under its 24-character limit.
-    const tag = randomUUID().slice(0, 8);
-    const email = `e2e-${tag}@example.com`;
+    const sent = signUpBody({ password });
 
-    const response = await request(app.getHttpServer())
-      .post("/auth/signup")
-      .send({ email, password, username: `e2e-${tag}` });
+    const response = await request(app.getHttpServer()).post("/auth/signup").send(sent);
     const { id } = response.body as { id?: number };
     if (id !== undefined) {
       createdUserIds.push(id);
     }
-    return { email, userId: id, status: response.status };
+    return { email: sent.email, userId: id, status: response.status };
   }
 
   function login(email: string, password: string) {
@@ -92,10 +88,9 @@ describe("Passwords (e2e)", () => {
     });
 
     it("never returns the password or its hash", async () => {
-      const tag = randomUUID().slice(0, 8);
       const response = await request(app.getHttpServer())
         .post("/auth/signup")
-        .send({ email: `e2e-${tag}@example.com`, password: "secret123", username: `e2e-${tag}` })
+        .send(signUpBody())
         .expect(201);
       createdUserIds.push((response.body as { id: number }).id);
 
