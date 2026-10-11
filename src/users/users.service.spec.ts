@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
+import { isValidUtc } from "@northguild/gmt";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
@@ -160,6 +161,20 @@ describe("UsersService", () => {
       await service.getUserForToken(25, 1_800_000_000);
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith("user.deletedAt IS NULL");
+    });
+
+    // The time the token was signed goes to the query, where Postgres
+    // compares it with passwordChangedAt. test/passwords.e2e-spec.ts proves
+    // the comparison itself.
+    it("hands the query the time the token was signed", async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.getUserForToken(25, 1_800_000_000);
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining("passwordChangedAt"),
+        { issuedAt: 1_800_000_000 },
+      );
     });
 
     // Null, not a 404. The guard turns it into a 401.
@@ -535,7 +550,7 @@ describe("UsersService", () => {
       // currentPassword is not a column, so it must not reach the update.
       expect(usersRepository.update).toHaveBeenCalledWith(
         { id: 3, deletedAt: IsNull() },
-        { password: "hashed(secret2)" },
+        { password: "hashed(secret2)", passwordChangedAt: expect.any(String) },
       );
     });
 
@@ -589,6 +604,7 @@ describe("UsersService", () => {
         { id: 3, deletedAt: IsNull() },
         {
           password: "hashed(secret2)",
+          passwordChangedAt: expect.any(String),
         },
       );
     });
@@ -602,7 +618,32 @@ describe("UsersService", () => {
       expect(hashingProvider.hashPassword).toHaveBeenCalledWith("secret2");
       expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), {
         password: "hashed(secret2)",
+        passwordChangedAt: expect.any(String),
       });
+    });
+
+    // The stamp is what ends the login tokens signed with the old password.
+    // See getUserForToken.
+    it("stamps passwordChangedAt with the current UTC time when a password is set", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude", email: "d@x.com" });
+
+      await service.updateUser(3, { password: "secret2" });
+
+      const [, written] = usersRepository.update.mock.calls[0] as [unknown, Record<string, string>];
+      expect(isValidUtc(written.passwordChangedAt)).toBe(true);
+    });
+
+    // Changing a username must not sign anybody out.
+    it("leaves passwordChangedAt alone when the body has no password", async () => {
+      usersRepository.update.mockResolvedValue({ affected: 1 });
+      usersRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 3, username: "donny", email: "d@x.com" });
+
+      await service.updateUser(3, { username: "donny" });
+
+      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), { username: "donny" });
     });
 
     it("does not hash anything when the body has no password", async () => {

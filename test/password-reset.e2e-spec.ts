@@ -9,6 +9,7 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import { MailProvider, type MailMessage } from "./../src/mail/mail.provider.js";
+import { bearer, signedAMinuteEarlier } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp as signUpUser } from "./sign-up.js";
 
@@ -187,6 +188,29 @@ describe("Password reset (e2e)", () => {
       await login(user.email, newPassword).expect(201);
       // By username too: it is the same account.
       await login(user.username, newPassword).expect(201);
+    });
+
+    // A member resets a password because they forgot it, or because someone
+    // else has it. Either way, whoever was signed in before is signed out.
+    it("ends the login tokens that were signed before the reset", async () => {
+      const user = await signUp();
+      const { body: session } = await login(user.email, oldPassword).expect(201);
+      const earlier = await signedAMinuteEarlier(app, (session as { token: string }).token);
+      await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
+
+      await reset(await requestToken(user.email)).expect(204);
+
+      const refused = await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer(earlier))
+        .expect(401);
+      expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+
+      const { body: fresh } = await login(user.email, newPassword).expect(201);
+      await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer((fresh as { token: string }).token))
+        .expect(200);
     });
 
     it("stores the new password as a bcrypt hash, as sign-up does", async () => {
