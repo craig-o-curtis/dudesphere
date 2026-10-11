@@ -55,7 +55,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `PG_ADMIN_PW`               | yes      | PostgreSQL password                                                     | (your password)                                   |
 | `PG_DATABASE`               | yes      | Database name                                                           | `dude`                                            |
 | `MONGO_URI`                 | no       | MongoDB connection string                                               | default `mongodb://localhost:27017/dude-abidings` |
-| `JWT_SECRET`                | yes      | Key that signs login tokens                                             | (a long random string)                            |
+| `JWT_SECRET`                | yes      | Key that signs login tokens. At least 32 characters                     | (make one with `openssl rand -base64 48`)         |
 | `JWT_EXPIRES_IN`            | no       | How long a login token lasts, in seconds                                | default `3600`                                    |
 | `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request | default `dudesphere-api`                          |
 | `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                    | default `dudesphere`                              |

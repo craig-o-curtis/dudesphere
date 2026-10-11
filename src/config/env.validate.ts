@@ -8,6 +8,7 @@ import {
   Matches,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from "class-validator";
 
@@ -61,8 +62,16 @@ export class EnvironmentVariables {
   })
   MONGO_URI: string = "mongodb://localhost:27017/dude-abidings";
 
+  // The key that signs every login token. Whoever holds it can sign a token
+  // for any member, so it must be too long to guess. Anyone with one real
+  // token can try keys against it on their own machine, as fast as they like,
+  // and a short or common key falls to that. 32 characters is the key size
+  // HS256 calls for (RFC 7518, section 3.2).
   @IsString()
   @IsNotEmpty()
+  @MinLength(32, {
+    message: "JWT_SECRET must be at least 32 characters. Make one with: openssl rand -base64 48",
+  })
   JWT_SECRET: string;
 
   // How long a login token lasts, in seconds.

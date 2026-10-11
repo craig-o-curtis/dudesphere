@@ -114,7 +114,9 @@ jobs:
       PG_ADMIN_PW: ci
       PG_DATABASE: dudesphere_ci
       MONGO_URI: mongodb://localhost:27017/dude-abidings
-      JWT_SECRET: ci-only-not-a-secret
+      # Not a secret: it signs tokens only inside this job. It is this long
+      # because the app will not start with fewer than 32 characters.
+      JWT_SECRET: ci-only-not-a-real-secret-just-long-enough
       EMAIL: ci-admin@example.com
       PASSWORD: ci-admin-password
       DUDE_OBSERVE_APP_KEY: ci
