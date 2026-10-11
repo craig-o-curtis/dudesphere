@@ -32,5 +32,6 @@ export enum ErrorCode {
   ROLE_REQUIRED = "ROLE_REQUIRED", // 403 Forbidden, the route needs a role the caller does not have
   RATE_LIMITED = "RATE_LIMITED", // 429 Too Many Requests, from AuthThrottlerGuard. Retry-After says how long to wait
   CLOCK_UNAVAILABLE = "CLOCK_UNAVAILABLE", // 503 Service Unavailable, getUtcNow() returned ""
+  MAIL_UNAVAILABLE = "MAIL_UNAVAILABLE", // 503 Service Unavailable, the mail server did not take the message
   DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE", // 503 Service Unavailable, Postgres or Mongo cannot be reached
 }

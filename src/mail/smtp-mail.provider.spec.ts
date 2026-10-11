@@ -1,5 +1,7 @@
+import { ServiceUnavailableException } from "@nestjs/common";
 import nodemailer from "nodemailer";
 
+import { isDatabaseUnreachable } from "../shared/filters/database-unreachable.js";
 import { SmtpMailProvider } from "./smtp-mail.provider.js";
 
 // No test opens a connection. createTransport is replaced, and the spec
@@ -62,6 +64,16 @@ describe("SmtpMailProvider", () => {
     expect(createTransport.mock.calls[1][0]).toMatchObject({ secure: false });
   });
 
+  // A real mail server has a login. With one, the login and the email must
+  // not go out in plain text because the server did not offer STARTTLS.
+  it("requires TLS when a user is set, and not for Mailpit", () => {
+    new SmtpMailProvider({ ...mailpit, port: 587, user: "apikey", password: "s3cret" });
+    new SmtpMailProvider(mailpit);
+
+    expect(createTransport.mock.calls[0][0]).toMatchObject({ requireTLS: true });
+    expect(createTransport.mock.calls[1][0]).toMatchObject({ requireTLS: false });
+  });
+
   // Nodemailer's own limits are minutes long.
   it("gives up on a mail server that does not answer within ten seconds", () => {
     new SmtpMailProvider(mailpit);
@@ -86,13 +98,36 @@ describe("SmtpMailProvider", () => {
     });
   });
 
-  it("rejects when the mail server refuses the message", async () => {
+  it("rejects with a 503 MAIL_UNAVAILABLE when the mail server refuses the message", async () => {
     const refused = new Error("550 mailbox unavailable");
     sendMail.mockRejectedValue(refused);
     const provider = new SmtpMailProvider(mailpit);
 
-    await expect(provider.send({ to: "w@x.com", subject: "Hello", text: "Hi" })).rejects.toBe(
-      refused,
-    );
+    const thrown: unknown = await provider
+      .send({ to: "w@x.com", subject: "Hello", text: "Hi" })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(ServiceUnavailableException);
+    const exception = thrown as ServiceUnavailableException;
+    expect(exception.message).toBe("Mail could not be sent");
+    expect(exception.errorCode).toBe("MAIL_UNAVAILABLE");
+    // The mail client's error is kept for the log, and only there.
+    expect(exception.cause).toBe(refused);
+  });
+
+  // Nodemailer puts ETIMEDOUT on its error when the server does not answer.
+  // AllExceptionsFilter answers a bare error with that code as 503
+  // DATABASE_UNAVAILABLE, so it must not get out of the provider as it is.
+  it("does not let a mail server timeout pass for a database outage", async () => {
+    const timedOut = Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" });
+    sendMail.mockRejectedValue(timedOut);
+    const provider = new SmtpMailProvider(mailpit);
+
+    const thrown: unknown = await provider
+      .send({ to: "w@x.com", subject: "Hello", text: "Hi" })
+      .catch((error: unknown) => error);
+
+    expect(isDatabaseUnreachable(timedOut)).toBe(true);
+    expect(isDatabaseUnreachable(thrown)).toBe(false);
   });
 });

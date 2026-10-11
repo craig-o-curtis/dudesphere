@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { addUtc, getUtcNow, isAfterUtc } from "@northguild/gmt";
 
 import { MailProvider } from "../mail/mail.provider.js";
+import { ErrorCode } from "../shared/error-codes.js";
 import { UsersService } from "../users/users.service.js";
 import authConfig from "./config/auth.config.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
@@ -164,6 +170,27 @@ describe("PasswordResetService", () => {
       arrange();
 
       await expect(service.requestEmail("w@x.com")).resolves.toBeUndefined();
+    });
+
+    // A mail server's refusal can quote the address it refused.
+    it("logs what kind of failure it was, and not the message", async () => {
+      const errorLog = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+      usersService.getUserByEmail.mockResolvedValue(user);
+      mailProvider.send.mockRejectedValue(
+        new ServiceUnavailableException("Mail could not be sent", {
+          cause: Object.assign(new Error("550 5.1.1 <w@x.com>: Recipient address rejected"), {
+            code: "EENVELOPE",
+          }),
+          errorCode: ErrorCode.MAIL_UNAVAILABLE,
+        }),
+      );
+
+      await service.requestEmail("w@x.com");
+
+      expect(errorLog).toHaveBeenCalledWith(
+        "Could not send a password reset link: ServiceUnavailableException MAIL_UNAVAILABLE EENVELOPE",
+      );
+      errorLog.mockRestore();
     });
   });
 

@@ -61,11 +61,10 @@ export class PasswordResetService {
     try {
       await this.sendLink(email);
     } catch (error) {
-      // The message only. It can name the mail server, never the token or the
-      // address, and the address itself is left out on purpose.
-      this.logger.error(
-        `Could not send a password reset link: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      // What kind of failure it was, never its message. A mail server's
+      // refusal can quote the address it refused, and the address is kept out
+      // of the log on purpose.
+      this.logger.error(`Could not send a password reset link: ${failureKind(error)}`);
     }
   }
 
@@ -94,7 +93,8 @@ export class PasswordResetService {
       .where(`"expiresAt" <= CURRENT_TIMESTAMP OR "userId" = :userId`, { userId: user.id })
       .execute();
 
-    // Only 32 random bites as 43 URL-safe chars, no dat, no signature
+    // 32 random bytes, written as 43 URL-safe characters. The token carries
+    // no data and no signature.
     const token = randomBytes(TOKEN_BYTES).toString("base64url");
     await this.pwResetTokenRepository.insert({
       userId: user.id,
@@ -130,8 +130,11 @@ export class PasswordResetService {
 
   // Deletes the token's row and returns whose it was, in one statement. A
   // token is used by being deleted, so it can never be used twice, and two
-  // requests with the same token cannot both get a row back. The clock that
-  // decides "expired" is the database's.
+  // requests with the same token cannot both get a row back.
+  //
+  // "Now" here is the database's clock. expiresAt was set from the app's
+  // clock, in sendLink. If the two hosts disagree about the time, a link
+  // lives that much longer or shorter than PASSWORD_RESET_EXPIRES_IN.
   private async consume(token: string): Promise<number | undefined> {
     const result = await this.pwResetTokenRepository
       .createQueryBuilder()
@@ -186,6 +189,21 @@ export class PasswordResetService {
       "",
     ].join("\n");
   }
+}
+
+// The error's class and its codes, without its message. For a mail server
+// that does not answer: "ServiceUnavailableException MAIL_UNAVAILABLE
+// ETIMEDOUT". The last part is the code on the error's cause, or on the error
+// itself when it has no cause.
+function failureKind(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "an unknown error";
+  }
+  const { errorCode } = error as Error & { errorCode?: unknown };
+  const { code } = (error.cause instanceof Error ? error.cause : error) as Error & {
+    code?: unknown;
+  };
+  return [error.name, errorCode, code].filter((part) => typeof part === "string").join(" ");
 }
 
 // SHA-256, not bcrypt. bcrypt is slow on purpose, to make guessing a short
