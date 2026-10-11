@@ -6,7 +6,7 @@ import { TokenMissingException } from "../exceptions/token-missing.exception.js"
 import { RolesGuard } from "./roles.guard.js";
 
 describe("RolesGuard", () => {
-  // What the @Roles() metadata on the route reads back as.
+  // What the list @Auth() stored on the route reads back as.
   const getAllAndOverride = vi.fn();
   const guard = new RolesGuard({ getAllAndOverride } as unknown as Reflector);
 
@@ -32,20 +32,32 @@ describe("RolesGuard", () => {
     expect(guard).toBeDefined();
   });
 
-  // Most routes carry no @Roles at all. Those are open to any signed-in
-  // caller, which JwtAuthGuard has already checked.
-  it("lets a route through when it asks for no roles", () => {
+  // A @Public() route carries no @Auth(), so there is no list and nothing
+  // for this guard to check. An anonymous caller passes.
+  it("lets anyone through a route with no @Auth()", () => {
     getAllAndOverride.mockReturnValue(undefined);
 
-    expect(guard.canActivate(signedIn(UserRole.USER))).toBe(true);
+    expect(guard.canActivate(contextFor({}))).toBe(true);
   });
 
-  // An empty array is the same as no rule. Guarding against it means
-  // `@Roles()` with no arguments cannot lock a route against everyone.
-  it("lets a route through when its roles list is empty", () => {
+  // @Auth() with no roles stores an empty list: signed in, any role.
+  it("lets any signed-in caller through when the roles list is empty", () => {
     getAllAndOverride.mockReturnValue([]);
 
     expect(guard.canActivate(signedIn(UserRole.USER))).toBe(true);
+    expect(guard.canActivate(signedIn(UserRole.ADMIN))).toBe(true);
+  });
+
+  // Unreachable while JwtAuthGuard runs first. Pinned because it is what
+  // makes @Auth() mean "signed in" in this guard too.
+  it("throws TokenMissingException when the roles list is empty and nobody is signed in", () => {
+    getAllAndOverride.mockReturnValue([]);
+    function attempt() {
+      return guard.canActivate(contextFor({}));
+    }
+
+    expect(attempt).toThrow(TokenMissingException);
+    expect(attempt).toThrow(expect.objectContaining({ errorCode: "TOKEN_MISSING" }));
   });
 
   it("lets an admin through a route that requires admin", () => {

@@ -10,9 +10,6 @@ import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { ACCOUNT_THROTTLER } from "./auth/decorators/throttle-by-account.decorator.js";
-import { AuthThrottlerGuard } from "./auth/guards/auth-throttler.guard.js";
-import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
 import mongoConfig from "./config/mongo.config.js";
@@ -21,7 +18,10 @@ import postgresConfig from "./config/postgres.config.js";
 import throttleConfig from "./config/throttle.config.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
+import { AuthThrottlerGuard } from "./shared/guards/auth-throttler.guard.js";
+import { JwtAuthGuard } from "./shared/guards/jwt-auth.guard.js";
 import { RolesGuard } from "./shared/guards/roles.guard.js";
+import { ACCOUNT_THROTTLER } from "./shared/guards/throttle-by-account.decorator.js";
 import { REQUEST_TIMEOUT_MS } from "./shared/interceptors/timeout.interceptor.js";
 import { PaginationModule } from "./shared/pagination/pagination.module.js";
 import { UsersModule } from "./users/users.module.js";
@@ -44,8 +44,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // minute from one IP address. The second is tighter and counts by account
     // and IP address together. It runs only on a route marked
     // @ThrottleByAccount, as login and forgot-password are in AuthController,
-    // and AuthThrottlerGuard skips it everywhere else. Its 5 in 15 minutes is
-    // the fallback for a marked route that sets no limit of its own.
+    // and AuthThrottlerGuard skips it everywhere else. @ThrottleByAccount
+    // always sets the route's own limit, so the 5 in 15 minutes here is only
+    // the value ThrottlerModule needs in order to register the count.
     //
     // The counts are kept in this process's memory, so they reset on a
     // restart and are not shared between two copies of the app.
@@ -128,10 +129,13 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // reads that user's role. The limiter goes first so that a guessed token
     // is counted too.
     //
-    // Because these are global, a route needs no @UseGuards. Routes an
-    // anonymous caller is meant to reach carry @Public(); routes limited to a
-    // role carry @Roles(); every other route carries @Authenticated(), a
-    // label that src/shared/route-access.spec.ts requires.
+    // Because these are global, a route needs no @UseGuards. A route an
+    // anonymous caller is meant to reach carries @Public(). Every other route
+    // carries @Auth(), with the roles that may call it when it is limited to
+    // some. src/shared/guards/route-access.spec.ts requires one of the two.
+    //
+    // The three guards and their decorators live in src/shared/guards. Its
+    // README follows one request through all three.
     { provide: APP_GUARD, useClass: AuthThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

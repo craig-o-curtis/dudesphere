@@ -9,8 +9,8 @@ import {
   Query,
 } from "@nestjs/common";
 
-import { Public } from "../shared/decorators/public.decorator.js";
-import { Roles } from "../shared/decorators/roles.decorator.js";
+import { Auth } from "../shared/guards/auth.decorator.js";
+import { Public } from "../shared/guards/public.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -57,7 +57,7 @@ export class HashtagsController {
   // 404. Pulling the tag out of every abiding would make HashtagsModule depend
   // on abidings, inverting the direction UserAbidingsModule exists to keep —
   // see the comment on HashtagsModule.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Delete(":slug")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   public async deleteHashtagBySlug(@Param("slug") slug: string): Promise<void> {
@@ -69,7 +69,7 @@ export class HashtagsController {
   //
   // 200, not POST's default 201: this brings back an existing tag rather than
   // creating one. Same shape as POST /users/:id/restore.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Post(":slug/restore")
   @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
   public async restoreHashtagBySlug(@Param("slug") slug: string): Promise<HashtagResponseDto> {

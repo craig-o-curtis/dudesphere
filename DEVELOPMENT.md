@@ -498,7 +498,9 @@ these rules leaves rows behind on every run.
   happens, delete the stranded abidings in Mongo Express.
 - **Guards can only be tested here.** `JwtAuthGuard` and `RolesGuard` are
   registered in `AppModule`, and a unit controller spec never loads them. A
-  401 or 403 test belongs in an e2e suite.
+  401 or 403 test belongs in an e2e suite. `test/route-access.e2e-spec.ts`
+  already checks both on every route, so a new route needs no case of its own
+  for "no token" or "wrong role".
 - **CI runs the same suites** against empty databases that it throws away. See
   "Continuous Integration" in the [README](README.md).
 

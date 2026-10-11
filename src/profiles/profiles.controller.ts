@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
 
-import type { AuthUser } from "../auth/auth-user.js";
-import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { Authenticated } from "../shared/decorators/authenticated.decorator.js";
 import { PgIdParamDto } from "../shared/dto/pg-id-param.dto.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
+import { Auth } from "../shared/guards/auth.decorator.js";
+import { CurrentUser } from "../shared/guards/current-user.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -18,7 +18,7 @@ export class ProfilesController {
     private readonly paginationProvider: PaginationProvider,
   ) {}
 
-  @Authenticated()
+  @Auth()
   @Get()
   async getProfiles(
     @Query() pageRequest: PaginationQueryDto,
@@ -40,20 +40,20 @@ export class ProfilesController {
   //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
-  @Authenticated()
+  @Auth()
   @Get("me")
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(user.userId);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
-  @Authenticated()
+  @Auth()
   @Get("user/:id")
   getProfileByUserId(@Param() { id: userId }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(userId);
   }
 
-  @Authenticated()
+  @Auth()
   @Get(":id")
   getProfileById(@Param() { id }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileById(id);
@@ -65,7 +65,7 @@ export class ProfilesController {
   // param.
   //
   // Auth flow: same as GET /profiles/me — see that comment above.
-  @Authenticated()
+  @Auth()
   @Patch("me")
   async updateMyProfile(
     @Body() updateProfileDto: UpdateProfileDto,
@@ -78,7 +78,7 @@ export class ProfilesController {
   // Any profile, by id. The service decides who may: an admin edits anyone's,
   // and everyone else only their own, which is the same rule PATCH /profiles/me
   // goes through above.
-  @Authenticated()
+  @Auth()
   @Patch(":id")
   updateProfile(
     @Param() { id }: PgIdParamDto,

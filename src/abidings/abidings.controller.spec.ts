@@ -1,7 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { Types } from "mongoose";
 
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { AbidingsController } from "./abidings.controller.js";
@@ -41,10 +40,7 @@ describe("AbidingsController", () => {
         // The real one: it has no dependencies, and it builds the links these tests read.
         PaginationProvider,
       ],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: vi.fn(() => true) })
-      .compile();
+    }).compile();
 
     controller = module.get<AbidingsController>(AbidingsController);
   });

@@ -9,6 +9,7 @@ import { DataSource } from "typeorm";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { bearer } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUpBody } from "./sign-up.js";
 
@@ -22,10 +23,6 @@ describe("Passwords (e2e)", () => {
   let jwt: JwtService;
   let dataSource: DataSource;
   const createdUserIds: number[] = [];
-
-  function bearer(token: string) {
-    return { authorization: `Bearer ${token}` };
-  }
 
   async function register(password: string) {
     const sent = signUpBody({ password });

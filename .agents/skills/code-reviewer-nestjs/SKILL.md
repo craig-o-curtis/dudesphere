@@ -98,7 +98,7 @@ Don't load the whole rule set. Read only the rules that match what the diff touc
 | `*.entity.ts`, `*.schema.ts`, `migrations/` | `db-use-migrations`, `perf-optimize-database`                                                                                          |
 | providers, constructors                     | `di-prefer-constructor-injection`, `di-scope-awareness`, `di-avoid-service-locator`                                                    |
 | `main.ts`, filters, interceptors            | `error-use-exception-filters`, `api-use-interceptors`                                                                                  |
-| `src/auth/`, guards                         | `security-auth-jwt`, `security-use-guards`                                                                                             |
+| `src/auth/`, `src/shared/guards/`           | `security-auth-jwt`, `security-use-guards`                                                                                             |
 | config, env                                 | `devops-use-config-module`                                                                                                             |
 | logging                                     | `devops-use-logging`, `security-sanitize-output`                                                                                       |
 | `*.spec.ts`, `test/`                        | `test-use-testing-module`, `test-mock-external-services`, `test-e2e-supertest`                                                         |

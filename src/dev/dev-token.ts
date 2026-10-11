@@ -1,6 +1,6 @@
 import type { JwtService } from "@nestjs/jwt";
 
-import { jwtPayloadFor } from "../auth/auth-user.js";
+import { jwtPayloadFor } from "../shared/guards/auth-user.js";
 import type { UserResponseDto } from "../users/dto/user-response.dto.js";
 import type { UsersService } from "../users/users.service.js";
 
