@@ -4,7 +4,10 @@ import { minutes, Throttle } from "@nestjs/throttler";
 import { Public } from "../shared/decorators/public.decorator.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { AuthService } from "./auth.service.js";
-import { ThrottleByAccount } from "./decorators/throttle-by-account.decorator.js";
+import {
+  ACCOUNT_THROTTLER,
+  ThrottleByAccount,
+} from "./decorators/throttle-by-account.decorator.js";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
 import { LoginDto } from "./dto/login.dto.js";
 import { ResetPasswordDto } from "./dto/reset-password.dto.js";
@@ -30,9 +33,12 @@ export class AuthController {
   // wrong. That is slow enough to make guessing a password pointless, and a
   // person who mistypes theirs a few times is not shut out for long. The
   // sixth gets a 429 with a Retry-After header.
+  //
+  // The 100 a minute every route has still counts here, by IP address alone.
+  // It stops one address from trying a few passwords on every account.
   @Public()
   @ThrottleByAccount("identifier")
-  @Throttle({ default: { limit: 5, ttl: minutes(15) } })
+  @Throttle({ [ACCOUNT_THROTTLER]: { limit: 5, ttl: minutes(15) } })
   @Post("login")
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
@@ -44,11 +50,12 @@ export class AuthController {
   // emails are registered. requestEmail() never rejects, so `void` drops
   // nothing.
   //
-  // 3 in 15 minutes for one address from one IP, which also keeps anyone from
-  // flooding a member's inbox.
+  // 3 in 15 minutes for one email from one IP address, which also keeps
+  // anyone from flooding a member's inbox. The 100 a minute by IP address
+  // alone counts here too, however many emails a caller names.
   @Public()
   @ThrottleByAccount("email")
-  @Throttle({ default: { limit: 3, ttl: minutes(15) } })
+  @Throttle({ [ACCOUNT_THROTTLER]: { limit: 3, ttl: minutes(15) } })
   @Post("forgot-password")
   @HttpCode(202)
   forgotPassword(@Body() { email }: ForgotPasswordDto): void {
