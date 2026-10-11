@@ -172,6 +172,8 @@ full shape.
 Signing in and refreshing both answer
 `{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`. The paths
 and the keys are the ones the NestJS docs use.
+[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) walks
+through each flow step by step, with the reasons for the design.
 
 A member holds two tokens:
 
