@@ -72,7 +72,7 @@ Prefer `relations: { x: true }` on the query that needs it. Flag `eager: true` u
 
 ## Module boundaries
 
-The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → UsersModule` and `AuthModule → UsersModule`.
+The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → UsersModule`, `AuthModule → UsersModule` and `AuthModule → MailModule`.
 
 - **Cycles.** A new import that closes a cycle is a hard finding (`arch-avoid-circular-deps`). Don't accept `forwardRef` as the fix; it hides the cycle.
 - **Combining services.** Code that combines several services' results may live in the controller, because `arch-single-responsibility` allows orchestration there. Rules about one entity belong in that entity's service.
@@ -80,7 +80,7 @@ The current imports are `UsersModule → ProfilesModule`, `AbidingsModule → Us
 
 ## Auth and guards
 
-Login (`POST /auth`) checks the email and password and returns a signed JWT. `JwtAuthGuard` verifies it and puts `{ userId, username, role }` on the request. Read it with `@CurrentUser()`.
+Login (`POST /auth/login`) checks the username or email and the password, and returns a signed JWT. `JwtAuthGuard` verifies it and puts `{ userId, username, role }` on the request. Read it with `@CurrentUser()`.
 
 - **"Mine" comes from the token.** A route for the caller's own data (for example `GET /profiles/me`) takes the user id from `@CurrentUser()`, never from the URL or the body.
 - **Don't import `AuthModule` into a feature.** `AuthModule → UsersModule → ProfilesModule`, so that import closes a cycle. The guard needs only `JwtService`, which is registered globally. Use `@UseGuards(JwtAuthGuard)` directly.

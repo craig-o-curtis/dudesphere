@@ -75,7 +75,7 @@ the whole body and the error code.
 
 ## One code that has no class
 
-`CLOCK_UNAVAILABLE` is thrown from two places, so by the rule it would get a
+`CLOCK_UNAVAILABLE` is thrown from three places, so by the rule it would get a
 class. It does not, because it is temporary: the note in `../error-codes.ts`
 says when it goes away.
 
