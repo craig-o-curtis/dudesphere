@@ -56,7 +56,9 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `PG_DATABASE`               | yes      | Database name                                                           | `dude`                                            |
 | `MONGO_URI`                 | no       | MongoDB connection string                                               | default `mongodb://localhost:27017/dude-abidings` |
 | `JWT_SECRET`                | yes      | Key that signs login tokens. At least 32 characters                     | (make one with `openssl rand -base64 48`)         |
-| `JWT_EXPIRES_IN`            | no       | How long a login token lasts, in seconds                                | default `3600`                                    |
+| `JWT_EXPIRES_IN`            | no       | How long an access token lasts, in seconds                              | default `900`                                     |
+| `REFRESH_TOKEN_EXPIRES_IN`  | no       | How long one refresh token lasts, in seconds. At least 60               | default `604800`                                  |
+| `SESSION_EXPIRES_IN`        | no       | How long a session lasts at most, in seconds. Not less than the above   | default `2592000`                                 |
 | `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request | default `dudesphere-api`                          |
 | `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                    | default `dudesphere`                              |
 | `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself | default `true`                                    |

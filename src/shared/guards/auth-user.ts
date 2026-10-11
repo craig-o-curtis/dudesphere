@@ -27,6 +27,10 @@ export interface RequestWithUser {
 export interface JwtPayload {
   sub: number; // sub is for "subject", the user id
   username: string;
+  // "Session id": which sign-in this token belongs to. It is the familyId of
+  // the session's refresh tokens. A token from `pnpm dev:token` has none,
+  // because it belongs to no session.
+  sid?: string;
 }
 
 /** A payload read back from a token that passed verification. */
@@ -37,9 +41,18 @@ export interface VerifiedJwtPayload extends JwtPayload {
 
 /**
  * The claims for one user. Everything that signs a token builds its payload
- * here: login, and the dev token command in src/dev. A dev token then carries
- * exactly what a login token does, and the guards treat the two alike.
+ * here: TokenService at sign-in, and the dev token command in src/dev. The
+ * two then differ in one thing only: a sign-in token names its session, and
+ * a dev token has none.
  */
-export function jwtPayloadFor(user: { id: number; username: string }): JwtPayload {
-  return { sub: user.id, username: user.username };
+export function jwtPayloadFor(
+  user: { id: number; username: string },
+  sessionId?: string,
+): JwtPayload {
+  return {
+    sub: user.id,
+    username: user.username,
+    // Left out, not set to undefined, when there is no session.
+    ...(sessionId ? { sid: sessionId } : {}),
+  };
 }
