@@ -86,6 +86,32 @@ export class EnvironmentVariables {
   @IsIn(["true", "false"])
   THROTTLE_ENABLED: "true" | "false" = "true";
 
+  // Outgoing email, sent over SMTP. The defaults point at the Mailpit
+  // container in docker-compose.yml, which keeps every message and delivers
+  // none, so the app sends no real mail until these are changed.
+  @IsString()
+  @IsNotEmpty()
+  MAIL_HOST: string = "localhost";
+
+  @IntFromDigits()
+  @Min(1)
+  @Max(65535)
+  MAIL_PORT: number = 1025;
+
+  // The SMTP login. Mailpit needs none, so both are optional.
+  @IsOptional()
+  @IsString()
+  MAIL_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  MAIL_PASSWORD?: string;
+
+  // Who every email is from: an address, or "Name <address>".
+  @IsString()
+  @IsNotEmpty()
+  MAIL_FROM: string = "Dudesphere <no-reply@dudesphere.local>";
+
   @IsString()
   @IsNotEmpty()
   DUDE_OBSERVE_APP_KEY: string;

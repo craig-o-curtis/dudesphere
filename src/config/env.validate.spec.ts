@@ -36,6 +36,36 @@ describe("validateEnv", () => {
     expect(env.JWT_ISSUER).toBe("dudesphere");
     // Rate limiting is on unless someone turns it off.
     expect(env.THROTTLE_ENABLED).toBe("true");
+    // Mail goes to the Mailpit container unless it is pointed elsewhere, so
+    // an app with no mail settings sends nothing real.
+    expect(env.MAIL_HOST).toBe("localhost");
+    expect(env.MAIL_PORT).toBe(1025);
+    expect(env.MAIL_USER).toBeUndefined();
+    expect(env.MAIL_PASSWORD).toBeUndefined();
+    expect(env.MAIL_FROM).toBe("Dudesphere <no-reply@dudesphere.local>");
+  });
+
+  it("reads the mail settings when they are set", () => {
+    const env = validateEnv({
+      ...required,
+      MAIL_HOST: "smtp.example.com",
+      MAIL_PORT: "587",
+      MAIL_USER: "apikey",
+      MAIL_PASSWORD: "s3cret",
+      MAIL_FROM: "The Dude <dude@example.com>",
+    });
+
+    expect(env.MAIL_HOST).toBe("smtp.example.com");
+    expect(env.MAIL_PORT).toBe(587);
+    expect(env.MAIL_USER).toBe("apikey");
+    expect(env.MAIL_FROM).toBe("The Dude <dude@example.com>");
+  });
+
+  it.each([
+    ["MAIL_PORT", "0"],
+    ["MAIL_PORT", "70000"],
+  ])("throws when %s is %s", (name, value) => {
+    expect(() => validateEnv({ ...required, [name]: value })).toThrow(new RegExp(name));
   });
 
   it("takes true or false for THROTTLE_ENABLED and nothing else", () => {

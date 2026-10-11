@@ -68,6 +68,17 @@ services:
     depends_on:
       - mongo
 
+  # Catches every email the app sends and delivers none. Read them in the
+  # web inbox at http://localhost:8025. The app sends to it by default: see
+  # MAIL_HOST and MAIL_PORT in .env.example. Nothing is kept across a restart.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: dude-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP, where the app sends
+      - "8025:8025" # the web inbox
+
 volumes:
   postgres_data:
   mongo_data:
