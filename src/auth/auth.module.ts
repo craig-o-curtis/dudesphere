@@ -13,8 +13,16 @@ import { PasswordResetToken } from "./password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset.service.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
-// that injects authConfig.KEY has to import it: AuthModule for its own
-// providers, and JwtModule for the factory below.
+// that injects authConfig.KEY has to import it. There are two: AuthModule,
+// for PasswordResetService, and JwtModule, for the factory below. Both import
+// this one constant.
+//
+// Not authConfig.asProvider(). That returns a ready-made set of registerAsync
+// options: this same import and inject, plus a factory that hands the config
+// back unchanged. It suits a module whose options are the config object
+// itself. JwtModule's options are built from the config, so the factory below
+// is written out. asProvider() also returns options and not a module, so it
+// could not go in AuthModule's own imports for PasswordResetService.
 const authConfigModule = ConfigModule.forFeature(authConfig);
 
 @Module({
