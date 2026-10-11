@@ -1,5 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
-
 import {
   Inject,
   Injectable,
@@ -17,10 +15,8 @@ import { ErrorCode } from "../shared/error-codes.js";
 import { ResetTokenInvalidException } from "../shared/exceptions/reset-token-invalid.exception.js";
 import { UsersService } from "../users/users.service.js";
 import authConfig from "./config/auth.config.js";
+import { hashOf, newOneTimeToken } from "./one-time-token.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
-
-// 32 random bytes, so 2^256 possible tokens. Nobody guesses one.
-const TOKEN_BYTES = 32;
 
 /**
  * Forgot password: emails a link, and later swaps the link's token for a new
@@ -101,7 +97,7 @@ export class PasswordResetService {
 
     // 32 random bytes, written as 43 URL-safe characters. The token carries
     // no data and no signature.
-    const token = randomBytes(TOKEN_BYTES).toString("base64url");
+    const token = newOneTimeToken();
     await this.pwResetTokenRepository.insert({
       userId: user.id,
       tokenHash: hashOf(token),
@@ -210,11 +206,4 @@ function failureKind(error: unknown): string {
     code?: unknown;
   };
   return [error.name, errorCode, code].filter((part) => typeof part === "string").join(" ");
-}
-
-// SHA-256, not bcrypt. bcrypt is slow on purpose, to make guessing a short
-// password costly. A token is 32 random bytes: there is nothing to guess, so
-// a fast hash is enough, and a fast hash can be looked up by an index.
-function hashOf(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
 }
