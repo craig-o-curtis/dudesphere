@@ -1,4 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -57,6 +58,21 @@ export async function setRole(
   role: UserRole,
 ): Promise<void> {
   await app.get(DataSource).query(`UPDATE "user" SET "role" = $1 WHERE "id" = $2`, [role, userId]);
+}
+
+/**
+ * The same member's token, as if they had logged in a minute earlier. It is
+ * signed by the app's own JwtService, so it is as real as the one passed in.
+ *
+ * For a test that needs a token that is plainly older than something it is
+ * about to do, such as a password change. A token records only the second it
+ * was signed in, so a token from a login moments before would be a coin toss.
+ * Moving it back a minute settles that with no waiting and no clock.
+ */
+export function signedAMinuteEarlier(app: INestApplication<App>, token: string): Promise<string> {
+  const jwt = app.get(JwtService);
+  const { sub, username, iat } = jwt.decode<{ sub: number; username: string; iat: number }>(token);
+  return jwt.signAsync({ sub, username, iat: iat - 60 });
 }
 
 // One member for each role, for each app. A suite calls tokenFor many times,

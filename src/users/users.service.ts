@@ -3,8 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { getUtcNow } from "@northguild/gmt";
 import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
@@ -26,6 +28,14 @@ import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
 import { User, UserRole } from "./user.entity.js";
+
+// For getUserForToken. True for a user whose password has never changed, and
+// for a token signed in the same second as the change or later. `issuedAt`
+// is in whole seconds, so one second is added before comparing.
+const TOKEN_NOT_OLDER_THAN_PASSWORD = `(
+  user.passwordChangedAt IS NULL
+  OR user.passwordChangedAt < to_timestamp(:issuedAt) + interval '1 second'
+)`;
 
 @Injectable()
 export class UsersService {
@@ -65,16 +75,23 @@ export class UsersService {
   }
 
   // For JwtAuthGuard, which calls this on every signed-in request. `id` is
-  // the user id from a token that has already passed verification.
+  // the user id from a token that has already passed verification, and
+  // `issuedAt` is when that token was signed, in seconds since 1970 (its
+  // `iat` claim).
   //
-  // Returns who that user is now, or null when there is no such user. A
-  // soft-deleted user is not found, so closing an account ends its tokens at
-  // once. The username and the role are the current ones, so a demoted admin
-  // is a plain user on their very next request.
+  // Returns who that user is now, or null when the token should be refused:
+  //
+  // - There is no such user. A soft-deleted user is not found, so closing an
+  //   account ends its tokens at once.
+  // - The password was changed or reset after the token was signed. Whoever
+  //   holds that token logged in with the old password.
+  //
+  // The username and the role are the current ones, so a demoted admin is a
+  // plain user on their very next request.
   //
   // Selects three columns and joins nothing: this runs far more often than
   // any other query in the app.
-  async getUserForToken(id: number, _issuedAt: number): Promise<AuthUser | null> {
+  async getUserForToken(id: number, issuedAt: number): Promise<AuthUser | null> {
     const user = await this.usersRepository
       .createQueryBuilder("user")
       .select(["user.id", "user.username", "user.role"])
@@ -82,6 +99,13 @@ export class UsersService {
       // The query builder already leaves soft-deleted rows out. Said here as
       // well, because this line is the reason a closed account's token stops.
       .andWhere("user.deletedAt IS NULL")
+      // A token only records the second it was signed in, not the
+      // millisecond. So a token signed in the same second as the password
+      // change is let through: it is far more often the member logging in
+      // straight after a reset than an old token. Any token from an earlier
+      // second is refused. Postgres does the comparison, so there is no date
+      // arithmetic here.
+      .andWhere(TOKEN_NOT_OLDER_THAN_PASSWORD, { issuedAt })
       .getOne();
 
     return user ? { userId: user.id, username: user.username, role: user.role } : null;
@@ -240,11 +264,20 @@ export class UsersService {
     // as on sign-up. update() below runs no entity hooks, so it is done here.
     // The hash goes into a new object, so the caller's DTO keeps what the
     // caller sent.
+    //
+    // A new password also stamps passwordChangedAt, which ends every login
+    // token signed before now. See getUserForToken. This is the one place a
+    // password is set after sign-up: updateMyUser, the admin's PATCH and the
+    // password reset all come through here.
     const { password, ...otherFields } = updateUserDto;
     const userFields =
       password === undefined
         ? otherFields
-        : { ...otherFields, password: await this.hashingProvider.hashPassword(password) };
+        : {
+            ...otherFields,
+            password: await this.hashingProvider.hashPassword(password),
+            passwordChangedAt: this.passwordChangedNow(),
+          };
 
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and
@@ -312,6 +345,24 @@ export class UsersService {
   // email. An "@" means an email. CreateUserDto and a CHECK on the table both
   // keep "@" out of usernames, so one identifier can never match two accounts.
   // Both columns are citext, so either lookup ignores case.
+  // The moment a password change is recorded at. It comes from the app's
+  // clock, not the database's, because the app's clock is also what writes
+  // the `iat` of a token. Two clocks a second apart would refuse a member's
+  // new token straight after they reset their password.
+  //
+  // getUtcNow returns "" on failure. A password must not change without the
+  // stamp, or the old tokens would outlive it, so that is a 503 and nothing
+  // is written. See CLOCK_UNAVAILABLE in src/shared/error-codes.ts.
+  private passwordChangedNow(): string {
+    const now = getUtcNow();
+    if (!now) {
+      throw new ServiceUnavailableException("Could not read the current UTC time", {
+        errorCode: ErrorCode.CLOCK_UNAVAILABLE,
+      });
+    }
+    return now;
+  }
+
   private findByIdentifier(identifier: string): Promise<User | null> {
     const where = identifier.includes("@") ? { email: identifier } : { username: identifier };
     return this.usersRepository.findOne({ where });

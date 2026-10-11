@@ -9,7 +9,7 @@ import { DataSource } from "typeorm";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
-import { bearer } from "./auth-helpers.js";
+import { bearer, signedAMinuteEarlier } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUpBody } from "./sign-up.js";
 
@@ -189,6 +189,42 @@ describe("Passwords (e2e)", () => {
       expect(response.body).not.toHaveProperty("currentPassword");
       await login(email, "secret456").expect(201);
       await login(email, "secret123").expect(401);
+    });
+
+    // Whoever holds a token from before the change logged in with the old
+    // password. That may be the member's other phone, or it may be the thief
+    // the member is changing the password to get rid of.
+    it("ends the tokens that were signed before the change", async () => {
+      const { email, token } = await signUp();
+      const earlier = await signedAMinuteEarlier(app, token);
+      await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
+
+      await changePassword(token, { password: "secret456", currentPassword: "secret123" }).expect(
+        200,
+      );
+
+      const refused = await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer(earlier))
+        .expect(401);
+      expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+
+      // The member logs in again with the new password, and that token works.
+      const { body } = await login(email, "secret456").expect(201);
+      await request(app.getHttpServer())
+        .get("/users/me")
+        .set(bearer((body as { token: string }).token))
+        .expect(200);
+    });
+
+    // Only a password change signs anybody out.
+    it("keeps the tokens when only the username changes", async () => {
+      const { token } = await signUp();
+      const earlier = await signedAMinuteEarlier(app, token);
+
+      await changePassword(token, { username: `e2e-${randomUUID().slice(0, 8)}` }).expect(200);
+
+      await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
     });
 
     it("does not ask for the current password when only the username changes", async () => {
