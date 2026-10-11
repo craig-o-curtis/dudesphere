@@ -10,6 +10,7 @@ import { LoginDto } from "./dto/login.dto.js";
 import { ResetPasswordDto } from "./dto/reset-password.dto.js";
 import { PasswordResetService } from "./password-reset.service.js";
 
+@Public()
 @Controller("auth")
 export class AuthController {
   constructor(
@@ -17,7 +18,6 @@ export class AuthController {
     private readonly passwordResetService: PasswordResetService,
   ) {}
 
-  @Public()
   @Post("signup")
   signup(@Body() signupDto: CreateUserDto) {
     return this.authService.signup(signupDto);
@@ -33,7 +33,6 @@ export class AuthController {
   //
   // The 100 a minute every route has still counts here, by IP address alone.
   // It stops one address from trying a few passwords on every account.
-  @Public()
   @ThrottleByAccount("identifier", { limit: 5, ttl: minutes(15) })
   @Post("login")
   login(@Body() loginDto: LoginDto) {
@@ -49,7 +48,6 @@ export class AuthController {
   // 3 in 15 minutes for one email from one IP address, which also keeps
   // anyone from flooding a member's inbox. The 100 a minute by IP address
   // alone counts here too, however many emails a caller names.
-  @Public()
   @ThrottleByAccount("email", { limit: 3, ttl: minutes(15) })
   @Post("forgot-password")
   @HttpCode(202)
@@ -63,7 +61,6 @@ export class AuthController {
   //
   // No limit of its own. A guessed token costs one lookup, and there are
   // 2^256 of them.
-  @Public()
   @Post("reset-password")
   @HttpCode(204)
   resetPassword(@Body() { token, password }: ResetPasswordDto): Promise<void> {
