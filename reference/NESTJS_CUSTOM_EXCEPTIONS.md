@@ -206,7 +206,8 @@ super.catch(new ValueTakenException(undefined, { cause: exception }), host);
 Before this class existed, a helper returned a message and a code, and each
 caller built the exception from them. The helper now returns only `"email"`
 or `"username"`. Working out the field is its job. Knowing what to say about
-it is the class's.
+it is the class's. `ProfilesService` passes `"displayName"` itself, because
+it only ever checks that one field.
 
 ## Traps
 
