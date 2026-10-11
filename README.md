@@ -72,10 +72,19 @@ docker compose down -v
 
 ### Database Credentials
 
-Credentials are configured in `.env`:
+No username or password is written in this repo. Each one is set in your own
+`.env`, which git ignores:
 
-- **PostgreSQL**: `dude` / `dude_password_123`
-- **MongoDB**: `dude` / `dude_mongo_123`
+| Service       | Username                 | Password      |
+| ------------- | ------------------------ | ------------- |
+| PostgreSQL    | `PG_ADMIN_USER`          | `PG_ADMIN_PW` |
+| MongoDB       | `MG_ADMIN_USER`          | `MG_ADMIN_PW` |
+| pgAdmin       | `EMAIL`                  | `PG_ADMIN_PW` |
+| Mongo Express | `MG_ADMIN_USER`          | `MG_ADMIN_PW` |
+| The app admin | `EMAIL`, set by the seed | `PASSWORD`    |
+
+`.env.example` lists every variable. Pick your own values, and do not reuse a
+password you use anywhere else.
 
 ## Development Commands
 

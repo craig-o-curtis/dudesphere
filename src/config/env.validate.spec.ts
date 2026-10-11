@@ -104,9 +104,9 @@ describe("validateEnv", () => {
   });
 
   it("keeps variables it has no rule for, such as the seed login", () => {
-    const env = validateEnv({ ...required, EMAIL: "admin@dude.com", HOME: "/home/node" });
+    const env = validateEnv({ ...required, EMAIL: "admin@example.com", HOME: "/home/node" });
 
-    expect(env.EMAIL).toBe("admin@dude.com");
+    expect(env.EMAIL).toBe("admin@example.com");
     expect(env).toHaveProperty("HOME", "/home/node");
   });
 

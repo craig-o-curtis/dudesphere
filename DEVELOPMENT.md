@@ -69,7 +69,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `PASSWORD_RESET_EXPIRES_IN` | no       | How long a reset link works, in seconds. At least 60                    | default `1800`                                    |
 | `DUDE_OBSERVE_APP_KEY`      | yes      | Observe project key                                                     | (from the Observe dashboard)                      |
 | `DUDE_OBSERVE_APP_SECRET`   | yes      | Observe project secret                                                  | (from the Observe dashboard)                      |
-| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@dude.com`                                  |
+| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and the e2e tests  | `admin@example.com`                               |
 | `PASSWORD`                  | seed     | Password of the seeded admin                                            | (your password)                                   |
 | `MG_ADMIN_USER`             | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app        | `dude`                                            |
 | `MG_ADMIN_PW`               | compose  | MongoDB admin password. Read by `docker-compose.yml`                    | (your password)                                   |
@@ -78,7 +78,8 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 
 pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
-1. Open http://localhost:5050
+1. Open http://localhost:5050 and log in with `EMAIL` and `PG_ADMIN_PW` from
+   your `.env`. `docker-compose.yml` reads both from there.
 2. Right-click **Servers** → **Register** → **Server**
 3. Fill in:
    - **Name**: `dude-postgres`
