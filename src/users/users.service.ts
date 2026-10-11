@@ -8,7 +8,6 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
@@ -19,6 +18,7 @@ import {
   type TakenField,
   ValueTakenException,
 } from "../shared/exceptions/value-taken.exception.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";

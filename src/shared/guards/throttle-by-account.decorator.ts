@@ -1,6 +1,7 @@
 import { SetMetadata } from "@nestjs/common";
 
-import { THROTTLE_ACCOUNT_FIELD_KEY } from "../../shared/auth-metadata.js";
+/** The key @ThrottleByAccount() writes. AuthThrottlerGuard, in this folder, reads it. */
+export const THROTTLE_ACCOUNT_FIELD_KEY = "throttleAccountField";
 
 /**
  * The name of the second count AppModule gives ThrottlerModule. The first,

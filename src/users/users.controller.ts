@@ -1,10 +1,9 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 
-import type { AuthUser } from "../auth/auth-user.js";
-import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { Authenticated } from "../shared/decorators/authenticated.decorator.js";
-import { Roles } from "../shared/decorators/roles.decorator.js";
 import { PgIdParamDto } from "../shared/dto/pg-id-param.dto.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
+import { Auth } from "../shared/guards/auth.decorator.js";
+import { CurrentUser } from "../shared/guards/current-user.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
@@ -26,7 +25,7 @@ export class UsersController {
   // asked, with no token, which made it a mass harvest. A single record is
   // for that user or an admin below, and a signed-in user reads their own
   // through GET /users/me.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Get()
   // @HttpCode(200)
   async getUsers(@Query() pageRequest: PaginationQueryDto): Promise<Paginated<UserResponseDto>> {
@@ -34,7 +33,7 @@ export class UsersController {
     return this.paginationProvider.toResponse(users, pageRequest, "/users");
   }
 
-  @Authenticated()
+  @Auth()
   @Get("me")
   getMyUser(@CurrentUser() user: AuthUser): Promise<UserResponseDto> {
     return this.usersService.getUserById(user.userId);
@@ -42,7 +41,7 @@ export class UsersController {
 
   // That user or an admin. The answer carries the email and the role, so no
   // other member may read it. The service enforces it.
-  @Authenticated()
+  @Auth()
   @Get(":id")
   getUserById(
     @Param() { id }: PgIdParamDto,
@@ -53,7 +52,7 @@ export class UsersController {
 
   // Admin only. Anyone else signs up through POST /auth/signup, which is
   // public and calls the same UsersService.createUser.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Post()
   // @HttpCode(201)
   createUser(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -68,7 +67,7 @@ export class UsersController {
   // Auth flow: same as GET /users/me — see that comment above.
   //
   // A new password also needs `currentPassword`. See UsersService.updateMyUser.
-  @Authenticated()
+  @Auth()
   @Patch("me")
   updateMyUser(
     @Body() updateMyUserDto: UpdateMyUserDto,
@@ -79,7 +78,7 @@ export class UsersController {
 
   // Any account, by id. Admin only — a user edits their own through
   // PATCH /users/me above.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Patch(":id")
   // @HttpCode(200)
   updateUser(
@@ -103,7 +102,7 @@ export class UsersController {
   //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
-  @Authenticated()
+  @Auth()
   @Delete("me")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   deleteMe(@CurrentUser() user: AuthUser): Promise<void> {
@@ -111,7 +110,7 @@ export class UsersController {
   }
 
   // Admin only — a user closes their own account through DELETE /users/me.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   deleteUser(@Param() { id }: PgIdParamDto): Promise<void> {
@@ -120,7 +119,7 @@ export class UsersController {
 
   // 200, not POST's default 201: this brings back an existing user rather
   // than creating one. Admin only, like DELETE above.
-  @Roles(UserRole.ADMIN)
+  @Auth(UserRole.ADMIN)
   @Post(":id/restore")
   @HttpCode(200) // uses 200 OK instead of Nest default 201 Created
   restoreUser(@Param() { id }: PgIdParamDto): Promise<UserResponseDto> {

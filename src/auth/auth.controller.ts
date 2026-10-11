@@ -1,13 +1,13 @@
 import { Body, Controller, HttpCode, Post } from "@nestjs/common";
 import { minutes, Throttle } from "@nestjs/throttler";
 
-import { Public } from "../shared/decorators/public.decorator.js";
-import { CreateUserDto } from "../users/dto/create-user.dto.js";
-import { AuthService } from "./auth.service.js";
+import { Public } from "../shared/guards/public.decorator.js";
 import {
   ACCOUNT_THROTTLER,
   ThrottleByAccount,
-} from "./decorators/throttle-by-account.decorator.js";
+} from "../shared/guards/throttle-by-account.decorator.js";
+import { CreateUserDto } from "../users/dto/create-user.dto.js";
+import { AuthService } from "./auth.service.js";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
 import { LoginDto } from "./dto/login.dto.js";
 import { ResetPasswordDto } from "./dto/reset-password.dto.js";

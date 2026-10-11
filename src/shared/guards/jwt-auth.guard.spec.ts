@@ -2,8 +2,8 @@ import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
-import { TokenMissingException } from "../../shared/exceptions/token-missing.exception.js";
 import { UserRole } from "../../users/user.entity.js";
+import { TokenMissingException } from "../exceptions/token-missing.exception.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 
 describe("JwtAuthGuard", () => {

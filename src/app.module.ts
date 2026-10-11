@@ -10,9 +10,6 @@ import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { ACCOUNT_THROTTLER } from "./auth/decorators/throttle-by-account.decorator.js";
-import { AuthThrottlerGuard } from "./auth/guards/auth-throttler.guard.js";
-import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
 import mongoConfig from "./config/mongo.config.js";
@@ -21,7 +18,10 @@ import postgresConfig from "./config/postgres.config.js";
 import throttleConfig from "./config/throttle.config.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
+import { AuthThrottlerGuard } from "./shared/guards/auth-throttler.guard.js";
+import { JwtAuthGuard } from "./shared/guards/jwt-auth.guard.js";
 import { RolesGuard } from "./shared/guards/roles.guard.js";
+import { ACCOUNT_THROTTLER } from "./shared/guards/throttle-by-account.decorator.js";
 import { REQUEST_TIMEOUT_MS } from "./shared/interceptors/timeout.interceptor.js";
 import { PaginationModule } from "./shared/pagination/pagination.module.js";
 import { UsersModule } from "./users/users.module.js";
@@ -128,10 +128,13 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // reads that user's role. The limiter goes first so that a guessed token
     // is counted too.
     //
-    // Because these are global, a route needs no @UseGuards. Routes an
-    // anonymous caller is meant to reach carry @Public(); routes limited to a
-    // role carry @Roles(); every other route carries @Authenticated(), a
-    // label that src/shared/route-access.spec.ts requires.
+    // Because these are global, a route needs no @UseGuards. A route an
+    // anonymous caller is meant to reach carries @Public(). Every other route
+    // carries @Auth(), with the roles that may call it when it is limited to
+    // some. src/shared/guards/route-access.spec.ts requires one of the two.
+    //
+    // The three guards and their decorators live in src/shared/guards. Its
+    // README follows one request through all three.
     { provide: APP_GUARD, useClass: AuthThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

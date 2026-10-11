@@ -3,10 +3,10 @@ import { InjectModel } from "@nestjs/mongoose";
 import { isAfterUtc } from "@northguild/gmt";
 import { Model, type QueryFilter } from "mongoose";
 
-import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import type { AuthUser } from "../shared/guards/auth-user.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import {

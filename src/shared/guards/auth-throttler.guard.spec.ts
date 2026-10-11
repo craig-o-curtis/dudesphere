@@ -2,11 +2,8 @@ import { ExecutionContext, HttpException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { ThrottlerRequest, ThrottlerStorage } from "@nestjs/throttler";
 
-import {
-  ACCOUNT_THROTTLER,
-  ThrottleByAccount,
-} from "../decorators/throttle-by-account.decorator.js";
 import { AuthThrottlerGuard } from "./auth-throttler.guard.js";
+import { ACCOUNT_THROTTLER, ThrottleByAccount } from "./throttle-by-account.decorator.js";
 
 // handleRequest and throwThrottlingException are protected, because only
 // ThrottlerGuard calls them. This opens them to the spec and adds nothing.

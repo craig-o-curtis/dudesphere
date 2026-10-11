@@ -71,7 +71,7 @@ describe("HashtagsController", () => {
     });
   });
 
-  // No role assertion here. The admin-only rule is @Roles() metadata read by
+  // No role assertion here. The admin-only rule is @Auth() metadata read by
   // RolesGuard, an APP_GUARD this testing module never registers, so a 403 is
   // unreachable from a unit spec. test/hashtags.e2e-spec.ts proves it over HTTP.
   describe("deleteHashtagBySlug", () => {
