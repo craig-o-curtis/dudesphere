@@ -1,11 +1,8 @@
 import { Body, Controller, HttpCode, Post } from "@nestjs/common";
-import { minutes, Throttle } from "@nestjs/throttler";
+import { minutes } from "@nestjs/throttler";
 
 import { Public } from "../shared/guards/public.decorator.js";
-import {
-  ACCOUNT_THROTTLER,
-  ThrottleByAccount,
-} from "../shared/guards/throttle-by-account.decorator.js";
+import { ThrottleByAccount } from "../shared/guards/throttle-by-account.decorator.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { AuthService } from "./auth.service.js";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
@@ -37,8 +34,7 @@ export class AuthController {
   // The 100 a minute every route has still counts here, by IP address alone.
   // It stops one address from trying a few passwords on every account.
   @Public()
-  @ThrottleByAccount("identifier")
-  @Throttle({ [ACCOUNT_THROTTLER]: { limit: 5, ttl: minutes(15) } })
+  @ThrottleByAccount("identifier", { limit: 5, ttl: minutes(15) })
   @Post("login")
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
@@ -54,8 +50,7 @@ export class AuthController {
   // anyone from flooding a member's inbox. The 100 a minute by IP address
   // alone counts here too, however many emails a caller names.
   @Public()
-  @ThrottleByAccount("email")
-  @Throttle({ [ACCOUNT_THROTTLER]: { limit: 3, ttl: minutes(15) } })
+  @ThrottleByAccount("email", { limit: 3, ttl: minutes(15) })
   @Post("forgot-password")
   @HttpCode(202)
   forgotPassword(@Body() { email }: ForgotPasswordDto): void {

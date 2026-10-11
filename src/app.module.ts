@@ -44,8 +44,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // minute from one IP address. The second is tighter and counts by account
     // and IP address together. It runs only on a route marked
     // @ThrottleByAccount, as login and forgot-password are in AuthController,
-    // and AuthThrottlerGuard skips it everywhere else. Its 5 in 15 minutes is
-    // the fallback for a marked route that sets no limit of its own.
+    // and AuthThrottlerGuard skips it everywhere else. @ThrottleByAccount
+    // always sets the route's own limit, so the 5 in 15 minutes here is only
+    // the value ThrottlerModule needs in order to register the count.
     //
     // The counts are kept in this process's memory, so they reset on a
     // restart and are not shared between two copies of the app.
