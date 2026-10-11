@@ -42,7 +42,9 @@ export class CreateUserDto {
   // 72 bytes, not characters, because that is all bcrypt reads: anything past
   // it would be ignored, so two long passwords with the same first 72 bytes
   // would both log in. An accented letter is 2 bytes and an emoji is 4.
-  @IsByteLength(6, 72, { message: "password must be at most 72 bytes" })
+  @IsByteLength(0, 72, {
+    message: "password is too long: at most 72 letters or digits, fewer with accents or emoji",
+  })
   password: string;
 
   // Optional. A profile is always created; these are its starting values.
