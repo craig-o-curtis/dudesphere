@@ -14,6 +14,7 @@ import { UserResponseDto } from "./dto/user-response.dto.js";
 import { UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
+@Auth()
 @Controller("users")
 export class UsersController {
   constructor(
@@ -33,7 +34,6 @@ export class UsersController {
     return this.paginationProvider.toResponse(users, pageRequest, "/users");
   }
 
-  @Auth()
   @Get("me")
   getMyUser(@CurrentUser() user: AuthUser): Promise<UserResponseDto> {
     return this.usersService.getUserById(user.userId);
@@ -41,7 +41,6 @@ export class UsersController {
 
   // That user or an admin. The answer carries the email and the role, so no
   // other member may read it. The service enforces it.
-  @Auth()
   @Get(":id")
   getUserById(
     @Param() { id }: PgIdParamDto,
@@ -67,7 +66,6 @@ export class UsersController {
   // Auth flow: same as GET /users/me — see that comment above.
   //
   // A new password also needs `currentPassword`. See UsersService.updateMyUser.
-  @Auth()
   @Patch("me")
   updateMyUser(
     @Body() updateMyUserDto: UpdateMyUserDto,
@@ -102,7 +100,6 @@ export class UsersController {
   //   4. JwtAuthGuard extracts the token, verifies its signature and expiry,
   //      then populates request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
-  @Auth()
   @Delete("me")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   deleteMe(@CurrentUser() user: AuthUser): Promise<void> {
