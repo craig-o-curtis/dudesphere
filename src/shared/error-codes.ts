@@ -6,21 +6,28 @@
 // a client that sees EMAIL_TAKEN should never have to check the status too.
 // For a code thrown from more than one place, a class in ./exceptions pairs
 // the code with its status, so the two cannot drift apart: the four *_TAKEN
-// codes, NOT_OWNER, TOKEN_MISSING, REFRESH_TOKEN_INVALID and
-// DATABASE_UNAVAILABLE. Throw the class,
-// not the code. The rest are each thrown from one place, beside a built-in
-// exception.
+// codes, NOT_OWNER, TOKEN_MISSING, REFRESH_TOKEN_INVALID, CLOCK_UNAVAILABLE
+// and DATABASE_UNAVAILABLE. Throw the class, not the code. The rest are each
+// thrown from one place, beside a built-in exception.
 //
 // CLOCK_UNAVAILABLE is temporary. gmt's getUtcNow() documents "" as its
 // result when the clock cannot be read, so every caller checks for it and
 // throws this. The clock cannot in fact fail, and gmt 1.19.0 takes "" out of
-// the contract (https://github.com/northguild/gmt/issues/303). When that
-// version is installed, remove this code, each check that throws it
-// (UserAbidingsService.softDeleteForUser, HashtagsService.deleteBySlug,
-// PasswordResetService.sendLink, UsersService.passwordChangedNow,
-// TokenService.now, JwtAuthGuard.isSessionLive), the
-// matching check in HashtagsService.registerTags, and the vi.mock of gmt in
-// hashtags.service.spec.ts.
+// the contract (https://github.com/northguild/gmt/issues/303).
+//
+// The check is written once, in src/shared/utils/utc-clock.ts, and thrown as
+// ClockUnavailableException. When that gmt version is installed, remove this
+// code, that class and that file. Its callers then use gmt directly:
+//
+// - utcNowOrThrow, in UserAbidingsService.softDeleteForUser,
+//   HashtagsService.deleteBySlug, PasswordResetService.sendLink,
+//   UsersService.passwordChangedNow, TokenService.now and
+//   JwtAuthGuard.isSessionLive;
+// - orClockUnavailable, in PasswordResetService.sendLink, TokenService.after
+//   and TokenService.earlier.
+//
+// Remove also the matching check in HashtagsService.registerTags and the
+// vi.mock of gmt in hashtags.service.spec.ts.
 export enum ErrorCode {
   EMAIL_TAKEN = "EMAIL_TAKEN", // 409 Conflict
   USERNAME_TAKEN = "USERNAME_TAKEN", // 409 Conflict
