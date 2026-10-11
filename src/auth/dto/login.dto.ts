@@ -24,11 +24,14 @@ export class LoginDto {
   // minimum here that differs from it locks out users with a valid password.
   // The seed and an admin's update do not go through sign-up's minimum at all.
   //
-  // The 72-byte maximum is safe: BcryptProvider.hash refuses anything longer,
-  // so no stored password can be longer. Without it, bcrypt would compare the
-  // first 72 bytes and accept a password with extra characters on the end.
+  // The 72-byte maximum is safe: BcryptProvider.hashPassword refuses anything
+  // longer, so no stored password can be longer. BcryptProvider.comparePassword
+  // answers false for a longer one as well. The rule here turns that into a 400
+  // that says why, before any hashing work is done.
   @IsString()
   @IsNotEmpty()
-  @IsByteLength(1, 72, { message: "password must be at most 72 bytes" })
+  @IsByteLength(0, 72, {
+    message: "password is too long: at most 72 letters or digits, fewer with accents or emoji",
+  })
   password: string;
 }
