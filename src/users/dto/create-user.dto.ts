@@ -1,9 +1,9 @@
 import { Type } from "class-transformer";
 import {
   IsByteLength,
+  IsDefined,
   IsEmail,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Matches,
   MinLength,
@@ -47,11 +47,13 @@ export class CreateUserDto {
   })
   password: string;
 
-  // Optional. A profile is always created; these are its starting values.
-  // @ValidateNested + @Type are BOTH needed for the nested fields to be validated.
+  // Required, because a profile's displayName is. A profile is always
+  // created; these are its starting values.
+  // @IsDefined is needed for "required": @ValidateNested alone skips a missing
+  // object. @ValidateNested + @Type are BOTH needed for the nested fields to be validated.
   // NOTE - the confusing here is that on teh actual User table, the profile is a relation, not a column.
-  @IsOptional()
+  @IsDefined()
   @ValidateNested()
   @Type(() => CreateProfileDto)
-  profile?: CreateProfileDto;
+  profile: CreateProfileDto;
 }

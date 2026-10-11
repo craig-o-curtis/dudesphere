@@ -56,9 +56,10 @@ more file to keep in step with the code.
 Who throws each one:
 
 - `ValueTakenException`: `UsersService`, when its own lookup finds the email
-  or username in use, and both database filters, when a unique index refuses
-  a write. Pass `"email"` or `"username"` when you know the field. Pass no
-  field when you do not, and the answer is the general `VALUE_TAKEN`.
+  or username in use; `ProfilesService`, when a display name is in use; and
+  both database filters, when a unique index refuses a write. Pass `"email"`,
+  `"username"` or `"displayName"` when you know the field. Pass no field when
+  you do not, and the answer is the general `VALUE_TAKEN`.
 - `NotOwnerException`: `AbidingsService`, `ProfilesService` and `UsersService`,
   when the thing exists and is someone else's. Each passes its own message.
 - `TokenMissingException`: `JwtAuthGuard` and `RolesGuard`.

@@ -111,7 +111,12 @@ describe("UsersController", () => {
 
   describe("createUser", () => {
     it("passes the body to the service and returns its result", async () => {
-      const body = { username: "dude", email: "d@x.com", password: "secret1" };
+      const body = {
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile: { displayName: "The Dude" },
+      };
       const created = { id: 42, username: "dude", email: "d@x.com" };
       usersService.createUser.mockResolvedValue(created);
 

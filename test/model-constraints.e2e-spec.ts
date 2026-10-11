@@ -116,19 +116,25 @@ describe("Model constraints (e2e)", () => {
       expectRejectedField(body, "isDude");
     });
 
+    it("PATCH /profiles/me rejects null for displayName", async () => {
+      const { body } = await patch("/profiles/me", { displayName: null }).expect(400);
+
+      expectRejectedField(body, "displayName");
+    });
+
     // The other side of the same rule: null is how a client clears a column
     // that allows it.
     it("PATCH /profiles/me still accepts null for a nullable column", async () => {
-      await patch("/profiles/me", { firstName: "Walter" }).expect(200);
+      await patch("/profiles/me", { bio: "The Dude abides" }).expect(200);
 
-      const { body } = await patch("/profiles/me", { firstName: null }).expect(200);
+      const { body } = await patch("/profiles/me", { bio: null }).expect(200);
 
-      expect((body as { firstName: string | null }).firstName).toBeNull();
+      expect((body as { bio: string | null }).bio).toBeNull();
     });
   });
 
   describe("a NUL character, which Postgres cannot store", () => {
-    it.each(["bio", "firstName", "lastName", "profileImageUrl"])(
+    it.each(["bio", "displayName", "profileImageUrl"])(
       "PATCH /profiles/me rejects one in %s",
       async (field) => {
         const { body } = await patch("/profiles/me", { [field]: "ab\u0000cd" }).expect(400);
@@ -158,13 +164,13 @@ describe("Model constraints (e2e)", () => {
       expectRejectedField(body, "username");
     });
 
-    // 51 letters to @MaxLength, 102 characters to the column's limit of 100.
-    it("PATCH /profiles/me rejects such a firstName", async () => {
+    // 26 letters to @MaxLength, 52 characters to the column's limit of 50.
+    it("PATCH /profiles/me rejects such a displayName", async () => {
       const { body } = await patch("/profiles/me", {
-        firstName: LETTER_WITH_SELECTOR.repeat(51),
+        displayName: LETTER_WITH_SELECTOR.repeat(26),
       }).expect(400);
 
-      expectRejectedField(body, "firstName");
+      expectRejectedField(body, "displayName");
     });
   });
 

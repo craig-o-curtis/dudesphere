@@ -38,6 +38,7 @@ describe("UsersService", () => {
   };
 
   const profilesService = {
+    assertDisplayNameFree: vi.fn(),
     createProfileForUser: vi.fn(),
     softDeleteForUser: vi.fn(),
     restoreForUser: vi.fn(),
@@ -262,12 +263,16 @@ describe("UsersService", () => {
   });
 
   describe("createUser", () => {
+    // Sign up needs a profile with a display name. Most tests here are about
+    // the user, so they share this one.
+    const profile = { displayName: "The Dude" };
+
     it("creates the user and the profile using the SAME transaction manager", async () => {
       // By `SAME transaction manager` we mean the user insert and the profile
       // insert both run through the `manager` the transaction hands us, so they
       // commit or roll back together.
       const mockUserId = 42;
-      const mockProfile = { id: 1, userId: mockUserId, isDude: true };
+      const mockProfile = { id: 1, userId: mockUserId, displayName: "The Dude", isDude: true };
       manager.findOne.mockResolvedValue(null);
       manager.save.mockResolvedValue({ id: mockUserId, username: "dude", email: "d@x.com" });
       profilesService.createProfileForUser.mockResolvedValue(mockProfile);
@@ -276,7 +281,7 @@ describe("UsersService", () => {
         username: "dude",
         email: "d@x.com",
         password: "secret1",
-        profile: { firstName: "The" },
+        profile: { displayName: "The Dude", bio: "abides" },
       });
 
       // Both writes happen inside one transaction.
@@ -291,7 +296,8 @@ describe("UsersService", () => {
       });
       // The profile is created with that same manager, for the id the insert returned.
       expect(profilesService.createProfileForUser).toHaveBeenCalledWith(manager, mockUserId, {
-        firstName: "The",
+        displayName: "The Dude",
+        bio: "abides",
       });
       // The response carries the new user and the profile created for it, and
       // never echoes the password back.
@@ -309,7 +315,7 @@ describe("UsersService", () => {
       profilesService.createProfileForUser.mockRejectedValue(new Error("profile insert failed"));
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toThrow("profile insert failed");
     });
 
@@ -317,7 +323,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ message: "Email already registered", errorCode: "EMAIL_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
@@ -328,7 +334,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ message: "Username already taken", errorCode: "USERNAME_TAKEN" });
 
       expect(manager.save).not.toHaveBeenCalled();
@@ -340,7 +346,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
 
       await expect(
-        service.createUser({ username: "dude", email: "D@X.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "D@X.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
     });
 
@@ -348,7 +354,7 @@ describe("UsersService", () => {
       manager.findOne.mockResolvedValue({ id: 1, email: "other@x.com", username: "dude" });
 
       await expect(
-        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "Dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toMatchObject({ errorCode: "USERNAME_TAKEN" });
     });
 
@@ -359,7 +365,12 @@ describe("UsersService", () => {
       manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
       profilesService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
 
-      await service.createUser({ username: "dude", email: "d@x.com", password: "secret1" });
+      await service.createUser({
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile,
+      });
 
       expect(manager.findOne).toHaveBeenCalledWith(User, {
         where: [{ email: "d@x.com" }, { username: "dude" }],
@@ -376,10 +387,61 @@ describe("UsersService", () => {
       });
 
       await expect(
-        service.createUser({ username: "dude", email: "d@x.com", password: "secret1" }),
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
       ).rejects.toBeInstanceOf(ValueTakenException);
 
       expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    // The display name is unique as well, on the profile table, so its check
+    // belongs to ProfilesService. It has to run inside the transaction, and
+    // before the slow hash and the first write.
+    it("checks the display name through the transaction's manager, before hashing", async () => {
+      manager.findOne.mockResolvedValue(null);
+      manager.save.mockResolvedValue({ id: 7, username: "dude", email: "d@x.com" });
+      profilesService.createProfileForUser.mockResolvedValue({ id: 1, userId: 7 });
+
+      await service.createUser({
+        username: "dude",
+        email: "d@x.com",
+        password: "secret1",
+        profile,
+      });
+
+      expect(profilesService.assertDisplayNameFree).toHaveBeenCalledWith(manager, "The Dude");
+      expect(profilesService.assertDisplayNameFree.mock.invocationCallOrder[0]).toBeLessThan(
+        hashingProvider.hashPassword.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("throws 409 and creates nothing when the display name is taken", async () => {
+      manager.findOne.mockResolvedValue(null);
+      profilesService.assertDisplayNameFree.mockRejectedValue(
+        new ValueTakenException("displayName"),
+      );
+
+      await expect(
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
+      ).rejects.toMatchObject({
+        message: "Display name already taken",
+        errorCode: "DISPLAY_NAME_TAKEN",
+      });
+
+      expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
+      expect(profilesService.createProfileForUser).not.toHaveBeenCalled();
+    });
+
+    // One answer at a time, and the account fields first: a caller told
+    // "email taken" is not also told about the name.
+    it("does not check the display name when the email is already taken", async () => {
+      manager.findOne.mockResolvedValue({ id: 1, email: "d@x.com", username: "someoneelse" });
+
+      await expect(
+        service.createUser({ username: "dude", email: "d@x.com", password: "secret1", profile }),
+      ).rejects.toMatchObject({ errorCode: "EMAIL_TAKEN" });
+
+      expect(profilesService.assertDisplayNameFree).not.toHaveBeenCalled();
     });
   });
 
@@ -481,13 +543,6 @@ describe("UsersService", () => {
 
     it("throws 400 when the body carries no user fields", async () => {
       await expect(service.updateUser(3, {})).rejects.toBeInstanceOf(BadRequestException);
-      expect(usersRepository.update).not.toHaveBeenCalled();
-    });
-
-    it("throws 400 when the body carries only profile fields", async () => {
-      await expect(
-        service.updateUser(3, { profile: { firstName: "Dude" } }),
-      ).rejects.toBeInstanceOf(BadRequestException);
       expect(usersRepository.update).not.toHaveBeenCalled();
     });
 

@@ -12,8 +12,7 @@ describe("ProfilesController", () => {
   const mockProfile = {
     id: 1,
     userId: 42,
-    firstName: "John",
-    lastName: "Doe",
+    displayName: "The Dude",
     bio: "Hello world",
     profileImageUrl: "https://example.com/avatar.jpg",
     isDude: true,

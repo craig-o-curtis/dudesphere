@@ -28,10 +28,17 @@ describe("UpdateUserDto", () => {
     expect(await check({ [field]: null })).toEqual([field]);
   });
 
-  // profile is not a column on user. Its fields are updated through
-  // /profiles, and UsersService drops it, so null is harmless here.
-  it("still accepts null for profile", async () => {
-    expect(await check({ profile: null })).toEqual([]);
+  // profile is not a column on user, and it is not a field here. A profile
+  // is edited through /profiles. The app's ValidationPipe runs with these two
+  // options, so a profile sent to PATCH /users/me is a 400, not ignored.
+  it("has no profile field, so one is refused as unknown", async () => {
+    const errors = await validate(
+      plainToInstance(UpdateUserDto, { profile: { displayName: "The Dude" } }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+
+    expect(errors.map((error) => error.property)).toEqual(["profile"]);
+    expect(errors[0].constraints).toHaveProperty("whitelistValidation");
   });
 });
 
