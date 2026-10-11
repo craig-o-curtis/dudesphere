@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { EntityManager, IsNull, Not, QueryFailedError } from "typeorm";
+import { EntityManager, In, IsNull, Not, QueryFailedError } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -17,6 +17,7 @@ describe("ProfilesService", () => {
 
   // A fake repository: only the methods ProfilesService actually calls.
   const profileRepository = {
+    find: vi.fn(),
     findAndCount: vi.fn(),
     findOne: vi.fn(),
     update: vi.fn(),
@@ -136,6 +137,54 @@ describe("ProfilesService", () => {
       await expect(service.getProfileByUserId(999)).rejects.toThrow(
         "Profile for user #999 not found",
       );
+    });
+  });
+
+  // AbidingsService names the authors of a page through this.
+  describe("getDisplayNamesByUserIds", () => {
+    it("returns each user's display name, keyed by user id", async () => {
+      profileRepository.find.mockResolvedValue([
+        { userId: 1, displayName: "Admin Dude" },
+        { userId: 25, displayName: "Walter" },
+      ]);
+
+      const names = await service.getDisplayNamesByUserIds([1, 25]);
+
+      expect([...names]).toEqual([
+        [1, "Admin Dude"],
+        [25, "Walter"],
+      ]);
+    });
+
+    // One query for the whole page. Only the two columns it needs, so
+    // nothing else about a profile travels with an abiding. withDeleted: a
+    // soft-deleted author still gets their name shown.
+    it("loads only those users, only the two columns, deleted profiles included", async () => {
+      profileRepository.find.mockResolvedValue([]);
+
+      await service.getDisplayNamesByUserIds([1, 25]);
+
+      expect(profileRepository.find).toHaveBeenCalledTimes(1);
+      expect(profileRepository.find).toHaveBeenCalledWith({
+        where: { userId: In([1, 25]) },
+        select: { userId: true, displayName: true },
+        withDeleted: true,
+      });
+    });
+
+    it("leaves a user with no profile out of the map", async () => {
+      profileRepository.find.mockResolvedValue([{ userId: 1, displayName: "Admin Dude" }]);
+
+      const names = await service.getDisplayNamesByUserIds([1, 99]);
+
+      expect(names.has(99)).toBe(false);
+    });
+
+    it("skips the query when there are no ids", async () => {
+      const names = await service.getDisplayNamesByUserIds([]);
+
+      expect(names.size).toBe(0);
+      expect(profileRepository.find).not.toHaveBeenCalled();
     });
   });
 

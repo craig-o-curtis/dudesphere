@@ -18,7 +18,7 @@ import { UpdateAbidingDto } from "./dto/update-abiding.dto.js";
 
 // Every route here reads the request, calls AbidingsService and returns what
 // it gets. The service returns each abiding as an AbidingResponseDto with its
-// author's username already on it. A list route also asks PaginationProvider
+// author's display name already on it. A list route also asks PaginationProvider
 // to wrap the page in the response body, with links for this route's path.
 @Controller("abidings")
 export class AbidingsController {

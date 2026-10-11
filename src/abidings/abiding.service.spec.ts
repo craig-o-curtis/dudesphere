@@ -6,10 +6,10 @@ import mongoose from "mongoose";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
+import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
-import { UsersService } from "../users/users.service.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -64,12 +64,12 @@ describe("AbidingsService", () => {
     registerTags: vi.fn(),
   };
 
-  // createAbiding reads the author from getMyUser before it writes. Every
-  // method that returns an abiding reads its author's username from
-  // getUsersByIds.
-  const usersService = {
-    getMyUser: vi.fn(),
-    getUsersByIds: vi.fn(),
+  // createAbiding reads the author's profile from getProfileByUserId before
+  // it writes. Every method that returns an abiding reads its author's
+  // display name from getDisplayNamesByUserIds.
+  const profilesService = {
+    getProfileByUserId: vi.fn(),
+    getDisplayNamesByUserIds: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -81,17 +81,17 @@ describe("AbidingsService", () => {
     // Default: the abiding exists, so a write that matched nothing reads as an
     // ownership refusal. Tests for a missing abiding override this with null.
     abidingModel.exists.mockReturnValue(queryOf({ _id: "x" }));
-    // Default: the caller's user exists.
-    usersService.getMyUser.mockResolvedValue({ id: 1, username: "walter" });
-    // Default: no author is found, so every username reads "Unknown".
-    usersService.getUsersByIds.mockResolvedValue([]);
+    // Default: the caller's profile exists.
+    profilesService.getProfileByUserId.mockResolvedValue({ userId: 1, displayName: "Walter" });
+    // Default: no author is found, so every display name reads "Unknown".
+    profilesService.getDisplayNamesByUserIds.mockResolvedValue(new Map());
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AbidingsService,
         { provide: getModelToken(Abiding.name), useValue: abidingModel },
         { provide: HashtagsService, useValue: hashtagsService },
-        { provide: UsersService, useValue: usersService },
+        { provide: ProfilesService, useValue: profilesService },
         // The real one. It has no dependencies, and every list is tested through it.
         PaginationProvider,
       ],
@@ -292,8 +292,9 @@ describe("AbidingsService", () => {
   });
 
   // The names live in Postgres and the abidings in Mongo. The service joins
-  // them, so every abiding it returns already carries its author's username.
-  describe("authors' usernames", () => {
+  // them, so every abiding it returns already carries its author's display
+  // name. It never carries the username: that is a login name.
+  describe("authors' display names", () => {
     function abidingBy(userId: number) {
       return { _id: new mongoose.Types.ObjectId(), userId, message: "hello" };
     }
@@ -305,20 +306,31 @@ describe("AbidingsService", () => {
 
       await service.getAbidings(firstPage);
 
-      expect(usersService.getUsersByIds).toHaveBeenCalledTimes(1);
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([1, 25]);
+      expect(profilesService.getDisplayNamesByUserIds).toHaveBeenCalledTimes(1);
+      expect(profilesService.getDisplayNamesByUserIds).toHaveBeenCalledWith([1, 25]);
     });
 
-    it("puts each author's username on their abidings", async () => {
+    it("puts each author's display name on their abidings", async () => {
       abidingModel.find.mockReturnValue(listQueryOf([abidingBy(1), abidingBy(25)]));
-      usersService.getUsersByIds.mockResolvedValue([
-        { id: 1, username: "Admin" },
-        { id: 25, username: "walter" },
-      ]);
+      profilesService.getDisplayNamesByUserIds.mockResolvedValue(
+        new Map([
+          [1, "Admin Dude"],
+          [25, "Walter"],
+        ]),
+      );
 
       const result = await service.getAbidings(firstPage);
 
-      expect(result.items.map((abiding) => abiding.username)).toEqual(["Admin", "walter"]);
+      expect(result.items.map((abiding) => abiding.displayName)).toEqual(["Admin Dude", "Walter"]);
+    });
+
+    it("puts no username on an abiding", async () => {
+      abidingModel.find.mockReturnValue(listQueryOf([abidingBy(25)]));
+      profilesService.getDisplayNamesByUserIds.mockResolvedValue(new Map([[25, "Walter"]]));
+
+      const result = await service.getAbidings(firstPage);
+
+      expect(result.items[0]).not.toHaveProperty("username");
     });
 
     it("falls back to Unknown when the author is not found", async () => {
@@ -326,32 +338,32 @@ describe("AbidingsService", () => {
 
       const result = await service.getAbidings(firstPage);
 
-      expect(result.items[0].username).toBe("Unknown");
+      expect(result.items[0].displayName).toBe("Unknown");
     });
 
     it("names the author on a caller's own list", async () => {
       abidingModel.find.mockReturnValue(listQueryOf([abidingBy(25)]));
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      profilesService.getDisplayNamesByUserIds.mockResolvedValue(new Map([[25, "Walter"]]));
 
       const result = await service.getAbidingsByUserId(25, firstPage);
 
-      expect(result.items[0].username).toBe("walter");
+      expect(result.items[0].displayName).toBe("Walter");
     });
 
     it("names the author of one abiding read by id", async () => {
       abidingModel.findOne.mockReturnValue(queryOf(abidingBy(25)));
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      profilesService.getDisplayNamesByUserIds.mockResolvedValue(new Map([[25, "Walter"]]));
 
       const result = await service.getAbidingById("6ac543e3d91134719299fe49");
 
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
-      expect(result.username).toBe("walter");
+      expect(profilesService.getDisplayNamesByUserIds).toHaveBeenCalledWith([25]);
+      expect(result.displayName).toBe("Walter");
     });
 
     // The author, not the caller: an admin may edit someone else's abiding.
     it("names the author of an abiding after an edit", async () => {
       abidingModel.findOneAndUpdate.mockReturnValue(queryOf(abidingBy(25)));
-      usersService.getUsersByIds.mockResolvedValue([{ id: 25, username: "walter" }]);
+      profilesService.getDisplayNamesByUserIds.mockResolvedValue(new Map([[25, "Walter"]]));
 
       const result = await service.patchAbiding(
         "6ac543e3d91134719299fe49",
@@ -359,8 +371,8 @@ describe("AbidingsService", () => {
         admin,
       );
 
-      expect(usersService.getUsersByIds).toHaveBeenCalledWith([25]);
-      expect(result.username).toBe("walter");
+      expect(profilesService.getDisplayNamesByUserIds).toHaveBeenCalledWith([25]);
+      expect(result.displayName).toBe("Walter");
     });
   });
 
@@ -412,26 +424,30 @@ describe("AbidingsService", () => {
   });
 
   describe("createAbiding", () => {
-    it("looks up the author by the id in the token and returns their username", async () => {
+    it("looks up the author by the id in the token and returns their display name", async () => {
       abidingModel.create.mockResolvedValue({
         _id: new mongoose.Types.ObjectId(),
         userId: 1,
         message: "new abiding",
       });
-      usersService.getMyUser.mockResolvedValue({ id: 1, username: "the-dude" });
+      profilesService.getProfileByUserId.mockResolvedValue({ userId: 1, displayName: "The Dude" });
 
       const result = await service.createAbiding({ message: "new abiding" }, author);
 
-      expect(usersService.getMyUser).toHaveBeenCalledWith(1);
-      // The current name from the database, not the one in the token.
-      expect(result.username).toBe("the-dude");
+      expect(profilesService.getProfileByUserId).toHaveBeenCalledWith(1);
+      // The display name from the database. The token holds the username,
+      // "walter", and that must not reach the response.
+      expect(result.displayName).toBe("The Dude");
+      expect(result).not.toHaveProperty("username");
       expect(result).toBeInstanceOf(AbidingResponseDto);
     });
 
     // A token outlives its user: it stays valid until it expires. Without
     // this, a deleted user could keep posting, and the abidings would be live.
     it("writes nothing when the caller's user is deleted or missing", async () => {
-      usersService.getMyUser.mockRejectedValue(new NotFoundException("My User #1 not found"));
+      profilesService.getProfileByUserId.mockRejectedValue(
+        new NotFoundException("Profile for user #1 not found"),
+      );
 
       await expect(service.createAbiding({ message: "new abiding" }, author)).rejects.toThrow(
         NotFoundException,
