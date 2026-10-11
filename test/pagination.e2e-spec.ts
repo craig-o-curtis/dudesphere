@@ -396,7 +396,7 @@ describe("Pagination (e2e)", () => {
     });
 
     it("returns profiles in id order, even after the first one is edited", async () => {
-      const profiles = await getEveryPage<{ id: number }>("/profiles?limit=100");
+      const profiles = await getEveryPage<{ id: number }>("/profiles?limit=100", first.token);
       const ids = profiles.map((profile) => profile.id);
 
       expect(ids).toContain(first.profileId);
@@ -414,7 +414,7 @@ describe("Pagination (e2e)", () => {
     // The last page the API allows. With 10 rows to a page it starts ten
     // million rows in, so it is empty, and the answer is still a 200.
     it("answers the last allowed page with 200 and no rows", async () => {
-      const page = await getPage<unknown>("/profiles?page=1000000");
+      const page = await getPage<unknown>("/profiles?page=1000000", first.token);
 
       expect(page.data).toEqual([]);
       expect(page.links.next).toBeNull();

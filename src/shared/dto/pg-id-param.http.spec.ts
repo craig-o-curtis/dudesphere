@@ -35,12 +35,17 @@ describe("PgIdParamDto (over HTTP)", () => {
 
   const usersService = {
     getUserById: vi.fn(),
+    getUserForCaller: vi.fn(),
     getUsers: vi.fn(),
   };
+
+  // The stand-in for the signed-in caller. See the middleware below.
+  const requestUser = { userId: 7, username: "walter", role: "user" };
 
   beforeEach(async () => {
     vi.resetAllMocks();
     usersService.getUserById.mockResolvedValue({ id: 1, username: "walter" });
+    usersService.getUserForCaller.mockResolvedValue({ id: 1, username: "walter" });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
@@ -56,7 +61,7 @@ describe("PgIdParamDto (over HTTP)", () => {
     // @CurrentUser() would hand /users/me undefined. JwtAuthGuard has its own
     // tests; the id param is what this file is about.
     app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
-      req.user = { userId: 7, username: "walter", role: "user" };
+      req.user = requestUser;
       next();
     });
     // The same global setup as main.ts, so the ValidationPipe options here
@@ -72,14 +77,14 @@ describe("PgIdParamDto (over HTTP)", () => {
   it("passes a normal id through, coerced to a number", async () => {
     await request(app.getHttpServer()).get("/users/42").expect(200);
 
-    expect(usersService.getUserById).toHaveBeenCalledWith(42);
-    expect(typeof usersService.getUserById.mock.calls[0][0]).toBe("number");
+    expect(usersService.getUserForCaller).toHaveBeenCalledWith(42, requestUser);
+    expect(typeof usersService.getUserForCaller.mock.calls[0][0]).toBe("number");
   });
 
   it("accepts the largest value a Postgres integer holds", async () => {
     await request(app.getHttpServer()).get(`/users/${PG_INT_MAX}`).expect(200);
 
-    expect(usersService.getUserById).toHaveBeenCalledWith(PG_INT_MAX);
+    expect(usersService.getUserForCaller).toHaveBeenCalledWith(PG_INT_MAX, requestUser);
   });
 
   // The bug this DTO exists for. ParseIntPipe accepted 20 digits, parseInt
@@ -88,7 +93,7 @@ describe("PgIdParamDto (over HTTP)", () => {
   it("rejects an id past the Postgres integer limit with 400, not 500", async () => {
     await request(app.getHttpServer()).get("/users/99999999999999999999").expect(400);
 
-    expect(usersService.getUserById).not.toHaveBeenCalled();
+    expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });
 
   it("rejects one past the limit by a single digit", async () => {
@@ -96,7 +101,7 @@ describe("PgIdParamDto (over HTTP)", () => {
       .get(`/users/${PG_INT_MAX + 1}`)
       .expect(400);
 
-    expect(usersService.getUserById).not.toHaveBeenCalled();
+    expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });
 
   // Digits only. Each of these coerces to a perfectly valid integer under a
@@ -106,13 +111,13 @@ describe("PgIdParamDto (over HTTP)", () => {
       .get(`/users/${encodeURIComponent(id)}`)
       .expect(400);
 
-    expect(usersService.getUserById).not.toHaveBeenCalled();
+    expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });
 
   it.each(["abc", "1.5", "-1", "0", "%20", "null"])("rejects %j", async (id) => {
     await request(app.getHttpServer()).get(`/users/${id}`).expect(400);
 
-    expect(usersService.getUserById).not.toHaveBeenCalled();
+    expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });
 
   // "me" has its own route, declared before @Get(":id"). This checks the
@@ -123,5 +128,6 @@ describe("PgIdParamDto (over HTTP)", () => {
 
     // 7 is the id on the stand-in request user, not anything from the URL.
     expect(usersService.getUserById).toHaveBeenCalledWith(7);
+    expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });
 });

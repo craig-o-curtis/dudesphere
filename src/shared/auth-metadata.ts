@@ -3,5 +3,6 @@
 // apart: a typo in one place would silently make a route public, or make a
 // role rule never fire.
 export const IS_PUBLIC_KEY = "isPublic";
+export const IS_AUTHENTICATED_KEY = "isAuthenticated";
 export const ROLES_KEY = "roles";
 export const THROTTLE_ACCOUNT_FIELD_KEY = "throttleAccountField";

@@ -8,11 +8,13 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Not, Repository } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
+import type { AuthUser } from "../auth/auth-user.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { ErrorCode } from "../shared/error-codes.js";
+import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import {
   type TakenField,
   ValueTakenException,
@@ -23,7 +25,7 @@ import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
 import { UserResponseDto } from "./dto/user-response.dto.js";
-import { User } from "./user.entity.js";
+import { User, UserRole } from "./user.entity.js";
 
 @Injectable()
 export class UsersService {
@@ -71,6 +73,20 @@ export class UsersService {
       throw new NotFoundException(`User #${id} not found`);
     }
     return this.toResponseDto(user, user.profile);
+  }
+
+  // For GET /users/:id. `caller` is who is asking: an admin reads any user,
+  // and everyone else reads only their own. The answer carries the email and
+  // the role, so another member's is not theirs to read.
+  //
+  // The lookup comes first, so a missing user is a 404 for every caller. See
+  // NotOwnerException for why.
+  async getUserForCaller(id: number, caller: AuthUser): Promise<UserResponseDto> {
+    const user = await this.getUserById(id);
+    if (caller.role !== UserRole.ADMIN && caller.userId !== id) {
+      throw new NotOwnerException("Not authorized to read this user");
+    }
+    return user;
   }
 
   async getUsersByIds(ids: number[]): Promise<UserResponseDto[]> {

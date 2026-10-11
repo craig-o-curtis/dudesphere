@@ -130,7 +130,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     //
     // Because these are global, a route needs no @UseGuards. Routes an
     // anonymous caller is meant to reach carry @Public(); routes limited to a
-    // role carry @Roles().
+    // role carry @Roles(); every other route carries @Authenticated(), a
+    // label that src/shared/route-access.spec.ts requires.
     { provide: APP_GUARD, useClass: AuthThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

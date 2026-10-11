@@ -162,8 +162,10 @@ Public. What a visitor sees first.
   SSR, so pages and route middleware know who is signed in without reading
   the httpOnly cookie, which they cannot.
 - `app/middleware/auth.ts` is a route middleware. Pages opt in with
-  `definePageMeta({ middleware: 'auth' })`: `/feed`, `/dudes/me`,
-  `/sphere`, `/admin/*`. It sends anonymous visitors to `/login?next=`.
+  `definePageMeta({ middleware: 'auth' })`: `/feed`, `/dudes/:id`,
+  `/dudes/me`, `/sphere`, `/admin/*`. It sends anonymous visitors to
+  `/login?next=`. `/dudes/:id` is on the list because the API gives a profile
+  to signed-in callers only.
 - Every Nitro route that changes data re-checks `event.context.user`
   itself. Route middleware guards pages, not API calls.
 
@@ -190,8 +192,10 @@ The logged-in home. This is the Twitter part.
 
 The forum part. One abiding and the conversation under it.
 
-- The abiding from `GET /abidings/:id`, its author from `GET /users/:id` and
-  `GET /profiles/user/:id`.
+- The abiding from `GET /abidings/:id`, which is public and carries the
+  author's `username`. A signed-in visitor also gets the author's profile from
+  `GET /profiles/user/:id`. An anonymous visitor sees the abiding and the
+  username only, because profiles need a token.
 - Its replies, newest first. **Backend gap:** this needs
   `GET /abidings?replyToId=:id`, which does not exist yet.
 - The feed stays mounted behind the thread through
@@ -204,8 +208,13 @@ The forum part. One abiding and the conversation under it.
 
 A member's page.
 
-- `GET /users/:id`, `GET /profiles/user/:id` and
-  `GET /abidings?userId=:id`, paginated like the feed.
+- `GET /profiles/user/:id` and `GET /abidings?userId=:id`, paginated like
+  the feed. Both need a signed-in visitor here, the first because profiles
+  need a token.
+- **Backend gap:** the page has no way to read another member's username.
+  `GET /users/:id` answers only that user or an admin, because it carries the
+  email and the role, and the profile has no `username`. `/dudes/me` reads
+  its own from `GET /users/me`.
 - `/dudes/me` adds edit forms that post to Nitro routes calling
   `PATCH /users/me` and `PATCH /profiles/me`, and a "Leave the sphere"
   button for `DELETE /users/me` with a confirm step.
@@ -405,6 +414,7 @@ backend change and should land before the phase that needs it.
 | --------------------------------------- | --------------- | -------------------------------------------------------------- |
 | List replies to one abiding             | Thread, phase 4 | `GET /abidings?replyToId=:id`, same page shape                 |
 | Look up a user or profile by username   | Dude, phase 4   | `GET /users/by-username/:username`                             |
+| A member's username on their page       | Dude, phase 4   | `username` on `ProfileResponseDto`                             |
 | Reply count on an abiding               | Feed, phase 3   | `replyCount` on `AbidingResponseDto`, or a second call         |
 | List hidden hashtags for the admin page | Admin, phase 5  | `GET /hashtags?includeDeleted=true`, admin only                |
 | Set, change or clear my location        | Sphere, phase 6 | `PUT /profiles/me/location`, `DELETE /profiles/me/location`    |

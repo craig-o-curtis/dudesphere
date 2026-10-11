@@ -20,6 +20,10 @@ interface RequestWithUser {
 // AppModule registers this as an APP_GUARD, so it runs on every route. Routes
 // an anonymous caller is meant to reach carry @Public(). On those the token is
 // optional: a good one still identifies the caller, and a bad one is ignored.
+//
+// Every other route needs a token. Those carry @Authenticated() or @Roles(),
+// but this guard reads neither: needing a token is the default, and
+// @Authenticated() only says so in the controller.
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
