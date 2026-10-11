@@ -25,16 +25,17 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 
 ### PostgreSQL — `user` table
 
-| Column      | Type                   | Description                                                                                         |
-| ----------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `id`        | serial PK              | Auto-increment                                                                                      |
-| `username`  | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only |
-| `email`     | citext UNIQUE          | Up to 100 characters. A login name                                                                  |
-| `password`  | varchar(255)           | bcrypt hash; never returned                                                                         |
-| `role`      | enum `admin` or `user` | Defaults to `user`                                                                                  |
-| `createdAt` | timestamptz            | Set by the database when the row is created                                                         |
-| `updatedAt` | timestamptz            | Moved by TypeORM on every update                                                                    |
-| `deletedAt` | timestamptz, nullable  | Soft delete. Null means the user is live                                                            |
+| Column              | Type                   | Description                                                                                                |
+| ------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`                | serial PK              | Auto-increment                                                                                             |
+| `username`          | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only        |
+| `email`             | citext UNIQUE          | Up to 100 characters. A login name                                                                         |
+| `password`          | varchar(255)           | bcrypt hash; never returned                                                                                |
+| `role`              | enum `admin` or `user` | Defaults to `user`                                                                                         |
+| `passwordChangedAt` | timestamptz, nullable  | When the password was last changed or reset. Null means never. An access token signed before it is refused |
+| `createdAt`         | timestamptz            | Set by the database when the row is created                                                                |
+| `updatedAt`         | timestamptz            | Moved by TypeORM on every update                                                                           |
+| `deletedAt`         | timestamptz, nullable  | Soft delete. Null means the user is live                                                                   |
 
 ### PostgreSQL — `password_reset_token` table
 
@@ -49,6 +50,27 @@ One row for each password reset link that can still be used.
 | `createdAt` | timestamptz        | Set by the database when the row is created               |
 
 A row is deleted when its link is used, so there is no "used" column.
+
+### PostgreSQL — `refresh_token` table
+
+One row for each refresh token handed out. The rows of one sign-in share a
+`familyId`, and that family is the session.
+[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) explains
+how they are used.
+
+| Column            | Type                  | Description                                           |
+| ----------------- | --------------------- | ----------------------------------------------------- |
+| `id`              | varchar(64) PK        | SHA-256 of the refresh token. The token is not stored |
+| `familyId`        | uuid                  | The session. Indexed together with `revoked`          |
+| `userId`          | int, FK to `user`     | `ON DELETE CASCADE`. Indexed                          |
+| `expiresAt`       | timestamptz           | This one token stops working at this instant          |
+| `familyExpiresAt` | timestamptz           | The session ends at this instant. Indexed             |
+| `usedAt`          | timestamptz, nullable | When the token was swapped for its successor          |
+| `revoked`         | boolean               | True once the session was ended on purpose            |
+| `createdAt`       | timestamptz           | Set by the database when the row is created           |
+
+Rows are kept until their session's end, then deleted the next time anyone
+signs in or refreshes.
 
 ### PostgreSQL — `profile` table
 
@@ -181,8 +203,9 @@ A member holds two tokens:
   `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
   that lifetime in seconds. It holds the member's id, their username and the
   id of their session, and nothing else.
-- **The refresh token** is 43 random characters, not a JWT. It goes to
-  `POST /auth/token/refresh` only, and lasts 7 days. The database keeps a hash
+- **The refresh token** is 43 random characters, not a JWT. It goes to two
+  routes only, `POST /auth/token/refresh` and `POST /auth/token/revoke`, and
+  lasts 7 days. The database keeps a hash
   of it, never the token.
 
 One sign-in is one session. A session lasts as long as the member keeps

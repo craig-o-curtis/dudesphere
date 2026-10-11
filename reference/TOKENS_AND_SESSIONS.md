@@ -10,23 +10,25 @@ works once.
 One sign-in is one **session**. The server can end a session at any moment,
 and when it does, both tokens stop working on the very next request.
 
-Every flow below was run against the app, by hand with curl and in
-[test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts).
+The flows below are run over real HTTP and the real database by
+[test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts), and the main ones were
+also run by hand with curl. The password reset flow is in
+[test/password-reset.e2e-spec.ts](../test/password-reset.e2e-spec.ts).
 
 ## The words
 
-| Word          | What it means here                                                              |
-| ------------- | ------------------------------------------------------------------------------- |
-| Access token  | A signed JWT. Sent with every request as `Authorization: Bearer <accessToken>`  |
-| Refresh token | 43 random characters. Sent to one route only, to get a new pair                 |
-| Pair          | One access token and one refresh token, handed out together                     |
-| Session       | Everything that follows from one sign-in, until it ends                         |
-| Family        | The refresh tokens of one session. "Family" and "session" are the same thing    |
-| `sid`         | "Session id". The claim in the access token that names its session              |
-| Successor     | The new refresh token a client gets when it swaps the old one                   |
-| Rotation      | Replacing the refresh token on every use. Each one works once                   |
-| Revoke        | End a session on purpose                                                        |
-| Opaque        | Carrying no readable data. The refresh token is opaque; the access token is not |
+| Word          | What it means here                                                               |
+| ------------- | -------------------------------------------------------------------------------- |
+| Access token  | A signed JWT. Sent with every request as `Authorization: Bearer <accessToken>`   |
+| Refresh token | 43 random characters. Sent to two routes only: to get a new pair, or to sign out |
+| Pair          | One access token and one refresh token, handed out together                      |
+| Session       | Everything that follows from one sign-in, until it ends                          |
+| Family        | The refresh tokens of one session. "Family" and "session" are the same thing     |
+| `sid`         | "Session id". The claim in the access token that names its session               |
+| Successor     | The new refresh token a client gets when it swaps the old one                    |
+| Rotation      | Replacing the refresh token on every use. Each one works once                    |
+| Revoke        | End a session on purpose                                                         |
+| Opaque        | Carrying no readable data. The refresh token is opaque; the access token is not  |
 
 ## The two tokens
 
@@ -67,15 +69,15 @@ The payload of an access token from this app:
 }
 ```
 
-| Claim      | Meaning                                                          | Who writes it            |
-| ---------- | ---------------------------------------------------------------- | ------------------------ |
-| `sub`      | "Subject": the member's user id                                  | `jwtPayloadFor`          |
-| `username` | The member's username at sign-in. The server never reads it back | `jwtPayloadFor`          |
-| `sid`      | The session this token belongs to: the `familyId` of its rows    | `TokenService.signToken` |
-| `iat`      | "Issued at", in seconds since 1970                               | The JWT library          |
-| `exp`      | "Expires", in seconds since 1970. Here `iat` plus 900            | The JWT library          |
-| `aud`      | "Audience": who the token is for                                 | `JwtModule` options      |
-| `iss`      | "Issuer": who signed it                                          | `JwtModule` options      |
+| Claim      | Meaning                                                          | Who writes it                       |
+| ---------- | ---------------------------------------------------------------- | ----------------------------------- |
+| `sub`      | "Subject": the member's user id                                  | `jwtPayloadFor`                     |
+| `username` | The member's username at sign-in. The server never reads it back | `jwtPayloadFor`                     |
+| `sid`      | The session this token belongs to: the `familyId` of its rows    | `jwtPayloadFor`, for `TokenService` |
+| `iat`      | "Issued at", in seconds since 1970                               | The JWT library                     |
+| `exp`      | "Expires", in seconds since 1970. Here `iat` plus 900            | The JWT library                     |
+| `aud`      | "Audience": who the token is for                                 | `JwtModule` options                 |
+| `iss`      | "Issuer": who signed it                                          | `JwtModule` options                 |
 
 **There is no role in it, on purpose.** A token cannot change once it is
 signed. A role in it would be a copy that goes stale the moment an admin is
@@ -124,8 +126,9 @@ Read it like this:
 
 `POST /auth/token` with `{ "identifier": "walter", "password": "..." }`.
 
-1. `TokensController.issue` receives the body.
-2. `AuthService.verifyCredentials` checks the username or email and the
+1. `TokensController.issue` receives the body and hands it to
+   `AuthService.signIn`, which does the next three steps.
+2. `UsersService.getUserByCredentials` checks the username or email and the
    password. A wrong one is 401 `BAD_CREDENTIALS`, with one message whichever
    was wrong.
 3. `TokenService.issue` starts a session:
@@ -134,7 +137,10 @@ Read it like this:
    - it makes a refresh token, 32 random bytes;
    - it saves one row, holding the token's hash;
    - it signs an access token whose `sid` is that `familyId`.
-4. The answer is 200:
+4. `UsersService.credentialsStillHold` asks once more: is the password that
+   was checked in step 2 still the member's password? See "The sign-in
+   recheck" below for why.
+5. The answer is 200:
 
 ```json
 {
@@ -150,10 +156,43 @@ to refresh without decoding anything.
 Signing in twice, on a phone and a laptop, makes two sessions with two
 `familyId`s. Ending one leaves the other alone.
 
+## The sign-in recheck
+
+Step 4 of signing in closes a gap of about a tenth of a second.
+
+Checking a password is slow on purpose. bcrypt takes roughly 100 ms, so that
+guessing passwords is costly. That leaves a moment in which this can happen:
+
+1. Someone who knows Walter's **old** password starts a sign-in. The server
+   reads Walter's stored hash and begins checking the password against it.
+2. In that same tenth of a second, Walter changes his password. The change
+   ends every session he has.
+3. The sign-in from step 1 finishes its check, which passes against the hash
+   it read, and starts a new session.
+
+That new session was started after step 2 ended "every session", so nothing
+ended it. The holder of the old password would stay signed in for 30 days.
+
+So once the session exists, `AuthService.signIn` asks
+`UsersService.credentialsStillHold`: is the hash that was checked still the
+member's stored hash, on an account that is still open? If not, it ends the
+session it just started and answers 401 `BAD_CREDENTIALS`, as for any wrong
+password.
+
+The read uses a row lock (`SELECT ... FOR SHARE`). A password change holds
+its own lock on the user row from its `UPDATE` until it commits, so the
+recheck waits for a change that is in flight and then sees the new hash.
+Without the lock it could read the old hash a moment before the commit.
+
+Nobody can force this timing, and it needs the old password to begin with.
+It is closed because someone who already has a password, and expects it to
+be changed, could sign in over and over to try to land in the gap.
+
 ## An ordinary request: what the guard checks
 
-Every route that is not `@Public()` goes through
-[JwtAuthGuard](../src/shared/guards/jwt-auth.guard.ts). It makes three checks:
+Every route goes through
+[JwtAuthGuard](../src/shared/guards/jwt-auth.guard.ts). On a route that is not
+`@Public()` a token is required, and the guard makes three checks:
 
 1. **Is the token real?** The JWT library checks the signature, the expiry,
    the audience, the issuer and the algorithm. This needs no database.
@@ -170,6 +209,11 @@ three failing is 401 `TOKEN_INVALID`.
 **This is the part most JWT setups skip.** A plain JWT guard does check 1
 only, so a signed token works until it expires, whatever has happened since.
 Checks 2 and 3 are why signing out here means signed out, at once.
+
+On a `@Public()` route the token is optional. If one is sent, the guard makes
+the same three checks. A token that fails them is ignored, and the caller
+goes through as nobody. A database that cannot be reached is not ignored: it
+is an error on a public route as on any other.
 
 The cost is two queries for each signed-in request. They are not cached. A
 cache would bring back exactly the window the checks close.
@@ -200,6 +244,10 @@ Three details worth knowing:
   done nothing wrong. Their token has simply run out, and they sign in again.
 - **Step 6 saves before it marks.** If the app stopped between the two, the
   member would still hold a token that works, and could try again.
+- **Steps 6 and 7 happen together in the code.** The new access token is
+  signed as soon as the successor is saved, and the old token is marked used
+  after that. The table lists the mark first because it is the part that can
+  still refuse the request.
 - **The old access token is not cancelled by a normal refresh.** It belongs
   to the same session, which is still going, so it works until its own 15
   minutes are up. Only ending the session stops it early.
@@ -270,8 +318,10 @@ never send two refreshes at once for one session.
 - The member's other devices are untouched.
 - The route is public, so a client can sign out with an access token that has
   already expired.
-- It answers 204 whatever it is sent, a real token or nonsense. A different
-  answer would tell a caller whether a token they hold is real.
+- It answers 204 for a real token and for nonsense alike. A different answer
+  would tell a caller whether a token they hold is real. A body the DTO
+  refuses is a plain 400, as on any route: no `refreshToken`, an empty one,
+  one that is not a string, or one over 1,000 characters.
 - A spent token of the session works too, so a client that kept an old one
   can still sign out.
 
@@ -299,8 +349,20 @@ bearer token.
 | 30 days passed since sign-in           | That one            | `familyExpiresAt`                   |
 | 7 days passed with no refresh          | That one, in effect | `expiresAt`                         |
 
-In every row but the last two, the access token stops on the next request.
-In the last two there is no access token left to stop: it ran out long before.
+In every row but the last, the access token stops on the next request. That
+includes the 30-day end: a refresh on day 29 hands out an access token that
+could outlast the session by a few minutes, and the guard's third check stops
+it at the session's end. In the last row there is no access token left to
+stop. Seven days with no refresh means the last one ran out long ago.
+
+**A password change and the end of its sessions are one transaction.** Either
+both happen or neither does. If they were two separate writes and the second
+failed, the old refresh tokens would go on working, which is the one thing a
+password change must stop. Closing an account works the same way.
+
+**A restored account comes back with no sessions.** When an admin restores a
+closed account, the member signs in to it again. The tokens they held when it
+was closed stay dead.
 
 **A member who changes their own password is signed out everywhere**, on the
 device they used too. They sign in again with the new password. Whoever was
@@ -374,15 +436,36 @@ revoked token can be told from one that never existed.
 
 **Who cleans the table up?**
 `RefreshTokensService.save` does, each time it adds a row: it deletes the
-rows of every session that has passed `familyExpiresAt`. There is no
-scheduler.
+rows of every session that has passed `familyExpiresAt`. So the table cleans
+itself whenever someone signs in or refreshes, which is also the only time it
+grows.
+
+**Does Postgres not delete old rows by itself?**
+No. Postgres has no setting to expire a row after a time, as Redis and a
+MongoDB TTL index do. What it does by itself is `VACUUM`, and that is a
+different job: when the app deletes a row, Postgres only marks it dead, and
+the autovacuum process frees the space later. Autovacuum decides nothing
+about which rows go. If the app sat idle, the expired rows would wait until
+the next sign-in. That costs a little disk and nothing else, because an
+expired row cannot be used. Cleanup that does not depend on traffic would
+need a scheduled job: `@nestjs/schedule` in the app, or `pg_cron` in the
+database.
+
+**Why does the session check not count rows?**
+A session gains a row with every refresh, and keeps them until its end. A
+client that refreshed every 15 minutes for 30 days would have about 2,900.
+The guard asks about the session on every request, so it must not read them
+all. `isSessionLive` asks two yes-or-no questions, each of which stops at the
+first row it finds: is any row of this session inside its time, and is any
+row revoked. One index, on `familyId` and `revoked` together, answers both.
 
 **Where did the design come from?**
 The NestJS authentication docs describe it, and `TokenService` uses their
 method names: `issue`, `refresh`, `revoke`, `revokeAll`. The official package
-`@nestjs/authentication` implements the same thing. It was three days old
-when this was built, and it does not end an access token with its session, so
-this is written by hand. The matching names keep a later move small.
+`@nestjs/authentication` implements the same thing. Its 0.1.0 release was
+three days old when this was built, and it does not end an access token with
+its session, so this is written by hand. The matching names keep a later move
+small.
 
 ## The settings
 
@@ -402,7 +485,7 @@ An env file that sets one of these wins over the default.
 | File                                                                          | Its job                                                                       |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)             | The four routes                                                               |
-| [src/auth/auth.service.ts](../src/auth/auth.service.ts)                       | `verifyCredentials`: is this the member's password?                           |
+| [src/auth/auth.service.ts](../src/auth/auth.service.ts)                       | `signIn`: check the password, start the session, check again                  |
 | [src/auth/token.service.ts](../src/auth/token.service.ts)                     | The rules: `issue`, `refresh`, `revoke`, `revokeAll`                          |
 | [src/auth/refresh-tokens.service.ts](../src/auth/refresh-tokens.service.ts)   | The queries on `refresh_token`. It decides nothing                            |
 | [src/auth/refresh-token.entity.ts](../src/auth/refresh-token.entity.ts)       | The table                                                                     |
@@ -411,7 +494,7 @@ An env file that sets one of these wins over the default.
 | [src/shared/guards/jwt-auth.guard.ts](../src/shared/guards/jwt-auth.guard.ts) | The three checks on every signed-in request                                   |
 | [src/shared/guards/auth-user.ts](../src/shared/guards/auth-user.ts)           | `JwtPayload` and `jwtPayloadFor`: what goes in the JWT                        |
 | [src/users/users.service.ts](../src/users/users.service.ts)                   | `getUserForToken`, and ending sessions on a password change or closed account |
-| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                         | Every flow in this document, over real HTTP                                   |
+| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                         | The flows in this document, over real HTTP and the real database              |
 
 **Why `RefreshTokensService` is its own module.** Three places need it:
 `AuthModule` to issue tokens, `UsersModule` to end sessions, and `AppModule`
@@ -529,6 +612,13 @@ the app can sign one.
 - **A token signed in the same second as a password change survives the
   password check.** A JWT records only the second it was signed in. The
   session check still stops it, since a password change ends every session.
+- **Signing out does not stop a `pnpm dev:token` token.** It belongs to no
+  session, so there is nothing to end. It lasts its 30 days unless the
+  account is closed or its password changes. The command refuses to run in
+  production, and does run on staging.
+- **Spent rows are kept for the whole session**, up to 30 days, though each
+  token lasted 7. That is what lets a very old token be recognised as used
+  when it comes back.
 
 ## Further reading
 

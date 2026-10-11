@@ -131,8 +131,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Create the schema
         run: pnpm migration:run
-      # profile-me logs in as the seeded admin. The other suites make their
-      # own users.
+      # No e2e suite needs the admin: each makes its own users. This step is
+      # here to prove that `pnpm seed:run` still starts and runs.
       - name: Seed the admin user
         run: pnpm seed:run
       - run: pnpm test:e2e

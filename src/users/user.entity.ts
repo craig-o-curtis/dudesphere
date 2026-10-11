@@ -49,7 +49,7 @@ export class User {
   // When the password was last changed or reset. Null for a member who still
   // has the password they signed up with.
   //
-  // A login token issued before this moment is refused, so changing a
+  // An access token issued before this moment is refused, so changing a
   // password signs out every device that was signed in with the old one,
   // including one a thief is using. UsersService.updateUser sets it and
   // UsersService.getUserForToken checks it.
