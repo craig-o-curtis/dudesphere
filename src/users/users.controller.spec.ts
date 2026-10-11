@@ -1,6 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "./user.entity.js";
@@ -34,10 +33,7 @@ describe("UsersController", () => {
         // The real one: it has no dependencies, and it builds the links these tests read.
         PaginationProvider,
       ],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: vi.fn(() => true) })
-      .compile();
+    }).compile();
 
     controller = module.get<UsersController>(UsersController);
   });
