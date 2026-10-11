@@ -7,8 +7,7 @@ export class ProfileResponseDto {
 
   id: number;
   userId: number;
-  firstName: string | null;
-  lastName: string | null;
+  displayName: string;
   bio: string | null;
   profileImageUrl: string | null;
   isDude: boolean;
@@ -20,8 +19,7 @@ export class ProfileResponseDto {
     return new ProfileResponseDto({
       id: profile.id,
       userId: profile.userId,
-      firstName: profile.firstName ?? null,
-      lastName: profile.lastName ?? null,
+      displayName: profile.displayName,
       bio: profile.bio ?? null,
       profileImageUrl: profile.profileImageUrl ?? null,
       isDude: profile.isDude,

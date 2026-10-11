@@ -12,7 +12,7 @@ export interface SignUpBody {
   username: string;
   email: string;
   password: string;
-  profile?: Record<string, unknown>;
+  profile: Record<string, unknown>;
 }
 
 /** The parts of the created user the suites read back. */
@@ -22,16 +22,21 @@ export interface SignedUpUser {
   email: string;
   createdAt: string;
   updatedAt: string;
-  profile: { id: number };
+  profile: { id: number; displayName: string };
 }
 
 /**
  * A sign-up body no other run has used. Pass `overrides` to set a field, or
- * to break one for a test that expects a 400.
+ * to break one for a test that expects a 400. Fields in `overrides.profile`
+ * are added to the profile, so it keeps its display name unless one is given.
  *
  * The email starts with `e2e-`, which is what test/global-setup.ts deletes by.
  * randomUUID, not Date.now(), which the gmt lint rules ban. 8 characters keep
  * the username under its 24-character limit.
+ *
+ * The display name is "e2e <tag>", with a space. A username cannot hold a
+ * space, so a display name made here never equals a username, and a test
+ * that checks "no username in this body" cannot pass by accident.
  */
 export function signUpBody(overrides: Partial<SignUpBody> = {}): SignUpBody {
   const tag = randomUUID().slice(0, 8);
@@ -40,6 +45,7 @@ export function signUpBody(overrides: Partial<SignUpBody> = {}): SignUpBody {
     email: `e2e-${tag}@example.com`,
     password: "secret123",
     ...overrides,
+    profile: { displayName: `e2e ${tag}`, ...overrides.profile },
   };
 }
 

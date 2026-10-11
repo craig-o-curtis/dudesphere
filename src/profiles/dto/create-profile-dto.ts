@@ -1,25 +1,38 @@
-import { IsBoolean, IsOptional, IsString, IsUrl, MinLength, ValidateIf } from "class-validator";
+import { Transform } from "class-transformer";
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MinLength,
+  ValidateIf,
+} from "class-validator";
 
 import { IsUtcDateTime } from "../../shared/decorators/is-utc-date-time.decorator.js";
 import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
 import { NoNulCharacter } from "../../shared/decorators/no-nul-character.decorator.js";
+import { cleanDisplayName, DISPLAY_NAME_CHARACTERS } from "../../shared/utils/display-name.js";
 
 export class CreateProfileDto {
-  // @MaxCodePoints and @NoNulCharacter keep the value to what the column can
-  // hold. See their files in src/shared/decorators.
+  // The one name other members see. It is unique, ignoring letter case.
+  //
+  // Required, so sign up has to carry one. UpdateProfileDto makes every field
+  // optional, but there is no @IsOptional() here, so a null is still refused
+  // there, which the NOT NULL column needs.
+  //
+  // cleanDisplayName runs first, so the rules below judge the value that is
+  // stored. @MaxCodePoints and @NoNulCharacter keep it to what the column can
+  // hold. See src/shared/utils/display-name.ts for the rest.
+  @Transform(({ value }: { value: unknown }) => cleanDisplayName(value))
   @IsString()
-  @IsOptional()
   @MinLength(2)
-  @MaxCodePoints(100)
+  @MaxCodePoints(50)
   @NoNulCharacter()
-  firstName?: string;
-
-  @IsString()
-  @IsOptional()
-  @MinLength(2)
-  @MaxCodePoints(100)
-  @NoNulCharacter()
-  lastName?: string;
+  @Matches(DISPLAY_NAME_CHARACTERS, {
+    message: "displayName must not contain invisible or control characters",
+  })
+  displayName: string;
 
   @IsString()
   @IsOptional()

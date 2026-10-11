@@ -146,6 +146,9 @@ export class UsersService {
       if (existing) {
         throw new ValueTakenException(takenField(existing, createUserDto));
       }
+      // The display name is unique too, on the profile table. Checked here,
+      // before the password is hashed and before anything is written.
+      await this.profilesService.assertDisplayNameFree(manager, createUserDto.profile.displayName);
 
       const user = await manager.save(
         User,
@@ -199,14 +202,11 @@ export class UsersService {
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
-    // Profile fields are updated through PATCH /profiles/:id, not here.
-    const { profile: _profile, ...userFields } = updateUserDto;
-
     // TypeORM's update() throws UpdateValuesMissingError on an empty set, and
     // that is not a QueryFailedError, so PgErrorFilter lets it through as
-    // a 500. Every field on UpdateUserDto is optional, so an empty body and a
-    // profile-only body both land here.
-    if (Object.keys(userFields).length === 0) {
+    // a 500. Every field on UpdateUserDto is optional, so an empty body lands
+    // here.
+    if (Object.keys(updateUserDto).length === 0) {
       throw new BadRequestException("No user fields to update");
     }
     // id: Not(id) leaves the caller's own row out. findOne returns one row, so
@@ -229,9 +229,13 @@ export class UsersService {
 
     // A new password arrives as plain text and is stored as a hash, the same
     // as on sign-up. update() below runs no entity hooks, so it is done here.
-    if (userFields.password !== undefined) {
-      userFields.password = await this.hashingProvider.hashPassword(userFields.password);
-    }
+    // The hash goes into a new object, so the caller's DTO keeps what the
+    // caller sent.
+    const { password, ...otherFields } = updateUserDto;
+    const userFields =
+      password === undefined
+        ? otherFields
+        : { ...otherFields, password: await this.hashingProvider.hashPassword(password) };
 
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and

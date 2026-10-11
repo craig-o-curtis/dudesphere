@@ -1,4 +1,4 @@
-import { PartialType } from "@nestjs/mapped-types";
+import { OmitType, PartialType } from "@nestjs/mapped-types";
 
 import { CreateUserDto } from "./create-user.dto.js";
 
@@ -7,5 +7,10 @@ import { CreateUserDto } from "./create-user.dto.js";
 // a missing field, so { "username": null } passed and then failed in Postgres
 // as a 500. With the option, only a missing field is skipped.
 //
-// `profile` still accepts null: its own @IsOptional() on CreateUserDto says so.
-export class UpdateUserDto extends PartialType(CreateUserDto, { skipNullProperties: false }) {}
+// No `profile`. A profile is edited through PATCH /profiles/me or
+// PATCH /profiles/:id, so one sent here is refused as an unknown field. It
+// used to be accepted and ignored. Leaving it in would also make this route
+// demand a displayName, which CreateUserDto's profile requires.
+export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ["profile"] as const), {
+  skipNullProperties: false,
+}) {}

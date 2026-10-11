@@ -1,10 +1,11 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { EntityManager, IsNull, Not } from "typeorm";
+import { EntityManager, IsNull, Not, QueryFailedError } from "typeorm";
 
 import type { AuthUser } from "../auth/auth-user.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
+import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
@@ -26,8 +27,7 @@ describe("ProfilesService", () => {
   const mockProfile = {
     id: 1,
     userId: 42,
-    firstName: "John",
-    lastName: "Doe",
+    displayName: "The Dude",
     bio: "Hello world",
     profileImageUrl: "https://example.com/avatar.jpg",
     isDude: true,
@@ -107,7 +107,7 @@ describe("ProfilesService", () => {
       expect(profileRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result.id).toBe(1);
       expect(result.userId).toBe(42);
-      expect(result.firstName).toBe("John");
+      expect(result.displayName).toBe("The Dude");
     });
 
     it("throws NotFoundException when profile does not exist", async () => {
@@ -140,17 +140,18 @@ describe("ProfilesService", () => {
   });
 
   describe("createProfileForUser", () => {
-    it("creates a profile with minimal data (no DTO)", async () => {
+    it("creates a profile from a display name alone, with defaults for the rest", async () => {
       const create = vi.fn().mockReturnValue(mockProfile);
       const save = vi.fn().mockResolvedValue(mockProfile);
       const mockManager = { create, save } as unknown as EntityManager;
 
-      const result = await service.createProfileForUser(mockManager, 42);
+      const result = await service.createProfileForUser(mockManager, 42, {
+        displayName: "The Dude",
+      });
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
-        firstName: null,
-        lastName: null,
+        displayName: "The Dude",
         bio: null,
         profileImageUrl: null,
         isDude: false,
@@ -166,8 +167,7 @@ describe("ProfilesService", () => {
       const mockManager = { create, save } as unknown as EntityManager;
 
       const dto = {
-        firstName: "Jane",
-        lastName: "Smith",
+        displayName: "Maude",
         bio: "A great bio",
         profileImageUrl: "https://example.com/jane.jpg",
         isDude: true,
@@ -178,8 +178,7 @@ describe("ProfilesService", () => {
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
-        firstName: "Jane",
-        lastName: "Smith",
+        displayName: "Maude",
         bio: "A great bio",
         profileImageUrl: "https://example.com/jane.jpg",
         isDude: true,
@@ -193,18 +192,53 @@ describe("ProfilesService", () => {
       const save = vi.fn().mockResolvedValue(mockProfile);
       const mockManager = { create, save } as unknown as EntityManager;
 
-      const dto = { bio: "Just a bio" };
+      const dto = { displayName: "Donny", bio: "Just a bio" };
 
       await service.createProfileForUser(mockManager, 42, dto);
 
       expect(create).toHaveBeenCalledWith(Profile, {
         userId: 42,
-        firstName: null,
-        lastName: null,
+        displayName: "Donny",
         bio: "Just a bio",
         profileImageUrl: null,
         isDude: false,
         ordainedDate: null,
+      });
+    });
+  });
+
+  // Sign up calls this inside its transaction, before it writes anything.
+  describe("assertDisplayNameFree", () => {
+    it("passes when no profile has the name", async () => {
+      const exists = vi.fn().mockResolvedValue(false);
+      const mockManager = { exists } as unknown as EntityManager;
+
+      await expect(service.assertDisplayNameFree(mockManager, "The Dude")).resolves.toBeUndefined();
+    });
+
+    it("throws 409 DISPLAY_NAME_TAKEN when a profile has it", async () => {
+      const exists = vi.fn().mockResolvedValue(true);
+      const mockManager = { exists } as unknown as EntityManager;
+
+      const attempt = service.assertDisplayNameFree(mockManager, "The Dude");
+
+      await expect(attempt).rejects.toBeInstanceOf(ValueTakenException);
+      await expect(attempt).rejects.toMatchObject({ errorCode: "DISPLAY_NAME_TAKEN" });
+    });
+
+    // The name goes to Postgres as typed, and the citext column does the
+    // case-insensitive compare. withDeleted, because the unique constraint
+    // still covers a soft-deleted profile. The manager, not the repository,
+    // so the read is part of the caller's transaction.
+    it("asks Postgres, through the manager it is given, and includes deleted profiles", async () => {
+      const exists = vi.fn().mockResolvedValue(false);
+      const mockManager = { exists } as unknown as EntityManager;
+
+      await service.assertDisplayNameFree(mockManager, "tHe DuDe");
+
+      expect(exists).toHaveBeenCalledWith(Profile, {
+        where: { displayName: "tHe DuDe" },
+        withDeleted: true,
       });
     });
   });
@@ -293,12 +327,53 @@ describe("ProfilesService", () => {
       profileRepository.update.mockResolvedValue({ affected: 1 });
       profileRepository.findOne.mockResolvedValue(mockProfile);
 
-      await service.updateProfile(1, { firstName: "Johnny" }, owner);
+      await service.updateProfile(1, { displayName: "El Duderino" }, owner);
 
       expect(profileRepository.update).toHaveBeenCalledWith(
         { id: 1, deletedAt: IsNull(), userId: 42 },
-        { firstName: "Johnny" },
+        { displayName: "El Duderino" },
       );
+    });
+
+    // What TypeORM throws when Postgres refuses a duplicate. displayName is
+    // the only unique column this DTO can write, so the service can name it.
+    function uniqueViolation(): QueryFailedError {
+      const driverError = Object.assign(new Error("duplicate key value"), { code: "23505" });
+      return new QueryFailedError("UPDATE profile", [], driverError);
+    }
+
+    it("throws 409 DISPLAY_NAME_TAKEN when the unique constraint refuses the name", async () => {
+      const refused = uniqueViolation();
+      profileRepository.update.mockRejectedValue(refused);
+
+      const attempt = service.updateProfile(1, { displayName: "Walter" }, owner);
+
+      await expect(attempt).rejects.toBeInstanceOf(ValueTakenException);
+      await expect(attempt).rejects.toMatchObject({
+        errorCode: "DISPLAY_NAME_TAKEN",
+        cause: refused,
+      });
+    });
+
+    // Any other database error is not ours to rename. It goes on to
+    // PgErrorFilter as it is.
+    it("lets any other database error through unchanged", async () => {
+      const driverError = Object.assign(new Error("deadlock detected"), { code: "40P01" });
+      const fault = new QueryFailedError("UPDATE profile", [], driverError);
+      profileRepository.update.mockRejectedValue(fault);
+
+      await expect(service.updateProfile(1, { displayName: "Walter" }, owner)).rejects.toBe(fault);
+    });
+
+    // The reason there is no lookup before the write: the ownership rule in
+    // the criteria has to answer first.
+    it("answers 403, not 409, when a stranger sends a name", async () => {
+      profileRepository.update.mockResolvedValue({ affected: 0 });
+      profileRepository.findOne.mockResolvedValue(mockProfile);
+
+      await expect(
+        service.updateProfile(1, { displayName: "The Dude" }, other),
+      ).rejects.toBeInstanceOf(NotOwnerException);
     });
 
     // The authorization rule is part of the update criteria, so a non-owner's
