@@ -7,6 +7,7 @@ import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import { bearer } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, signUpBody, type SignUpBody } from "./sign-up.js";
 
@@ -34,10 +35,6 @@ describe("Display names (e2e)", () => {
   /** A display name no other run has used. The tag is 8 hex characters. */
   function freshName(): string {
     return `e2e Name ${randomUUID().slice(0, 8)}`;
-  }
-
-  function bearer(token: string) {
-    return { authorization: `Bearer ${token}` };
   }
 
   function postSignUp(body: object) {
