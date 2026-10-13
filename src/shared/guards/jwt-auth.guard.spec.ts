@@ -2,7 +2,7 @@ import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
-import { RefreshTokensService } from "../../auth/refresh-tokens.service.js";
+import { RefreshTokensService } from "../../auth/sessions/refresh-tokens.service.js";
 import { UserRole } from "../../users/user.entity.js";
 import { UsersService } from "../../users/users.service.js";
 import { TokenMissingException } from "../exceptions/token-missing.exception.js";

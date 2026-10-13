@@ -84,9 +84,9 @@ describe("Authorization (e2e)", () => {
     });
 
     // Both have to stay open or there is no way to get a first token.
-    it("POST /auth/token and POST /auth/signup are reachable anonymously", async () => {
+    it("POST /auth/login and POST /auth/signup are reachable anonymously", async () => {
       await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ identifier: "nobody@example.com", password: "wrong" })
         .expect(401); // reached the handler, which rejected the credentials
 

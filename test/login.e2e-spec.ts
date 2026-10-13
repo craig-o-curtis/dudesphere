@@ -30,7 +30,7 @@ describe("Login (e2e)", () => {
 
   function login(identifier: unknown, withPassword: string = password) {
     return request(app.getHttpServer())
-      .post("/auth/token")
+      .post("/auth/login")
       .send({ identifier, password: withPassword });
   }
 
@@ -126,7 +126,7 @@ describe("Login (e2e)", () => {
   describe("400 for a body that is not a login", () => {
     it("the old shape, with email in place of identifier", async () => {
       const { body } = await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ email, password })
         .expect(400);
 
@@ -142,7 +142,7 @@ describe("Login (e2e)", () => {
       ["no password", { identifier: email }],
       ["a password longer than 72 bytes", { identifier: email, password: "a".repeat(73) }],
     ])("%s", async (_what, body) => {
-      await request(app.getHttpServer()).post("/auth/token").send(body).expect(400);
+      await request(app.getHttpServer()).post("/auth/login").send(body).expect(400);
     });
   });
 

@@ -3,37 +3,48 @@ import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import { addUtc, getUtcNow, isAfterUtc, subtractUtc } from "@northguild/gmt";
 
-import { RefreshTokenInvalidException } from "../shared/exceptions/refresh-token-invalid.exception.js";
-import { UsersService } from "../users/users.service.js";
-import authConfig from "./config/auth.config.js";
-import { hashOf, newOneTimeToken } from "./one-time-token.js";
+import { RefreshTokenInvalidException } from "../../shared/exceptions/refresh-token-invalid.exception.js";
+import { UsersService } from "../../users/users.service.js";
+import authConfig from "../config/auth.config.js";
+import { hashOf, newOneTimeToken } from "../one-time-token.js";
 import { RefreshTokensService } from "./refresh-tokens.service.js";
-import { TokenService } from "./token.service.js";
+import { SessionsService } from "./sessions.service.js";
 
-describe("TokenService", () => {
-  let service: TokenService;
+describe("SessionsService", () => {
+  let service: SessionsService;
 
   const jwtService = { signAsync: vi.fn() };
   const refreshTokens = {
     save: vi.fn(),
     find: vi.fn(),
     markUsed: vi.fn(),
-    revokeFamily: vi.fn(),
-    isFamilyRevoked: vi.fn(),
+    revokeSession: vi.fn(),
+    isSessionRevoked: vi.fn(),
     revokeAllForUser: vi.fn(),
   };
   const usersService = { getLiveUser: vi.fn() };
   const warn = vi.fn();
-  // 15 minutes, 7 days and 30 days, in seconds.
-  const auth = { expiresIn: 900, refreshExpiresIn: 604800, sessionExpiresIn: 2592000 };
+  // 15 minutes, 7 days, 30 days and 180 days, in seconds.
+  const auth = {
+    expiresIn: 900,
+    refreshExpiresIn: 604800,
+    sessionExpiresIn: 2592000,
+    sessionRetention: 15552000,
+  };
 
   const walter = { id: 25, username: "walter", email: "walter@example.com", role: "user" };
-  const familyId = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
+  const sessionId = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
 
   /** The row save() was last called with. */
   function savedRow() {
     const [row] = refreshTokens.save.mock.calls.at(-1) as [
-      { id: string; familyId: string; userId: number; expiresAt: string; familyExpiresAt: string },
+      {
+        id: string;
+        sessionId: string;
+        userId: number;
+        expiresAt: string;
+        sessionExpiresAt: string;
+      },
       string,
     ];
     return row;
@@ -47,7 +58,7 @@ describe("TokenService", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     jwtService.signAsync.mockResolvedValue("signed.jwt.token");
-    refreshTokens.isFamilyRevoked.mockResolvedValue(false);
+    refreshTokens.isSessionRevoked.mockResolvedValue(false);
     refreshTokens.markUsed.mockResolvedValue(true);
     usersService.getLiveUser.mockResolvedValue({ userId: 25, username: "walter", role: "user" });
     // The service warns when a token is used twice. This stands in for the
@@ -57,7 +68,7 @@ describe("TokenService", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        TokenService,
+        SessionsService,
         { provide: JwtService, useValue: jwtService },
         { provide: RefreshTokensService, useValue: refreshTokens },
         { provide: UsersService, useValue: usersService },
@@ -65,12 +76,12 @@ describe("TokenService", () => {
       ],
     }).compile();
 
-    service = module.get(TokenService);
+    service = module.get(SessionsService);
   });
 
-  describe("issue", () => {
+  describe("start", () => {
     it("returns an access token, a refresh token and the access token's lifetime", async () => {
-      const pair = await service.issue(walter);
+      const pair = await service.start(walter);
 
       expect(pair).toEqual({
         accessToken: "signed.jwt.token",
@@ -81,30 +92,42 @@ describe("TokenService", () => {
 
     // The table must never hold something a reader could use.
     it("stores a hash of the refresh token, and not the token", async () => {
-      const { refreshToken } = await service.issue(walter);
+      const { refreshToken } = await service.start(walter);
 
       expect(savedRow().id).toBe(hashOf(refreshToken));
       expect(JSON.stringify(refreshTokens.save.mock.calls)).not.toContain(refreshToken);
     });
 
     it("starts a new session each time", async () => {
-      await service.issue(walter);
-      const first = savedRow().familyId;
-      await service.issue(walter);
+      await service.start(walter);
+      const first = savedRow().sessionId;
+      await service.start(walter);
 
       expect(first).toMatch(/^[0-9a-f-]{36}$/);
-      expect(savedRow().familyId).not.toBe(first);
+      expect(savedRow().sessionId).not.toBe(first);
     });
 
     it("gives the refresh token 7 days and the session 30", async () => {
       const before = getUtcNow();
 
-      await service.issue(walter);
+      await service.start(walter);
 
       const row = savedRow();
       expect(row.userId).toBe(25);
       expect(isAbout(row.expiresAt, addUtc(before, { seconds: 604800 }))).toBe(true);
-      expect(isAbout(row.familyExpiresAt, addUtc(before, { seconds: 2592000 }))).toBe(true);
+      expect(isAbout(row.sessionExpiresAt, addUtc(before, { seconds: 2592000 }))).toBe(true);
+    });
+
+    // save() deletes the rows of every session that ended at or before the
+    // time it is given. A session's rows are kept for 180 days after its
+    // end, so that time is 180 days ago, and not now.
+    it("has the sessions that ended 180 days ago deleted, and none newer", async () => {
+      const before = getUtcNow();
+
+      await service.start(walter);
+
+      const [, purgeBefore] = refreshTokens.save.mock.calls.at(-1) as [unknown, string];
+      expect(isAbout(purgeBefore, subtractUtc(before, { seconds: 15552000 }))).toBe(true);
     });
 
     // `sub` is what JwtAuthGuard reads back as the signed-in member, and
@@ -112,13 +135,13 @@ describe("TokenService", () => {
     // no email: the guard reads the member from the database on every
     // request, so anything else in the token would only go stale.
     it("signs the member's id and username and the session id, and nothing else", async () => {
-      await service.issue(walter);
+      await service.start(walter);
 
       expect(jwtService.signAsync).toHaveBeenCalledTimes(1);
       expect(jwtService.signAsync).toHaveBeenCalledWith({
         sub: 25,
         username: "walter",
-        sid: savedRow().familyId,
+        sid: savedRow().sessionId,
       });
     });
   });
@@ -131,10 +154,10 @@ describe("TokenService", () => {
       const now = getUtcNow();
       return {
         id: hashOf(presented),
-        familyId,
+        sessionId,
         userId: 25,
         expiresAt: addUtc(now, { seconds: 3600 }),
-        familyExpiresAt: addUtc(now, { seconds: 86400 }),
+        sessionExpiresAt: addUtc(now, { seconds: 86400 }),
         usedAt: null,
         revoked: false,
         ...overrides,
@@ -169,18 +192,18 @@ describe("TokenService", () => {
 
         expect(savedRow()).toMatchObject({
           id: hashOf(refreshToken),
-          familyId,
+          sessionId,
           userId: 25,
-          familyExpiresAt: token.familyExpiresAt,
+          sessionExpiresAt: token.sessionExpiresAt,
         });
         expect(jwtService.signAsync).toHaveBeenCalledWith({
           sub: 25,
           username: "walter",
-          sid: familyId,
+          sid: sessionId,
         });
       });
 
-      // The session's end is fixed at sign-in. A refresh near the end must
+      // The session's end is fixed at login. A refresh near the end must
       // not push a token past it.
       it("never lets the successor outlive the session", async () => {
         const token = stored();
@@ -189,7 +212,7 @@ describe("TokenService", () => {
         await service.refresh(presented);
 
         // The session has a day left, and a refresh token would get seven.
-        expect(savedRow().expiresAt).toBe(token.familyExpiresAt);
+        expect(savedRow().expiresAt).toBe(token.sessionExpiresAt);
       });
 
       it("spends the token it was given", async () => {
@@ -198,7 +221,7 @@ describe("TokenService", () => {
         await service.refresh(presented);
 
         expect(refreshTokens.markUsed).toHaveBeenCalledWith(hashOf(presented), expect.any(String));
-        expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+        expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
       });
 
       // If the app stopped between the two, the member must still hold a
@@ -213,7 +236,7 @@ describe("TokenService", () => {
         expect(saved).toBeLessThan(spent);
       });
 
-      // The username may have changed since sign-in.
+      // The username may have changed since login.
       it("signs the new access token for the member as they are now", async () => {
         refreshTokens.find.mockResolvedValue(stored());
         usersService.getLiveUser.mockResolvedValue({
@@ -233,7 +256,7 @@ describe("TokenService", () => {
     describe("a token that is refused, with the session left alone", () => {
       afterEach(() => {
         expect(refreshTokens.save).not.toHaveBeenCalled();
-        expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+        expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
         expect(jwtService.signAsync).not.toHaveBeenCalled();
       });
 
@@ -256,11 +279,27 @@ describe("TokenService", () => {
 
       it("a token whose session was already ended", async () => {
         refreshTokens.find.mockResolvedValue(stored());
-        refreshTokens.isFamilyRevoked.mockResolvedValue(true);
+        refreshTokens.isSessionRevoked.mockResolvedValue(true);
 
         await expectRefused(service.refresh(presented));
 
-        expect(refreshTokens.isFamilyRevoked).toHaveBeenCalledWith(familyId);
+        expect(refreshTokens.isSessionRevoked).toHaveBeenCalledWith(sessionId);
+      });
+
+      // The row is still in the table, kept as a record, but its session
+      // reached its end. Even a spent one is plainly refused here: nobody
+      // can be robbed of a session that is over, so there is no theft to
+      // report and nothing to end. The row itself says so, with no query.
+      it("a token of a session that has reached its end, spent or not", async () => {
+        const ended = subtractUtc(getUtcNow(), { seconds: 1 });
+        refreshTokens.find.mockResolvedValue(
+          stored({ expiresAt: ended, sessionExpiresAt: ended, usedAt: ended }),
+        );
+
+        await expectRefused(service.refresh(presented));
+
+        expect(refreshTokens.isSessionRevoked).not.toHaveBeenCalled();
+        expect(warn).not.toHaveBeenCalled();
       });
 
       // The member was away too long. Nothing was stolen.
@@ -275,7 +314,7 @@ describe("TokenService", () => {
 
     describe("a token that is refused, and ends the session", () => {
       afterEach(() => {
-        expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(familyId);
+        expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
       });
 
       // Two parties hold it, and nothing says which is the member.
@@ -285,7 +324,7 @@ describe("TokenService", () => {
         await expectRefused(service.refresh(presented));
 
         expect(refreshTokens.save).not.toHaveBeenCalled();
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`Session ${familyId} is ended`));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`Session ${sessionId} is ended`));
       });
 
       // Used, and long expired: still a second use.
@@ -332,31 +371,31 @@ describe("TokenService", () => {
     });
   });
 
-  // Signing out one device.
-  describe("revoke", () => {
+  // Logging out one device.
+  describe("end", () => {
     const presented = newOneTimeToken();
 
     it("ends the session the token belongs to", async () => {
-      refreshTokens.find.mockResolvedValue({ id: hashOf(presented), familyId, userId: 25 });
+      refreshTokens.find.mockResolvedValue({ id: hashOf(presented), sessionId, userId: 25 });
 
-      await service.revoke(presented);
+      await service.end(presented);
 
       expect(refreshTokens.find).toHaveBeenCalledWith(hashOf(presented));
-      expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(familyId);
+      expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
     });
 
-    // A client that kept an old token of the session can still sign out.
+    // A client that kept an old token of the session can still log out.
     it("works with a token of the session that was already spent", async () => {
       refreshTokens.find.mockResolvedValue({
         id: hashOf(presented),
-        familyId,
+        sessionId,
         userId: 25,
         usedAt: getUtcNow(),
       });
 
-      await service.revoke(presented);
+      await service.end(presented);
 
-      expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(familyId);
+      expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
     });
 
     // No error for either. The route answers 204 whatever it is given, so
@@ -364,25 +403,25 @@ describe("TokenService", () => {
     it("does nothing, and raises nothing, for a token no row has", async () => {
       refreshTokens.find.mockResolvedValue(null);
 
-      await expect(service.revoke(presented)).resolves.toBeUndefined();
+      await expect(service.end(presented)).resolves.toBeUndefined();
 
-      expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
     });
 
     it("does nothing for text that is not a token, without asking the database", async () => {
-      await expect(service.revoke("not-a-token")).resolves.toBeUndefined();
+      await expect(service.end("not-a-token")).resolves.toBeUndefined();
 
       expect(refreshTokens.find).not.toHaveBeenCalled();
-      expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
     });
   });
 
-  // Signing out every device.
-  describe("revokeAll", () => {
+  // Logging out every device.
+  describe("endAll", () => {
     it("ends every session of that member", async () => {
-      await service.revokeAll(25);
+      await service.endAll(25);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(25);
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(25, expect.any(String));
     });
   });
 });

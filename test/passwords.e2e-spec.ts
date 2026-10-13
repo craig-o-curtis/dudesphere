@@ -38,7 +38,7 @@ describe("Passwords (e2e)", () => {
   }
 
   function login(email: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/token").send({ identifier: email, password });
+    return request(app.getHttpServer()).post("/auth/login").send({ identifier: email, password });
   }
 
   async function storedPassword(userId: number | undefined): Promise<string> {
@@ -64,6 +64,12 @@ describe("Passwords (e2e)", () => {
   });
 
   afterAll(async () => {
+    // The refresh tokens first. Their foreign key is ON DELETE RESTRICT, so a
+    // user who has logged in cannot be deleted while those rows exist.
+    // the ANY($1) here
+    await dataSource.query(`DELETE FROM "refresh_token" WHERE "userId" = ANY($1)`, [
+      createdUserIds,
+    ]);
     // The profile rows go with them: the foreign key is ON DELETE CASCADE.
     await dataSource.query(`DELETE FROM "user" WHERE "id" = ANY($1)`, [createdUserIds]);
     await app.close();

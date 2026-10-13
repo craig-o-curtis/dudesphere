@@ -62,7 +62,7 @@ describe("Password reset (e2e)", () => {
   }
 
   function login(identifier: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/token").send({ identifier, password });
+    return request(app.getHttpServer()).post("/auth/login").send({ identifier, password });
   }
 
   function emailsTo(address: string): MailMessage[] {
@@ -230,7 +230,7 @@ describe("Password reset (e2e)", () => {
 
       await request(app.getHttpServer()).get("/users/me").set(bearer(accessToken)).expect(401);
       const refused = await request(app.getHttpServer())
-        .post("/auth/token/refresh")
+        .post("/auth/refresh")
         .send({ refreshToken })
         .expect(401);
       expect(refused.body).toMatchObject({ errorCode: "REFRESH_TOKEN_INVALID" });

@@ -4,12 +4,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { addUtc } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
-import { MailProvider } from "../mail/mail.provider.js";
-import { ResetTokenInvalidException } from "../shared/exceptions/reset-token-invalid.exception.js";
-import { orClockUnavailable, utcNowOrThrow } from "../shared/utils/utc-clock.js";
-import { UsersService } from "../users/users.service.js";
-import authConfig from "./config/auth.config.js";
-import { hashOf, newOneTimeToken } from "./one-time-token.js";
+import { MailProvider } from "../../mail/mail.provider.js";
+import { ResetTokenInvalidException } from "../../shared/exceptions/reset-token-invalid.exception.js";
+import { orClockUnavailable, utcNowOrThrow } from "../../shared/utils/utc-clock.js";
+import { UsersService } from "../../users/users.service.js";
+import authConfig from "../config/auth.config.js";
+import { hashOf, newOneTimeToken } from "../one-time-token.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
 
 /**

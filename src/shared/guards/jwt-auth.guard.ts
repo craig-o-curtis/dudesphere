@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
-import { RefreshTokensService } from "../../auth/refresh-tokens.service.js";
+import { RefreshTokensService } from "../../auth/sessions/refresh-tokens.service.js";
 import { UsersService } from "../../users/users.service.js";
 import { ErrorCode } from "../error-codes.js";
 import { TokenMissingException } from "../exceptions/token-missing.exception.js";

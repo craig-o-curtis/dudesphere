@@ -85,7 +85,7 @@ describe("Pagination (e2e)", () => {
       const { sent, user } = await signUp(app);
       authorId = user.id;
       const login = await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ identifier: sent.email, password: sent.password })
         .expect(200);
       authorToken = (login.body as { accessToken: string }).accessToken;
@@ -323,7 +323,7 @@ describe("Pagination (e2e)", () => {
     async function signUpAndLogIn(): Promise<Account> {
       const { sent, user } = await signUp(app);
       const login = await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ identifier: sent.email, password: sent.password })
         .expect(200);
       return {

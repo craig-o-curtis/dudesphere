@@ -135,7 +135,7 @@ describe("Hashtag delete and restore (e2e)", () => {
       // A real user, because POST /abidings records the caller as the author.
       const { sent } = await signUp(app);
       const login = await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ identifier: sent.email, password: sent.password })
         .expect(200);
       authorToken = (login.body as { accessToken: string }).accessToken;

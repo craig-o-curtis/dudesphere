@@ -3,18 +3,18 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { addUtc, isAfterUtc, minUtc } from "@northguild/gmt";
+import { addUtc, isAfterUtc, minUtc, subtractUtc } from "@northguild/gmt";
 
-import { RefreshTokenInvalidException } from "../shared/exceptions/refresh-token-invalid.exception.js";
-import { jwtPayloadFor } from "../shared/guards/auth-user.js";
-import { orClockUnavailable, utcNowOrThrow } from "../shared/utils/utc-clock.js";
-import { UsersService } from "../users/users.service.js";
-import authConfig from "./config/auth.config.js";
-import { hashOf, isOneTimeToken, newOneTimeToken } from "./one-time-token.js";
+import { RefreshTokenInvalidException } from "../../shared/exceptions/refresh-token-invalid.exception.js";
+import { jwtPayloadFor } from "../../shared/guards/auth-user.js";
+import { orClockUnavailable, utcNowOrThrow } from "../../shared/utils/utc-clock.js";
+import { UsersService } from "../../users/users.service.js";
+import authConfig from "../config/auth.config.js";
+import { hashOf, isOneTimeToken, newOneTimeToken } from "../one-time-token.js";
 import { RefreshTokensService } from "./refresh-tokens.service.js";
 
 /**
- * What signing in, and refreshing, answer with. The names are OAuth's, and
+ * What logging in, and refreshing, answer with. The names are OAuth's, and
  * the ones the NestJS docs use.
  */
 export interface TokenPair {
@@ -33,28 +33,36 @@ interface TokenOwner {
 }
 
 /**
- * Makes the tokens a signed-in member holds, renews them, and ends them.
+ * Starts a session when a member logs in, renews it, and ends it. A session
+ * is what one login starts, and it lasts until the member logs out or it
+ * runs out.
  *
- * Two tokens, for two jobs:
+ * A member in a session holds two tokens, for two jobs:
  *
  * - The access token is a JWT that lasts 15 minutes. It goes with every
  *   request, and JwtAuthGuard checks it.
  * - The refresh token is random text that lasts 7 days. It goes to two
- *   routes only: one swaps it for a new pair, and one signs out. The
+ *   routes only: one swaps it for a new pair, and one logs out. The
  *   database keeps a hash of it.
  *
  * A refresh token works once. Swapping it marks it used and hands out a
- * successor. Every token that descends from one sign-in shares a family id,
- * and that family is the session. If a used token comes back, two parties
- * hold it, a thief and the member, and nothing says which is which. So the
- * whole session is ended and both sign in again.
+ * successor. Every token that descends from one login shares a session id.
+ * If a used token comes back, two parties hold it, a thief and the member,
+ * and nothing says which is which. So the whole session is ended and both
+ * log in again.
  *
- * The design and the method names (issue, refresh, revoke, revokeAll) are
- * the ones in the NestJS authentication docs.
+ * The rows of a session are kept for 180 days after it ends, as a record of
+ * what it did, and are deleted then. A session past its end is over: its
+ * tokens are refused and its rows are never changed again.
+ *
+ * The design is the one in the NestJS authentication docs. The docs call
+ * the four methods issue, refresh, revoke and revokeAll. Here they are named
+ * for what happens to the session: start, refresh, end and endAll. The docs
+ * also call a session a "token family".
  */
 @Injectable()
-export class TokenService {
-  private readonly logger = new Logger(TokenService.name);
+export class SessionsService {
+  private readonly logger = new Logger(SessionsService.name);
 
   constructor(
     // @Inject names every token outright. `pnpm seed:run` and `pnpm dev:token`
@@ -73,17 +81,17 @@ export class TokenService {
   ) {}
 
   /**
-   * At sign-in, once the password has been checked: starts a session and
+   * At login, once the password has been checked: starts a session and
    * returns its first pair of tokens.
    */
-  async issue(user: TokenOwner): Promise<TokenPair> {
+  async start(user: TokenOwner): Promise<TokenPair> {
     const now = this.now();
-    // A new family: this sign-in's session. Its end is fixed here and no
-    // refresh moves it.
-    const familyId = randomUUID();
-    const familyExpiresAt = this.after(now, this.auth.sessionExpiresIn);
+    // A new session id for this login. The session's end is fixed here
+    // and no refresh moves it.
+    const sessionId = randomUUID();
+    const sessionExpiresAt = this.after(now, this.auth.sessionExpiresIn);
 
-    return this.pair(user, familyId, familyExpiresAt, now);
+    return this.pair(user, sessionId, sessionExpiresAt, now);
   }
 
   /**
@@ -104,15 +112,20 @@ export class TokenService {
     const now = this.now();
     const token = await this.refreshTokensService.find(hashOf(refreshToken));
 
-    // 2. No such token, or its session was ended: by a sign-out, a password
-    //    change, or an earlier theft.
-    if (!token || (await this.refreshTokensService.isFamilyRevoked(token.familyId))) {
+    // 2. No such token, or its session is over. Either the session reached
+    //    its end, and this row is only kept as a record, or it was ended: by
+    //    a logout, a password change, or an earlier theft.
+    if (
+      !token ||
+      !isAfterUtc(token.sessionExpiresAt, now) ||
+      (await this.refreshTokensService.isSessionRevoked(token.sessionId))
+    ) {
       throw new RefreshTokenInvalidException();
     }
 
     // 3. Used before. Two parties hold this token, so the session ends.
     if (token.usedAt) {
-      throw await this.endStolenSession(token.familyId, token.userId);
+      throw await this.endStolenSession(token.sessionId, token.userId, now);
     }
 
     // 4. Unused, and past its time. The member was away too long. This is not
@@ -125,7 +138,7 @@ export class TokenService {
     //    are refused without another lookup.
     const user = await this.usersService.getLiveUser(token.userId);
     if (!user) {
-      await this.refreshTokensService.revokeFamily(token.familyId);
+      await this.refreshTokensService.revokeSession(token.sessionId, now);
       throw new RefreshTokenInvalidException();
     }
 
@@ -133,7 +146,7 @@ export class TokenService {
     //    app stops between the two, the member still holds a token that
     //    works, and can try again.
     const owner = { id: user.userId, username: user.username };
-    const pair = await this.pair(owner, token.familyId, token.familyExpiresAt, now);
+    const pair = await this.pair(owner, token.sessionId, token.sessionExpiresAt, now);
 
     // The mark is one conditional statement. If it changed nothing, another
     // request spent this same token in the moment since step 3. That is a
@@ -141,46 +154,51 @@ export class TokenService {
     // session.
     const spentByThisCall = await this.refreshTokensService.markUsed(token.id, now);
     if (!spentByThisCall) {
-      throw await this.endStolenSession(token.familyId, token.userId);
+      throw await this.endStolenSession(token.sessionId, token.userId, now);
     }
 
     return pair;
   }
 
   /**
-   * Signs out the device that holds this refresh token: ends its session,
+   * Logs out the device that holds this refresh token: ends its session,
    * and no other. A spent token of the session works too, so a client that
-   * kept an old one can still sign out.
+   * kept an old one can still log out.
    *
    * An unknown or malformed token does nothing and raises nothing. The route
    * answers the same either way, so it cannot be used to find out whether a
-   * token is real (RFC 7009, section 2.2).
+   * token is real (RFC 7009, section 2.2). The same goes for a token of a
+   * session that has already reached its end: there is nothing left to log
+   * out of, and its rows stay as they are.
    */
-  async revoke(refreshToken: string): Promise<void> {
+  async end(refreshToken: string): Promise<void> {
     if (!isOneTimeToken(refreshToken)) {
       return;
     }
     const token = await this.refreshTokensService.find(hashOf(refreshToken));
     if (token) {
-      await this.refreshTokensService.revokeFamily(token.familyId);
+      await this.refreshTokensService.revokeSession(token.sessionId, this.now());
     }
   }
 
   /**
-   * Signs the member out on every device: ends every session they have now.
-   * A session started afterwards is not affected, so they can sign in again
+   * Logs the member out on every device: ends every session they have now.
+   * A session started afterwards is not affected, so they can log in again
    * straight away.
    */
-  async revokeAll(userId: number): Promise<void> {
-    await this.refreshTokensService.revokeAllForUser(userId);
+  async endAll(userId: number): Promise<void> {
+    await this.refreshTokensService.revokeAllForUser(userId, this.now());
   }
 
-  // Makes one pair for a session: saves a new refresh token in the family,
-  // and signs an access token that names the family as its session.
+  // Makes one pair for a session: saves a new refresh token in the session,
+  // and signs an access token that carries the session's id.
+  //
+  // Saving is also when old rows are deleted: those of every session that
+  // ended 180 days ago or more.
   private async pair(
     user: TokenOwner,
-    familyId: string,
-    familyExpiresAt: string,
+    sessionId: string,
+    sessionExpiresAt: string,
     now: string,
   ): Promise<TokenPair> {
     const refreshToken = newOneTimeToken();
@@ -188,17 +206,17 @@ export class TokenService {
     await this.refreshTokensService.save(
       {
         id: hashOf(refreshToken),
-        familyId,
+        sessionId,
         userId: user.id,
         // A new 7 days from now, but never past the session's own end.
-        expiresAt: this.earlier(this.after(now, this.auth.refreshExpiresIn), familyExpiresAt),
-        familyExpiresAt,
+        expiresAt: this.earlier(this.after(now, this.auth.refreshExpiresIn), sessionExpiresAt),
+        sessionExpiresAt,
       },
-      now,
+      this.before(now, this.auth.sessionRetention),
     );
 
     return {
-      accessToken: await this.signToken(user, familyId),
+      accessToken: await this.signToken(user, sessionId),
       refreshToken,
       expiresIn: this.auth.expiresIn,
     };
@@ -215,12 +233,13 @@ export class TokenService {
   // log, and returns the exception for the caller to throw. The log names
   // the member and the session and never the token.
   private async endStolenSession(
-    familyId: string,
+    sessionId: string,
     userId: number,
+    now: string,
   ): Promise<RefreshTokenInvalidException> {
-    await this.refreshTokensService.revokeFamily(familyId);
+    await this.refreshTokensService.revokeSession(sessionId, now);
     this.logger.warn(
-      `A refresh token of user #${userId} was used twice. Session ${familyId} is ended.`,
+      `A refresh token of user #${userId} was used twice. Session ${sessionId} is ended.`,
     );
     return new RefreshTokenInvalidException();
   }
@@ -238,6 +257,10 @@ export class TokenService {
 
   private after(instant: string, seconds: number): string {
     return orClockUnavailable(addUtc(instant, { seconds }));
+  }
+
+  private before(instant: string, seconds: number): string {
+    return orClockUnavailable(subtractUtc(instant, { seconds }));
   }
 
   private earlier(first: string, second: string): string {

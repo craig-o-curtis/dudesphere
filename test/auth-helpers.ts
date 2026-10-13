@@ -26,7 +26,7 @@ export interface SignedInUser {
 }
 
 /**
- * Signs a member in through POST /auth/token and returns their access token
+ * Signs a member in through POST /auth/login and returns their access token
  * and their id. The sign-in answer carries no id, so this asks GET /users/me
  * with the new token, as a client would.
  */
@@ -40,14 +40,14 @@ export async function signIn(
   return { token, userId: (me.body as { id: number }).id };
 }
 
-/** Signs a member in through POST /auth/token and returns the access token alone. */
+/** Signs a member in through POST /auth/login and returns the access token alone. */
 export async function accessTokenFor(
   app: INestApplication<App>,
   identifier: string,
   password: string,
 ): Promise<string> {
   const response = await request(app.getHttpServer())
-    .post("/auth/token")
+    .post("/auth/login")
     .send({ identifier, password })
     .expect(200);
   return (response.body as { accessToken: string }).accessToken;

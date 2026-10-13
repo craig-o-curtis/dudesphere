@@ -33,7 +33,7 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/token with a username or email, and a password.
+  //   1. Frontend calls POST /auth/login with a username or email, and a password.
   //   2. Backend checks the credentials and returns an access token (a
   //      signed JWT) and a refresh token.
   //   3. Frontend stores both and sends the access token on every protected
@@ -44,7 +44,7 @@ export class ProfilesController {
   //      request.user with { userId, username, role }.
   //   5. @CurrentUser() reads that user object from the request.
   //   6. When the access token runs out, the frontend swaps the refresh
-  //      token for a new pair at POST /auth/token/refresh.
+  //      token for a new pair at POST /auth/refresh.
   @Auth()
   @Get("me")
   getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {

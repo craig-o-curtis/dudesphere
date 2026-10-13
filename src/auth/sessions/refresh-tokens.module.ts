@@ -8,7 +8,7 @@ import { RefreshTokensService } from "./refresh-tokens.service.js";
 // it. It depends on TypeORM and nothing else, so three modules can import it
 // without a cycle:
 //
-// - AuthModule, where TokenService issues and refreshes tokens.
+// - AuthModule, where SessionsService starts and refreshes sessions.
 // - UsersModule, where UsersService ends a member's sessions when their
 //   password changes or their account is closed.
 // - AppModule, where JwtAuthGuard checks on every request that the caller's

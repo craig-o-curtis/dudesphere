@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { UserAbidingsModule } from "../abidings/user-abidings.module.js";
-import { RefreshTokensModule } from "../auth/refresh-tokens.module.js";
+import { RefreshTokensModule } from "../auth/sessions/refresh-tokens.module.js";
 import { HashingModule } from "../hashing/hashing.module.js";
 import { ProfilesModule } from "../profiles/profiles.module.js";
 import { PaginationModule } from "../shared/pagination/pagination.module.js";
