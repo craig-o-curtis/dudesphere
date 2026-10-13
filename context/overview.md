@@ -51,31 +51,43 @@ One row for each password reset link that can still be used.
 
 A row is deleted when its link is used, so there is no "used" column.
 
+### PostgreSQL — `session` table
+
+One row for each login. That is a session: one login on one device.
+[reference/TOKEN_FYI.md](../reference/TOKEN_FYI.md) is the short guide to
+sessions and tokens, and
+[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) the
+long one.
+
+| Column      | Type                  | Description                                                    |
+| ----------- | --------------------- | -------------------------------------------------------------- |
+| `id`        | uuid PK               | Made by the app at login. The access token's `sid` claim       |
+| `userId`    | int, FK to `user`     | `ON DELETE RESTRICT`. Indexed                                  |
+| `expiresAt` | timestamptz           | The session ends at this instant, 30 days after login. Indexed |
+| `revokedAt` | timestamptz, nullable | When the session was ended on purpose. Null if it was not      |
+| `createdAt` | timestamptz           | Set by the database when the row is created                    |
+
+A session is live while `revokedAt` is null and `expiresAt` is ahead.
+
 ### PostgreSQL — `refresh_token` table
 
-One row for each refresh token handed out. The rows of one login share a
-`sessionId`, and together they are the session.
-[reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) explains
-how they are used.
+One row for each refresh token handed out. Each belongs to one session.
 
-| Column             | Type                  | Description                                           |
-| ------------------ | --------------------- | ----------------------------------------------------- |
-| `id`               | varchar(64) PK        | SHA-256 of the refresh token. The token is not stored |
-| `sessionId`        | uuid                  | The session. Indexed together with `revoked`          |
-| `userId`           | int, FK to `user`     | `ON DELETE RESTRICT`. Indexed                         |
-| `expiresAt`        | timestamptz           | This one token stops working at this instant          |
-| `sessionExpiresAt` | timestamptz           | The session ends at this instant. Indexed             |
-| `usedAt`           | timestamptz, nullable | When the token was swapped for its successor          |
-| `revoked`          | boolean               | True once the session was ended on purpose            |
-| `createdAt`        | timestamptz           | Set by the database when the row is created           |
+| Column      | Type                  | Description                                           |
+| ----------- | --------------------- | ----------------------------------------------------- |
+| `id`        | varchar(64) PK        | SHA-256 of the refresh token. The token is not stored |
+| `sessionId` | uuid, FK to `session` | `ON DELETE CASCADE`. Indexed                          |
+| `expiresAt` | timestamptz           | This one token stops working at this instant          |
+| `usedAt`    | timestamptz, nullable | When the token was swapped for its successor          |
+| `createdAt` | timestamptz           | Set by the database when the row is created           |
 
-A row is kept after its token stops working, as a record of what the session
-did. The rows of a session are deleted together, 180 days after the session
-ends (`SESSION_RETENTION`). That happens whenever anyone logs in or
-refreshes, and nothing else deletes a row.
+Rows of both tables are kept after they stop being useful, as a record. A
+session row is deleted 180 days after the session ends
+(`SESSION_RETENTION`), and its token rows go with it. That happens whenever
+anyone logs in or refreshes, and nothing else deletes a row.
 
 `ON DELETE RESTRICT` protects that record: Postgres refuses to delete a user
-row while the user still has rows here. The app never does. Closing an
+row while the user still has sessions. The app never does. Closing an
 account is a soft delete.
 
 ### PostgreSQL — `profile` table

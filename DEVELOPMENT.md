@@ -59,7 +59,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `JWT_EXPIRES_IN`            | no       | How long an access token lasts, in seconds                                | default `900`                                     |
 | `REFRESH_TOKEN_EXPIRES_IN`  | no       | How long one refresh token lasts, in seconds. At least 60                 | default `604800`                                  |
 | `SESSION_EXPIRES_IN`        | no       | How long a session lasts at most, in seconds. Not less than the above     | default `2592000`                                 |
-| `SESSION_RETENTION`         | no       | How long a session's token rows are kept after it ends, in seconds        | default `15552000`                                |
+| `SESSION_RETENTION`         | no       | How long a session's rows are kept after it ends, in seconds              | default `15552000`                                |
 | `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request   | default `dudesphere-api`                          |
 | `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                      | default `dudesphere`                              |
 | `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself   | default `true`                                    |
@@ -426,7 +426,7 @@ pnpm migration:run
 
 No suite needs the seed. Each one makes its own users, admins included,
 through `tokenFor` and `signedInAs` in `test/auth-helpers.ts`. Logging in as
-the seeded admin would leave a `refresh_token` row behind on every run, since
+the seeded admin would leave a `session` row behind on every run, since
 the cleanup only removes `e2e-` users.
 
 ### How the cleanup works
