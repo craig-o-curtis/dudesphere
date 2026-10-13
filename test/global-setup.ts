@@ -72,13 +72,22 @@ async function cleanup(label: string): Promise<void> {
       `DELETE FROM profile WHERE "userId" = ANY($1::int[])`,
       [ids],
     )) as [unknown, number];
+    // The refresh tokens before the users, and not by cascade. Their foreign
+    // key is ON DELETE RESTRICT, so Postgres refuses to delete a user who
+    // still has rows there. The app keeps those rows for 180 days as a
+    // record. For a throwaway e2e user there is nothing to keep.
+    const [, refreshTokens] = (await dataSource.query(
+      `DELETE FROM refresh_token WHERE "userId" = ANY($1::int[])`,
+      [ids],
+    )) as [unknown, number];
     const [, users] = (await dataSource.query(`DELETE FROM "user" WHERE id = ANY($1::int[])`, [
       ids,
     ])) as [unknown, number];
 
     console.log(
       `[e2e ${label}] removed ${users} users, ${profiles} profiles, ` +
-        `${abidings.deletedCount} abidings, ${hashtags.deletedCount} hashtags`,
+        `${refreshTokens} refresh tokens, ${abidings.deletedCount} abidings, ` +
+        `${hashtags.deletedCount} hashtags`,
     );
   } finally {
     await Promise.all([dataSource.destroy(), client.close()]);
