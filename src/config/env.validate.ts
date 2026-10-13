@@ -96,9 +96,9 @@ export class EnvironmentVariables {
   SESSION_EXPIRES_IN: number = 2592000;
 
   // How long the rows of a session are kept after the session ends, in
-  // seconds. 180 days. Until then they stay in the refresh_token table as a
-  // record of what the session did, and then they are deleted. 0 deletes a
-  // session's rows as soon as it ends.
+  // seconds. 180 days. Until then its row in the session table, and its
+  // tokens' rows in refresh_token, stay as a record of what the session did.
+  // Then they are deleted. 0 deletes a session's rows as soon as it ends.
   @IntFromDigits()
   @Min(0)
   SESSION_RETENTION: number = 15552000;

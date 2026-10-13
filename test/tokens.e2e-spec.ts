@@ -14,7 +14,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
 import { hashOf, newOneTimeToken } from "./../src/auth/one-time-token.js";
-import { RefreshTokensService } from "./../src/auth/sessions/refresh-tokens.service.js";
+import { SessionsRepository } from "./../src/auth/sessions/sessions.repository.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { UsersService } from "./../src/users/users.service.js";
 import { bearer, tokenFor } from "./auth-helpers.js";
@@ -32,7 +32,7 @@ import { signUp, type SignUpBody } from "./sign-up.js";
 //
 // Needs the databases running and the migrations applied. Creates throwaway
 // e2e- users. test/global-setup.ts deletes them when the run ends, their
-// refresh tokens first: the foreign key refuses to let a user go before them.
+// sessions first: the foreign key refuses to let a user go before them.
 describe("Tokens (e2e)", () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
@@ -44,11 +44,15 @@ describe("Tokens (e2e)", () => {
     expiresIn: number;
   }
 
+  // A refresh token's row, with what its session's row says about being
+  // ended. `revoked` is true once the session was ended on purpose, and
+  // `revokedAt` is when.
   interface StoredToken {
     id: string;
     sessionId: string;
     usedAt: string | null;
     revoked: boolean;
+    revokedAt: string | null;
   }
 
   const refused = {
@@ -105,13 +109,29 @@ describe("Tokens (e2e)", () => {
     return subtractUtc(getUtcNow(), { minutes: 1 });
   }
 
-  /** The row for a refresh token, found the way the app finds it: by its hash. */
+  /**
+   * The row for a refresh token, found the way the app finds it, by its hash,
+   * and joined to its session. Undefined once the row has been deleted.
+   */
   async function storedToken(refreshToken: string): Promise<StoredToken | undefined> {
     const rows: StoredToken[] = await dataSource.query(
-      `SELECT "id", "sessionId", "usedAt", "revoked" FROM "refresh_token" WHERE "id" = $1`,
+      `SELECT token."id", token."sessionId", token."usedAt",
+              session."revokedAt", session."revokedAt" IS NOT NULL AS "revoked"
+       FROM "refresh_token" AS token
+       JOIN "session" AS session ON session."id" = token."sessionId"
+       WHERE token."id" = $1`,
       [createHash("sha256").update(refreshToken).digest("hex")],
     );
     return rows[0];
+  }
+
+  /** How many session rows have this id: 1, or 0 once the session was deleted. */
+  async function sessionRows(sessionId: string | undefined): Promise<number> {
+    const [{ count }] = (await dataSource.query(
+      `SELECT count(*)::int AS "count" FROM "session" WHERE "id" = $1`,
+      [sessionId],
+    )) as [{ count: number }];
+    return count;
   }
 
   beforeAll(async () => {
@@ -268,6 +288,21 @@ describe("Tokens (e2e)", () => {
       const { body } = await refresh(pair.refreshToken).expect(401);
 
       expect(body).toEqual(refused);
+    });
+
+    // The backstop behind the case above. Closing an account ends its
+    // sessions, so a refresh is normally refused because the session is
+    // over. Here the account is marked closed straight in the table, with
+    // its session left going, to stand for one that slipped through. The
+    // refresh finds no member for the session, refuses, and ends it.
+    it("401 for a closed account whose session was somehow left going, and ends it", async () => {
+      const { userId, pair } = await newSession();
+      await dataSource.query(`UPDATE "user" SET "deletedAt" = now() WHERE "id" = $1`, [userId]);
+
+      const { body } = await refresh(pair.refreshToken).expect(401);
+
+      expect(body).toEqual(refused);
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ usedAt: null, revoked: true });
     });
   });
 
@@ -487,9 +522,9 @@ describe("Tokens (e2e)", () => {
     // the tokens they held when it was closed do not come back with it.
     //
     // Closing the account already ended the session, so on its own that
-    // would prove nothing about the restore. The row is set back to "not
-    // revoked" by hand, to stand for a session that slipped in around the
-    // close. Restoring must end that one too.
+    // would prove nothing about the restore. The session is set back to "not
+    // ended" by hand, to stand for one that slipped in around the close.
+    // Restoring must end that one too.
     it("ends every session when an admin restores the account", async () => {
       const { sent, userId, pair } = await newSession();
       const sessionId = (await storedToken(pair.refreshToken))?.sessionId;
@@ -497,10 +532,9 @@ describe("Tokens (e2e)", () => {
         .delete("/users/me")
         .set(bearer(pair.accessToken))
         .expect(204);
-      await dataSource.query(
-        `UPDATE "refresh_token" SET "revoked" = false WHERE "sessionId" = $1`,
-        [sessionId],
-      );
+      await dataSource.query(`UPDATE "session" SET "revokedAt" = NULL WHERE "id" = $1`, [
+        sessionId,
+      ]);
 
       await request(app.getHttpServer())
         .post(`/users/${userId}/restore`)
@@ -539,10 +573,15 @@ describe("Tokens (e2e)", () => {
   describe("a session that has reached its end", () => {
     /** Moves a session's end, and its tokens' own, into the past: a minute ago unless told. */
     async function endSessionOf(refreshToken: string, endedAt: string = aMinuteAgo()) {
-      await dataSource.query(
-        `UPDATE "refresh_token" SET "sessionExpiresAt" = $1, "expiresAt" = $1 WHERE "sessionId" = $2`,
-        [endedAt, (await storedToken(refreshToken))?.sessionId],
-      );
+      const sessionId = (await storedToken(refreshToken))?.sessionId;
+      await dataSource.query(`UPDATE "session" SET "expiresAt" = $1 WHERE "id" = $2`, [
+        endedAt,
+        sessionId,
+      ]);
+      await dataSource.query(`UPDATE "refresh_token" SET "expiresAt" = $1 WHERE "sessionId" = $2`, [
+        endedAt,
+        sessionId,
+      ]);
     }
 
     /** A day short of, or a day past, the time a session's rows are kept for. */
@@ -603,10 +642,14 @@ describe("Tokens (e2e)", () => {
     it("has its rows deleted once the 180 days are up, the next time anybody signs in", async () => {
       const { pair: first } = await newSession();
       const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
+      const sessionId = (await storedToken(first.refreshToken))?.sessionId;
       await endSessionOf(second.refreshToken, retentionAgo({ days: 1 }));
+      expect(await sessionRows(sessionId)).toBe(1);
 
       await newSession();
 
+      // The app deletes the session row. Postgres deletes its tokens with it.
+      expect(await sessionRows(sessionId)).toBe(0);
       expect(await storedToken(first.refreshToken)).toBeUndefined();
       expect(await storedToken(second.refreshToken)).toBeUndefined();
     });
@@ -684,42 +727,55 @@ describe("Tokens (e2e)", () => {
     });
   });
 
-  // A session counts as ended when any of its rows is revoked. If a refresh
-  // is in flight at the moment of a sign-out, it can save one more row a
-  // moment after the others were marked, and that row is not marked. The
-  // older, revoked rows are what keep the session ended, which is one reason
-  // a revoked row is never deleted before its session's rows all go. Here
-  // the late row is saved by hand.
-  describe("a token saved a moment after its session was signed out", () => {
-    it("does not bring the session back", async () => {
-      const { userId, pair: first } = await newSession();
+  // Whether a session is over is on its own row, and nowhere else. If a
+  // refresh is in flight at the moment of a logout, it can save one more
+  // token a moment after the session was ended. That token belongs to an
+  // ended session like any other, so it is refused. Here the late token is
+  // saved by hand.
+  describe("a token saved a moment after its session was logged out", () => {
+    it("does not bring the session back, and cannot be swapped", async () => {
+      const { pair: first } = await newSession();
       const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
-      const sessionId = (await storedToken(first.refreshToken))?.sessionId;
+      const sessionId = (await storedToken(first.refreshToken))?.sessionId ?? "";
       await logout(second.refreshToken).expect(204);
 
-      const now = getUtcNow();
-      await app.get(RefreshTokensService).save(
-        {
-          id: hashOf(newOneTimeToken()),
-          sessionId: sessionId ?? "",
-          userId,
-          expiresAt: addUtc(now, { days: 7 }),
-          sessionExpiresAt: addUtc(now, { days: 30 }),
-        },
-        subtractUtc(now, { seconds: auth.sessionRetention }),
-      );
+      const late = newOneTimeToken();
+      await app.get(SessionsRepository).saveToken({
+        id: hashOf(late),
+        sessionId,
+        expiresAt: addUtc(getUtcNow(), { days: 7 }),
+      });
 
-      expect(await storedToken(first.refreshToken)).toMatchObject({ revoked: true });
+      expect(await storedToken(late)).toMatchObject({ usedAt: null, revoked: true });
+      await refresh(late).expect(401);
       await expectSignedOut(second);
     });
   });
 
+  // A session that was ended says when. The time is written once: ending it
+  // again, here with a second logout, leaves the first time in place.
+  describe("the time a session was ended", () => {
+    it("is recorded at logout, and kept when the session is ended again", async () => {
+      const { pair } = await newSession();
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ revokedAt: null });
+
+      await logout(pair.refreshToken).expect(204);
+      const endedAt = (await storedToken(pair.refreshToken))?.revokedAt;
+      await pause(20);
+      await logout(pair.refreshToken).expect(204);
+
+      expect(endedAt).not.toBeNull();
+      expect((await storedToken(pair.refreshToken))?.revokedAt).toEqual(endedAt);
+    });
+  });
+
   // The rows are a record, so a user row cannot be deleted from under them.
-  // The foreign key is ON DELETE RESTRICT. The app never deletes a user row:
+  // The foreign key from session to user is ON DELETE RESTRICT. The app
+  // never deletes a user row:
   // closing an account sets deletedAt. This is the database's own refusal,
   // for anything that reaches it some other way.
   describe("deleting a user row for real", () => {
-    it("is refused by the database while the user has refresh token rows", async () => {
+    it("is refused by the database while the user has session rows", async () => {
       const { userId, pair } = await newSession();
 
       const attempt = dataSource.query(`DELETE FROM "user" WHERE "id" = $1`, [userId]);
@@ -742,15 +798,15 @@ describe("Tokens (e2e)", () => {
     it("lets exactly one of two calls mark a token used", async () => {
       const { pair } = await newSession();
       const id = (await storedToken(pair.refreshToken))?.id ?? "";
-      const refreshTokens = app.get(RefreshTokensService);
+      const sessionsRepository = app.get(SessionsRepository);
 
       const results = await Promise.all([
-        refreshTokens.markUsed(id, getUtcNow()),
-        refreshTokens.markUsed(id, getUtcNow()),
+        sessionsRepository.markTokenUsed(id, getUtcNow()),
+        sessionsRepository.markTokenUsed(id, getUtcNow()),
       ]);
 
       expect(results.filter(Boolean)).toHaveLength(1);
-      expect(await refreshTokens.markUsed(id, getUtcNow())).toBe(false);
+      expect(await sessionsRepository.markTokenUsed(id, getUtcNow())).toBe(false);
     });
 
     // What sign-in asks once it has started a session: is the password that

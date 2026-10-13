@@ -64,12 +64,11 @@ describe("Passwords (e2e)", () => {
   });
 
   afterAll(async () => {
-    // The refresh tokens first. Their foreign key is ON DELETE RESTRICT, so a
-    // user who has logged in cannot be deleted while those rows exist.
+    // The sessions first. Their foreign key is ON DELETE RESTRICT, so a user
+    // who has logged in cannot be deleted while those rows exist. Each
+    // session's refresh tokens go with it.
     // the ANY($1) here
-    await dataSource.query(`DELETE FROM "refresh_token" WHERE "userId" = ANY($1)`, [
-      createdUserIds,
-    ]);
+    await dataSource.query(`DELETE FROM "session" WHERE "userId" = ANY($1)`, [createdUserIds]);
     // The profile rows go with them: the foreign key is ON DELETE CASCADE.
     await dataSource.query(`DELETE FROM "user" WHERE "id" = ANY($1)`, [createdUserIds]);
     await app.close();

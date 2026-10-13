@@ -10,7 +10,7 @@ import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { RefreshTokensModule } from "./auth/sessions/refresh-tokens.module.js";
+import { SessionsModule } from "./auth/sessions/sessions.module.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
 import mongoConfig from "./config/mongo.config.js";
@@ -119,9 +119,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ProfilesModule,
     HashtagsModule,
     PaginationModule,
-    // For JwtAuthGuard below, which asks RefreshTokensService on every
+    // For JwtAuthGuard below, which asks SessionsService on every
     // signed-in request whether the caller's session is still going.
-    RefreshTokensModule,
+    SessionsModule,
   ],
   controllers: [AppController],
   providers: [

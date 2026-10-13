@@ -2,27 +2,31 @@ import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import { addUtc, getUtcNow, isAfterUtc, subtractUtc } from "@northguild/gmt";
+import type { EntityManager } from "typeorm";
 
 import { RefreshTokenInvalidException } from "../../shared/exceptions/refresh-token-invalid.exception.js";
-import { UsersService } from "../../users/users.service.js";
 import authConfig from "../config/auth.config.js";
 import { hashOf, newOneTimeToken } from "../one-time-token.js";
-import { RefreshTokensService } from "./refresh-tokens.service.js";
+import { SessionsRepository } from "./sessions.repository.js";
 import { SessionsService } from "./sessions.service.js";
 
+// The rules, with the queries faked. SessionsRepository is a stand-in here,
+// so each case says what the tables hold and reads what the service asked
+// for. test/tokens.e2e-spec.ts runs the same flows against the real tables.
 describe("SessionsService", () => {
   let service: SessionsService;
 
   const jwtService = { signAsync: vi.fn() };
-  const refreshTokens = {
-    save: vi.fn(),
-    find: vi.fn(),
-    markUsed: vi.fn(),
+  const sessionsRepository = {
+    createSession: vi.fn(),
+    saveToken: vi.fn(),
+    deleteSessionsEndedBy: vi.fn(),
+    findToken: vi.fn(),
+    markTokenUsed: vi.fn(),
     revokeSession: vi.fn(),
-    isSessionRevoked: vi.fn(),
-    revokeAllForUser: vi.fn(),
+    revokeSessionsOfUser: vi.fn(),
+    isSessionLive: vi.fn(),
   };
-  const usersService = { getLiveUser: vi.fn() };
   const warn = vi.fn();
   // 15 minutes, 7 days, 30 days and 180 days, in seconds.
   const auth = {
@@ -35,17 +39,18 @@ describe("SessionsService", () => {
   const walter = { id: 25, username: "walter", email: "walter@example.com", role: "user" };
   const sessionId = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
 
-  /** The row save() was last called with. */
-  function savedRow() {
-    const [row] = refreshTokens.save.mock.calls.at(-1) as [
-      {
-        id: string;
-        sessionId: string;
-        userId: number;
-        expiresAt: string;
-        sessionExpiresAt: string;
-      },
-      string,
+  /** The session row createSession() was last called with. */
+  function createdSession() {
+    const [row] = sessionsRepository.createSession.mock.calls.at(-1) as [
+      { id: string; userId: number; expiresAt: string },
+    ];
+    return row;
+  }
+
+  /** The token row saveToken() was last called with. */
+  function savedToken() {
+    const [row] = sessionsRepository.saveToken.mock.calls.at(-1) as [
+      { id: string; sessionId: string; expiresAt: string },
     ];
     return row;
   }
@@ -58,9 +63,7 @@ describe("SessionsService", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     jwtService.signAsync.mockResolvedValue("signed.jwt.token");
-    refreshTokens.isSessionRevoked.mockResolvedValue(false);
-    refreshTokens.markUsed.mockResolvedValue(true);
-    usersService.getLiveUser.mockResolvedValue({ userId: 25, username: "walter", role: "user" });
+    sessionsRepository.markTokenUsed.mockResolvedValue(true);
     // The service warns when a token is used twice. This stands in for the
     // logger, which keeps the warning out of the test output and lets a test
     // read what was logged.
@@ -70,8 +73,7 @@ describe("SessionsService", () => {
       providers: [
         SessionsService,
         { provide: JwtService, useValue: jwtService },
-        { provide: RefreshTokensService, useValue: refreshTokens },
-        { provide: UsersService, useValue: usersService },
+        { provide: SessionsRepository, useValue: sessionsRepository },
         { provide: authConfig.KEY, useValue: auth },
       ],
     }).compile();
@@ -90,21 +92,33 @@ describe("SessionsService", () => {
       });
     });
 
+    it("saves a session row for that member, with a new id each time", async () => {
+      await service.start(walter);
+      const first = createdSession();
+      await service.start(walter);
+
+      expect(first.userId).toBe(25);
+      expect(first.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(createdSession().id).not.toBe(first.id);
+    });
+
+    // The token row points at the session row, so the session has to be
+    // there first.
+    it("saves the session, then its first refresh token, pointing at it", async () => {
+      await service.start(walter);
+
+      expect(savedToken().sessionId).toBe(createdSession().id);
+      expect(sessionsRepository.createSession.mock.invocationCallOrder[0]).toBeLessThan(
+        sessionsRepository.saveToken.mock.invocationCallOrder[0],
+      );
+    });
+
     // The table must never hold something a reader could use.
     it("stores a hash of the refresh token, and not the token", async () => {
       const { refreshToken } = await service.start(walter);
 
-      expect(savedRow().id).toBe(hashOf(refreshToken));
-      expect(JSON.stringify(refreshTokens.save.mock.calls)).not.toContain(refreshToken);
-    });
-
-    it("starts a new session each time", async () => {
-      await service.start(walter);
-      const first = savedRow().sessionId;
-      await service.start(walter);
-
-      expect(first).toMatch(/^[0-9a-f-]{36}$/);
-      expect(savedRow().sessionId).not.toBe(first);
+      expect(savedToken().id).toBe(hashOf(refreshToken));
+      expect(JSON.stringify(sessionsRepository.saveToken.mock.calls)).not.toContain(refreshToken);
     });
 
     it("gives the refresh token 7 days and the session 30", async () => {
@@ -112,28 +126,25 @@ describe("SessionsService", () => {
 
       await service.start(walter);
 
-      const row = savedRow();
-      expect(row.userId).toBe(25);
-      expect(isAbout(row.expiresAt, addUtc(before, { seconds: 604800 }))).toBe(true);
-      expect(isAbout(row.sessionExpiresAt, addUtc(before, { seconds: 2592000 }))).toBe(true);
+      expect(isAbout(savedToken().expiresAt, addUtc(before, { seconds: 604800 }))).toBe(true);
+      expect(isAbout(createdSession().expiresAt, addUtc(before, { seconds: 2592000 }))).toBe(true);
     });
 
-    // save() deletes the rows of every session that ended at or before the
-    // time it is given. A session's rows are kept for 180 days after its
-    // end, so that time is 180 days ago, and not now.
+    // A session's rows are kept for 180 days after its end, so the cutoff is
+    // 180 days ago, and not now.
     it("has the sessions that ended 180 days ago deleted, and none newer", async () => {
       const before = getUtcNow();
 
       await service.start(walter);
 
-      const [, purgeBefore] = refreshTokens.save.mock.calls.at(-1) as [unknown, string];
-      expect(isAbout(purgeBefore, subtractUtc(before, { seconds: 15552000 }))).toBe(true);
+      const [cutoff] = sessionsRepository.deleteSessionsEndedBy.mock.calls.at(-1) as [string];
+      expect(isAbout(cutoff, subtractUtc(before, { seconds: 15552000 }))).toBe(true);
     });
 
-    // `sub` is what JwtAuthGuard reads back as the signed-in member, and
-    // `sid` is how it knows which session the token belongs to. No role and
-    // no email: the guard reads the member from the database on every
-    // request, so anything else in the token would only go stale.
+    // `sub` is what JwtAuthGuard reads back as the logged-in member, and
+    // `sid` is how it finds the session row. No role and no email: the guard
+    // reads the member from the database on every request, so anything else
+    // in the token would only go stale.
     it("signs the member's id and username and the session id, and nothing else", async () => {
       await service.start(walter);
 
@@ -141,7 +152,7 @@ describe("SessionsService", () => {
       expect(jwtService.signAsync).toHaveBeenCalledWith({
         sub: 25,
         username: "walter",
-        sid: savedRow().sessionId,
+        sid: createdSession().id,
       });
     });
   });
@@ -149,18 +160,28 @@ describe("SessionsService", () => {
   describe("refresh", () => {
     const presented = newOneTimeToken();
 
-    /** A stored token that is good to swap, with `overrides` laid over it. */
-    function stored(overrides: object = {}) {
+    /**
+     * What the repository finds for a token that is good to swap: its row,
+     * its session's row, and the member. Each part takes overrides.
+     */
+    function found(overrides: { token?: object; session?: object; member?: object | null } = {}) {
       const now = getUtcNow();
       return {
-        id: hashOf(presented),
-        sessionId,
-        userId: 25,
-        expiresAt: addUtc(now, { seconds: 3600 }),
-        sessionExpiresAt: addUtc(now, { seconds: 86400 }),
-        usedAt: null,
-        revoked: false,
-        ...overrides,
+        token: {
+          id: hashOf(presented),
+          sessionId,
+          expiresAt: addUtc(now, { seconds: 3600 }),
+          usedAt: null,
+          ...overrides.token,
+        },
+        session: {
+          id: sessionId,
+          userId: 25,
+          expiresAt: addUtc(now, { seconds: 86400 }),
+          revokedAt: null,
+          ...overrides.session,
+        },
+        member: overrides.member === undefined ? { id: 25, username: "walter" } : overrides.member,
       };
     }
 
@@ -171,11 +192,11 @@ describe("SessionsService", () => {
 
     describe("a token that is good to swap", () => {
       it("returns a new pair", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
+        sessionsRepository.findToken.mockResolvedValue(found());
 
         const pair = await service.refresh(presented);
 
-        expect(refreshTokens.find).toHaveBeenCalledWith(hashOf(presented));
+        expect(sessionsRepository.findToken).toHaveBeenCalledWith(hashOf(presented));
         expect(pair).toEqual({
           accessToken: "signed.jwt.token",
           refreshToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
@@ -184,18 +205,14 @@ describe("SessionsService", () => {
         expect(pair.refreshToken).not.toBe(presented);
       });
 
-      it("keeps the successor in the same session, with the same end", async () => {
-        const token = stored();
-        refreshTokens.find.mockResolvedValue(token);
+      // A refresh renews a session. It never starts one.
+      it("keeps the successor in the same session, and makes no new session", async () => {
+        sessionsRepository.findToken.mockResolvedValue(found());
 
         const { refreshToken } = await service.refresh(presented);
 
-        expect(savedRow()).toMatchObject({
-          id: hashOf(refreshToken),
-          sessionId,
-          userId: 25,
-          sessionExpiresAt: token.sessionExpiresAt,
-        });
+        expect(savedToken()).toMatchObject({ id: hashOf(refreshToken), sessionId });
+        expect(sessionsRepository.createSession).not.toHaveBeenCalled();
         expect(jwtService.signAsync).toHaveBeenCalledWith({
           sub: 25,
           username: "walter",
@@ -203,47 +220,47 @@ describe("SessionsService", () => {
         });
       });
 
-      // The session's end is fixed at login. A refresh near the end must
-      // not push a token past it.
+      // The session's end is fixed at login. A refresh near the end must not
+      // push a token past it.
       it("never lets the successor outlive the session", async () => {
-        const token = stored();
-        refreshTokens.find.mockResolvedValue(token);
+        const row = found();
+        sessionsRepository.findToken.mockResolvedValue(row);
 
         await service.refresh(presented);
 
         // The session has a day left, and a refresh token would get seven.
-        expect(savedRow().expiresAt).toBe(token.sessionExpiresAt);
+        expect(savedToken().expiresAt).toBe(row.session.expiresAt);
       });
 
       it("spends the token it was given", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
+        sessionsRepository.findToken.mockResolvedValue(found());
 
         await service.refresh(presented);
 
-        expect(refreshTokens.markUsed).toHaveBeenCalledWith(hashOf(presented), expect.any(String));
-        expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
+        expect(sessionsRepository.markTokenUsed).toHaveBeenCalledWith(
+          hashOf(presented),
+          expect.any(String),
+        );
+        expect(sessionsRepository.revokeSession).not.toHaveBeenCalled();
       });
 
       // If the app stopped between the two, the member must still hold a
       // token that works.
       it("saves the successor before it spends the old token", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
+        sessionsRepository.findToken.mockResolvedValue(found());
 
         await service.refresh(presented);
 
-        const saved = refreshTokens.save.mock.invocationCallOrder[0];
-        const spent = refreshTokens.markUsed.mock.invocationCallOrder[0];
+        const saved = sessionsRepository.saveToken.mock.invocationCallOrder[0];
+        const spent = sessionsRepository.markTokenUsed.mock.invocationCallOrder[0];
         expect(saved).toBeLessThan(spent);
       });
 
       // The username may have changed since login.
       it("signs the new access token for the member as they are now", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
-        usersService.getLiveUser.mockResolvedValue({
-          userId: 25,
-          username: "sobchak",
-          role: "user",
-        });
+        sessionsRepository.findToken.mockResolvedValue(
+          found({ member: { id: 25, username: "sobchak" } }),
+        );
 
         await service.refresh(presented);
 
@@ -255,8 +272,8 @@ describe("SessionsService", () => {
 
     describe("a token that is refused, with the session left alone", () => {
       afterEach(() => {
-        expect(refreshTokens.save).not.toHaveBeenCalled();
-        expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
+        expect(sessionsRepository.saveToken).not.toHaveBeenCalled();
+        expect(sessionsRepository.revokeSession).not.toHaveBeenCalled();
         expect(jwtService.signAsync).not.toHaveBeenCalled();
       });
 
@@ -268,44 +285,44 @@ describe("SessionsService", () => {
       ])("%s, without asking the database", async (_what, value) => {
         await expectRefused(service.refresh(value));
 
-        expect(refreshTokens.find).not.toHaveBeenCalled();
+        expect(sessionsRepository.findToken).not.toHaveBeenCalled();
       });
 
       it("a token no row has", async () => {
-        refreshTokens.find.mockResolvedValue(null);
+        sessionsRepository.findToken.mockResolvedValue(null);
 
         await expectRefused(service.refresh(presented));
       });
 
-      it("a token whose session was already ended", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
-        refreshTokens.isSessionRevoked.mockResolvedValue(true);
+      // A logout, a password change or an earlier theft. The session's row
+      // says so, and nothing more is done to it.
+      it("a token whose session was ended on purpose", async () => {
+        sessionsRepository.findToken.mockResolvedValue(
+          found({ session: { revokedAt: subtractUtc(getUtcNow(), { seconds: 60 }) } }),
+        );
 
         await expectRefused(service.refresh(presented));
-
-        expect(refreshTokens.isSessionRevoked).toHaveBeenCalledWith(sessionId);
       });
 
-      // The row is still in the table, kept as a record, but its session
-      // reached its end. Even a spent one is plainly refused here: nobody
+      // The rows are still in the tables, kept as a record, but the session
+      // reached its end. Even a spent token is plainly refused here: nobody
       // can be robbed of a session that is over, so there is no theft to
-      // report and nothing to end. The row itself says so, with no query.
+      // report and nothing to end.
       it("a token of a session that has reached its end, spent or not", async () => {
         const ended = subtractUtc(getUtcNow(), { seconds: 1 });
-        refreshTokens.find.mockResolvedValue(
-          stored({ expiresAt: ended, sessionExpiresAt: ended, usedAt: ended }),
+        sessionsRepository.findToken.mockResolvedValue(
+          found({ token: { expiresAt: ended, usedAt: ended }, session: { expiresAt: ended } }),
         );
 
         await expectRefused(service.refresh(presented));
 
-        expect(refreshTokens.isSessionRevoked).not.toHaveBeenCalled();
         expect(warn).not.toHaveBeenCalled();
       });
 
       // The member was away too long. Nothing was stolen.
       it("an unused token that has expired", async () => {
-        refreshTokens.find.mockResolvedValue(
-          stored({ expiresAt: subtractUtc(getUtcNow(), { seconds: 1 }) }),
+        sessionsRepository.findToken.mockResolvedValue(
+          found({ token: { expiresAt: subtractUtc(getUtcNow(), { seconds: 1 }) } }),
         );
 
         await expectRefused(service.refresh(presented));
@@ -314,25 +331,32 @@ describe("SessionsService", () => {
 
     describe("a token that is refused, and ends the session", () => {
       afterEach(() => {
-        expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
+        expect(sessionsRepository.revokeSession).toHaveBeenCalledWith(
+          sessionId,
+          expect.any(String),
+        );
       });
 
       // Two parties hold it, and nothing says which is the member.
       it("a token that was used before", async () => {
-        refreshTokens.find.mockResolvedValue(stored({ usedAt: getUtcNow() }));
+        sessionsRepository.findToken.mockResolvedValue(found({ token: { usedAt: getUtcNow() } }));
 
         await expectRefused(service.refresh(presented));
 
-        expect(refreshTokens.save).not.toHaveBeenCalled();
+        expect(sessionsRepository.saveToken).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledWith(expect.stringContaining(`Session ${sessionId} is ended`));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("user #25"));
       });
 
-      // Used, and long expired: still a second use.
+      // Used, and long expired: still a second use, for as long as the
+      // session is going.
       it("a used token, even after it has expired", async () => {
-        refreshTokens.find.mockResolvedValue(
-          stored({
-            usedAt: subtractUtc(getUtcNow(), { seconds: 7200 }),
-            expiresAt: subtractUtc(getUtcNow(), { seconds: 3600 }),
+        sessionsRepository.findToken.mockResolvedValue(
+          found({
+            token: {
+              usedAt: subtractUtc(getUtcNow(), { seconds: 7200 }),
+              expiresAt: subtractUtc(getUtcNow(), { seconds: 3600 }),
+            },
           }),
         );
 
@@ -342,28 +366,28 @@ describe("SessionsService", () => {
       // Two requests with one token, at the same moment. Both read it as
       // unused, and only one can mark it. This is the one that could not.
       it("a token another request spent a moment earlier", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
-        refreshTokens.markUsed.mockResolvedValue(false);
+        sessionsRepository.findToken.mockResolvedValue(found());
+        sessionsRepository.markTokenUsed.mockResolvedValue(false);
 
         await expectRefused(service.refresh(presented));
 
         expect(warn).toHaveBeenCalled();
       });
 
+      // Closing an account ends its sessions, so this should not be
+      // reachable. It is the backstop if a session ever slips through.
       it("a token whose member has closed their account", async () => {
-        refreshTokens.find.mockResolvedValue(stored());
-        usersService.getLiveUser.mockResolvedValue(null);
+        sessionsRepository.findToken.mockResolvedValue(found({ member: null }));
 
         await expectRefused(service.refresh(presented));
 
-        expect(usersService.getLiveUser).toHaveBeenCalledWith(25);
-        expect(refreshTokens.save).not.toHaveBeenCalled();
+        expect(sessionsRepository.saveToken).not.toHaveBeenCalled();
       });
     });
 
     // The log is for whoever runs the app. It must not hold a token.
     it("never writes the token to the log", async () => {
-      refreshTokens.find.mockResolvedValue(stored({ usedAt: getUtcNow() }));
+      sessionsRepository.findToken.mockResolvedValue(found({ token: { usedAt: getUtcNow() } }));
 
       await service.refresh(presented).catch(() => undefined);
 
@@ -374,45 +398,49 @@ describe("SessionsService", () => {
   // Logging out one device.
   describe("end", () => {
     const presented = newOneTimeToken();
+    const session = { id: sessionId, userId: 25 };
 
     it("ends the session the token belongs to", async () => {
-      refreshTokens.find.mockResolvedValue({ id: hashOf(presented), sessionId, userId: 25 });
-
-      await service.end(presented);
-
-      expect(refreshTokens.find).toHaveBeenCalledWith(hashOf(presented));
-      expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
-    });
-
-    // A client that kept an old token of the session can still log out.
-    it("works with a token of the session that was already spent", async () => {
-      refreshTokens.find.mockResolvedValue({
-        id: hashOf(presented),
-        sessionId,
-        userId: 25,
-        usedAt: getUtcNow(),
+      sessionsRepository.findToken.mockResolvedValue({
+        token: { id: hashOf(presented), sessionId },
+        session,
+        member: { id: 25, username: "walter" },
       });
 
       await service.end(presented);
 
-      expect(refreshTokens.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
+      expect(sessionsRepository.findToken).toHaveBeenCalledWith(hashOf(presented));
+      expect(sessionsRepository.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
+    });
+
+    // A client that kept an old token of the session can still log out.
+    it("works with a token of the session that was already spent", async () => {
+      sessionsRepository.findToken.mockResolvedValue({
+        token: { id: hashOf(presented), sessionId, usedAt: getUtcNow() },
+        session,
+        member: { id: 25, username: "walter" },
+      });
+
+      await service.end(presented);
+
+      expect(sessionsRepository.revokeSession).toHaveBeenCalledWith(sessionId, expect.any(String));
     });
 
     // No error for either. The route answers 204 whatever it is given, so
     // it cannot be used to find out whether a token is real.
     it("does nothing, and raises nothing, for a token no row has", async () => {
-      refreshTokens.find.mockResolvedValue(null);
+      sessionsRepository.findToken.mockResolvedValue(null);
 
       await expect(service.end(presented)).resolves.toBeUndefined();
 
-      expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
+      expect(sessionsRepository.revokeSession).not.toHaveBeenCalled();
     });
 
     it("does nothing for text that is not a token, without asking the database", async () => {
       await expect(service.end("not-a-token")).resolves.toBeUndefined();
 
-      expect(refreshTokens.find).not.toHaveBeenCalled();
-      expect(refreshTokens.revokeSession).not.toHaveBeenCalled();
+      expect(sessionsRepository.findToken).not.toHaveBeenCalled();
+      expect(sessionsRepository.revokeSession).not.toHaveBeenCalled();
     });
   });
 
@@ -421,7 +449,42 @@ describe("SessionsService", () => {
     it("ends every session of that member", async () => {
       await service.endAll(25);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(25, expect.any(String));
+      expect(sessionsRepository.revokeSessionsOfUser).toHaveBeenCalledWith(
+        25,
+        expect.any(String),
+        undefined,
+      );
+    });
+
+    // UsersService calls this inside the transaction that changes a
+    // password or closes an account.
+    it("passes the caller's transaction on, when it is given one", async () => {
+      const manager = {} as EntityManager;
+
+      await service.endAll(25, manager);
+
+      expect(sessionsRepository.revokeSessionsOfUser).toHaveBeenCalledWith(
+        25,
+        expect.any(String),
+        manager,
+      );
+    });
+  });
+
+  // What JwtAuthGuard asks on every logged-in request.
+  describe("isLive", () => {
+    it("asks about that session as of now, and gives the answer back", async () => {
+      sessionsRepository.isSessionLive.mockResolvedValue(true);
+
+      await expect(service.isLive(sessionId)).resolves.toBe(true);
+
+      expect(sessionsRepository.isSessionLive).toHaveBeenCalledWith(sessionId, expect.any(String));
+    });
+
+    it("is false when the repository says the session is not going", async () => {
+      sessionsRepository.isSessionLive.mockResolvedValue(false);
+
+      await expect(service.isLive(sessionId)).resolves.toBe(false);
     });
   });
 });
