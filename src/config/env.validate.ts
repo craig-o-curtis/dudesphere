@@ -95,6 +95,14 @@ export class EnvironmentVariables {
   @Min(60)
   SESSION_EXPIRES_IN: number = 2592000;
 
+  // How long the rows of a session are kept after the session ends, in
+  // seconds. 180 days. Until then they stay in the refresh_token table as a
+  // record of what the session did, and then they are deleted. 0 deletes a
+  // session's rows as soon as it ends.
+  @IntFromDigits()
+  @Min(0)
+  SESSION_RETENTION: number = 15552000;
+
   // Who a token is for, and who issued it. Both are written into every token
   // and checked on every request, so a token made for another app is rejected
   // even if it was signed with the same secret.

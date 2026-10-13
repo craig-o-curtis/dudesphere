@@ -11,6 +11,8 @@ export default registerAs("auth", () => {
     expiresIn: env.JWT_EXPIRES_IN,
     refreshExpiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
     sessionExpiresIn: env.SESSION_EXPIRES_IN,
+    // How long a session's rows are kept after it ends, in seconds.
+    sessionRetention: env.SESSION_RETENTION,
     audience: env.JWT_AUDIENCE,
     issuer: env.JWT_ISSUER,
     // For the password reset email: where its link points, and how long the
