@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { type EntityManager, IsNull, LessThanOrEqual, Repository } from "typeorm";
+import { type EntityManager, IsNull, LessThanOrEqual, Not, Repository } from "typeorm";
 
 import { RefreshToken } from "./refresh-token.entity.js";
 
@@ -44,13 +44,50 @@ export class RefreshTokensService {
   ) {}
 
   /**
-   * Saves a new token, then clears out the rows of every session that has
-   * run out by `now`. That is the only housekeeping the table gets: there is
-   * no scheduler, and each sign-in and each refresh passes through here.
+   * Saves a new token, then clears out the rows nothing needs any more.
+   * That is the only housekeeping the table gets: there is no scheduler, and
+   * each sign-in and each refresh passes through here.
+   *
+   * Two kinds of row go:
+   *
+   * 1. Every row of any session that has reached its end by `now`, whoever
+   *    it belongs to.
+   * 2. In the session this token belongs to: the tokens that were spent and
+   *    whose own time ran out. A session gains a row with every refresh, so
+   *    without this a busy one would keep 30 days of them. With it, it keeps
+   *    about 7.
    */
   async save(token: NewRefreshToken, now: string): Promise<void> {
     await this.refreshTokensRepository.insert(token);
     await this.refreshTokensRepository.delete({ familyExpiresAt: LessThanOrEqual(now) });
+    await this.trimSpentTokens(token.familyId, now);
+  }
+
+  // Deletes the spent, expired tokens of one session.
+  //
+  // Only this session, not the whole table. The index on (familyId, revoked)
+  // finds its rows at once, where a search for every spent row in the table
+  // would have to read all of it on each sign-in. A session that has stopped
+  // refreshing is not growing, and goes whole at its end.
+  //
+  // Only rows that are not revoked. A session counts as ended when any of
+  // its rows is revoked. A refresh that is in flight at the moment of a
+  // sign-out can save one more row a moment after the others were marked,
+  // and that late row is not marked. The older, revoked rows are what keep
+  // it dead. Deleting them would bring the session back to life, so they
+  // stay until the session's end.
+  //
+  // What this gives up: a spent token is recognised as "used twice" only
+  // while its row exists. One that comes back after its row is gone is
+  // still refused, as unknown, but it no longer ends the session. A stolen
+  // token is used in minutes, not after a week, so that is a small price.
+  private async trimSpentTokens(familyId: string, now: string): Promise<void> {
+    await this.refreshTokensRepository.delete({
+      familyId,
+      revoked: false,
+      usedAt: Not(IsNull()),
+      expiresAt: LessThanOrEqual(now),
+    });
   }
 
   /**
@@ -113,7 +150,7 @@ export class RefreshTokensService {
    * one row of a session that is still going, and stops there. Only for a
    * session past its end and not yet cleared out does it read them all, and
    * an access token cannot outlive its session by more than its own 15
-   * minutes.
+   * minutes. save() keeps a session to about a week of rows in any case.
    */
   async isSessionLive(familyId: string, now: string): Promise<boolean> {
     const [session] = (await this.refreshTokensRepository.query(SESSION_STATE, [
