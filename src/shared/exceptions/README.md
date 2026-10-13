@@ -69,7 +69,7 @@ Who throws each one:
 - `InvalidValueException`, `DatabaseFaultException`: both database filters.
 - `TimeLimitExceededException`: both database filters and `TimeoutInterceptor`.
 - `ResetTokenInvalidException`: `PasswordResetService`, when a password reset link is wrong, already used, or expired.
-- `RefreshTokenInvalidException`: `TokenService.refresh`, when a refresh token is unknown, expired, already used, or its session or member is gone.
+- `RefreshTokenInvalidException`: `SessionsService.refresh`, when a refresh token is unknown, expired, already used, or its session or member is gone.
 - `ClockUnavailableException`: the two helpers in `src/shared/utils/utc-clock.ts`, when gmt cannot read the clock or work out a time. Temporary, with its error code.
 
 The four the filters throw take the driver's error as their one argument and

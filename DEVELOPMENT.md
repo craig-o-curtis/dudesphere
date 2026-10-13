@@ -59,6 +59,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `JWT_EXPIRES_IN`            | no       | How long an access token lasts, in seconds                                | default `900`                                     |
 | `REFRESH_TOKEN_EXPIRES_IN`  | no       | How long one refresh token lasts, in seconds. At least 60                 | default `604800`                                  |
 | `SESSION_EXPIRES_IN`        | no       | How long a session lasts at most, in seconds. Not less than the above     | default `2592000`                                 |
+| `SESSION_RETENTION`         | no       | How long a session's token rows are kept after it ends, in seconds        | default `15552000`                                |
 | `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request   | default `dudesphere-api`                          |
 | `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                      | default `dudesphere`                              |
 | `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself   | default `true`                                    |
@@ -364,7 +365,7 @@ Sign up, `POST /auth/signup`:
 }
 ```
 
-Sign in, `POST /auth/token`. `identifier` is a username or an email:
+Log in, `POST /auth/login`. `identifier` is a username or an email:
 
 ```json
 { "identifier": "walter", "password": "secret123" }
@@ -372,7 +373,7 @@ Sign in, `POST /auth/token`. `identifier` is a username or an email:
 
 The answer holds `accessToken`, `refreshToken` and `expiresIn`. Send
 `accessToken` as the bearer token. It lasts 15 minutes. For a new pair, post
-`{ "refreshToken": "..." }` to `POST /auth/token/refresh`, and keep the new
+`{ "refreshToken": "..." }` to `POST /auth/refresh`, and keep the new
 refresh token from the answer: each one works once.
 
 For trying routes by hand, `pnpm dev:token` is easier. Its token lasts 30 days
@@ -383,7 +384,7 @@ and belongs to no session, so there is nothing to refresh.
 | Answer              | What it means                                           | What to do                                       |
 | ------------------- | ------------------------------------------------------- | ------------------------------------------------ |
 | 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one        | Set the Auth tab to Bearer and paste a token     |
-| 401 `TOKEN_INVALID` | Expired, signed out, or its account or password changed | Run `pnpm dev:token` again                       |
+| 401 `TOKEN_INVALID` | Expired, logged out, or its account or password changed | Run `pnpm dev:token` again                       |
 | 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's     | Use `pnpm dev:token` with no name, for the admin |
 | 403 `NOT_OWNER`     | The thing exists and belongs to someone else            | Use that member's token, or the admin's          |
 | 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes   | Wait for the time in the `Retry-After` header    |
@@ -424,7 +425,7 @@ pnpm migration:run
 ```
 
 No suite needs the seed. Each one makes its own users, admins included,
-through `tokenFor` and `signedInAs` in `test/auth-helpers.ts`. Signing in as
+through `tokenFor` and `signedInAs` in `test/auth-helpers.ts`. Logging in as
 the seeded admin would leave a `refresh_token` row behind on every run, since
 the cleanup only removes `e2e-` users.
 

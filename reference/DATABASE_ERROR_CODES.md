@@ -62,13 +62,14 @@ says why:
 
 These have no rule, and all were raised against Postgres 18.6 too:
 
-| Code    | Postgres name           | What it usually means                                       |
-| ------- | ----------------------- | ----------------------------------------------------------- |
-| `23503` | `foreign_key_violation` | A row points at a parent row that does not exist.           |
-| `23514` | `check_violation`       | A value broke a `CHECK` rule on the table.                  |
-| `42P01` | `undefined_table`       | The table is missing. Most often, a migration has not run.  |
-| `42703` | `undefined_column`      | The column is missing. Most often, a migration has not run. |
-| `42601` | `syntax_error`          | The SQL does not parse.                                     |
+| Code    | Postgres name           | What it usually means                                                                                      |
+| ------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `23001` | `restrict_violation`    | A delete that an `ON DELETE RESTRICT` foreign key refused. Here: a user row that still has refresh tokens. |
+| `23503` | `foreign_key_violation` | A row points at a parent row that does not exist.                                                          |
+| `23514` | `check_violation`       | A value broke a `CHECK` rule on the table.                                                                 |
+| `42P01` | `undefined_table`       | The table is missing. Most often, a migration has not run.                                                 |
+| `42703` | `undefined_column`      | The column is missing. Most often, a migration has not run.                                                |
+| `42601` | `syntax_error`          | The SQL does not parse.                                                                                    |
 
 ## An outage with no SQLSTATE
 
