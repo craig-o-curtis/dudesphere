@@ -121,10 +121,9 @@ signed for, and which session it belongs to. Everything else is read fresh on
 every logged-in request, by two small queries that run side by side:
 
 - `UsersService.getUserForToken` reads who the member is now.
-- `RefreshTokensService.isSessionLive` reads whether the session is still
-  going. The access token names its session in its `sid` claim. The session
-  is the group of refresh tokens that one login started, kept in the
-  `refresh_token` table. `src/auth/sessions/sessions.service.ts` has the
+- `SessionsService.isLive` reads whether the session is still going. The
+  access token names its session in its `sid` claim, and the session is one
+  row in the `session` table. `src/auth/sessions/sessions.service.ts` has the
   rules.
 
 A token from `pnpm dev:token` names no session and skips the second query.
