@@ -24,7 +24,7 @@ beside the guard that reads it, and each decorator file holds its own key.
 Also here:
 
 - `auth-user.ts` holds `AuthUser`, the user `JwtAuthGuard` puts on the
-  request, and `JwtPayload`, what signing in puts in the access token: the
+  request, and `JwtPayload`, what logging in puts in the access token: the
   member's id, their username and the session's id, and no role.
 - `current-user.decorator.ts` holds `@CurrentUser()`, which hands that user to
   a route handler.
@@ -40,11 +40,11 @@ Every route carries exactly one of these two.
 @Get()
 getAbidings() {}
 
-@Auth()                  // any signed-in caller
+@Auth()                  // any logged-in caller
 @Get("me")
 getMyUser() {}
 
-@Auth(UserRole.ADMIN)    // a signed-in admin
+@Auth(UserRole.ADMIN)    // a logged-in admin
 @Delete(":id")
 deleteUser() {}
 ```
@@ -92,8 +92,8 @@ request. There are three cases:
 | The route carries       | The list    | `RolesGuard` does                           |
 | ----------------------- | ----------- | ------------------------------------------- |
 | `@Public()`, no `@Auth` | none        | Nothing. The request passes.                |
-| `@Auth()`               | `[]`        | Needs a signed-in user. Any role passes.    |
-| `@Auth(UserRole.ADMIN)` | `["admin"]` | Needs a signed-in user with a role in list. |
+| `@Auth()`               | `[]`        | Needs a logged-in user. Any role passes.    |
+| `@Auth(UserRole.ADMIN)` | `["admin"]` | Needs a logged-in user with a role in list. |
 
 `RolesGuard` looks on the method first, then on the controller. So `@Auth` on
 a controller covers every route in it, and an `@Auth` on one method replaces
@@ -118,13 +118,14 @@ So `@CurrentUser()` can be `undefined` on a public route.
 A token cannot change once it is signed. It is a snapshot of the moment the
 member logged in. So it is trusted for two things only: which member it was
 signed for, and which session it belongs to. Everything else is read fresh on
-every signed-in request, by two small queries that run side by side:
+every logged-in request, by two small queries that run side by side:
 
 - `UsersService.getUserForToken` reads who the member is now.
 - `RefreshTokensService.isSessionLive` reads whether the session is still
   going. The access token names its session in its `sid` claim. The session
-  is the family of refresh tokens that one sign-in started, kept in the
-  `refresh_token` table. `src/auth/token.service.ts` has the rules.
+  is the group of refresh tokens that one login started, kept in the
+  `refresh_token` table. `src/auth/sessions/sessions.service.ts` has the
+  rules.
 
 A token from `pnpm dev:token` names no session and skips the second query.
 Only the app can sign one.
@@ -134,7 +135,7 @@ explains the two tokens and the session from the start.
 
 | What happened after login         | What the same token gets            |
 | --------------------------------- | ----------------------------------- |
-| The member signed out             | 401 `TOKEN_INVALID`                 |
+| The member logged out             | 401 `TOKEN_INVALID`                 |
 | A refresh token was used twice    | 401 `TOKEN_INVALID`                 |
 | The account was closed            | 401 `TOKEN_INVALID`                 |
 | The password was changed or reset | 401 `TOKEN_INVALID`                 |
@@ -151,7 +152,7 @@ will not start with one shorter than 32 characters, and only tokens signed
 with HS256 are accepted. Both rules are in `src/config/env.validate.ts` and
 `src/auth/auth.module.ts`.
 
-The cost is two small queries for each signed-in request. They are not
+The cost is two small queries for each logged-in request. They are not
 cached. A cache would bring back the window in which a closed account or an
 ended session still works.
 
@@ -171,7 +172,7 @@ before a row that belongs to someone else answers 403. See
   checks, over HTTP: 401 with no token on every route that is not public, and
   403 with the wrong role on every route limited to a role.
 - `test/tokens.e2e-spec.ts` proves the session check: an access token stops
-  on the next request once its session is signed out, reused, or past its end.
+  on the next request once its session is logged out, reused, or past its end.
 - `test/authorization.e2e-spec.ts` sends tokens someone has tampered with: a
   role written into the payload, another member's id, no signature, the wrong
   algorithm. It also demotes an admin and checks the same token gets 403.

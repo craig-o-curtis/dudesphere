@@ -127,10 +127,10 @@ Public. What a visitor sees first.
 ### Sign up `/signup` and log in `/login`
 
 - Sign up posts to `server/api/signup.post.ts`, which calls
-  `POST /auth/signup`, then `POST /auth/token` with the same credentials, then
+  `POST /auth/signup`, then `POST /auth/login` with the same credentials, then
   sets the cookies.
 - Log in posts to `server/api/session.post.ts`, which calls
-  `POST /auth/token`.
+  `POST /auth/login`.
 - The login form has one input, labelled "Username or email", and a password.
   It posts `{ identifier, password }`. The API decides which of the two the
   identifier is and ignores its letter case, so the form does neither.
@@ -151,7 +151,7 @@ Public. What a visitor sees first.
   the link no longer works and offers `/forgot-password` again.
 - A 429 from login or forgot password carries `Retry-After`, in seconds. The
   form shows how long to wait.
-- `POST /auth/token` answers `{ accessToken, refreshToken, expiresIn }`. Each
+- `POST /auth/login` answers `{ accessToken, refreshToken, expiresIn }`. Each
   token goes into its own cookie through Nitro's `setCookie`, both `httpOnly`,
   `secure` and `sameSite: 'lax'`:
   - `session` holds the access token, with `path: '/'` and a lifetime of
@@ -160,7 +160,7 @@ Public. What a visitor sees first.
     limited to the Nitro routes that refresh and log out, so it is not sent
     with every page.
 - **Refreshing.** When the `session` cookie is missing or the API answers
-  401 `TOKEN_INVALID`, Nitro calls `POST /auth/token/refresh` with the refresh
+  401 `TOKEN_INVALID`, Nitro calls `POST /auth/refresh` with the refresh
   token, sets both cookies from the answer, and repeats the request once.
 - **One refresh at a time for a session.** A refresh token works once, and the
   API ends the whole session if one is used twice. Two page requests that
@@ -168,9 +168,9 @@ Public. What a visitor sees first.
   pending promise for each refresh token and has later callers wait for it.
 - On 401 `REFRESH_TOKEN_INVALID`, Nitro clears both cookies and sends the
   visitor to `/login`.
-- `server/api/session.delete.ts` logs out: it calls `POST /auth/token/revoke`
+- `server/api/session.delete.ts` logs out: it calls `POST /auth/logout`
   with the refresh token, then clears both cookies. "Log out everywhere" calls
-  `POST /auth/token/revoke-all`.
+  `POST /auth/logout-all`.
 - Forms are plain `<form @submit.prevent>` with a `pending` ref. A 400 from
   Nest carries the field messages. Nitro passes the body through with
   `createError`, and the form shows each message under its input. No
@@ -181,13 +181,13 @@ Public. What a visitor sees first.
   carries no role, on purpose: the API reads the role from the database on
   every request, so Nitro asks for it and does not decode it.
 - A server plugin copies `event.context.user` into `useState('me')` during
-  SSR, so pages and route middleware know who is signed in without reading
+  SSR, so pages and route middleware know who is logged in without reading
   the httpOnly cookie, which they cannot.
 - `app/middleware/auth.ts` is a route middleware. Pages opt in with
   `definePageMeta({ middleware: 'auth' })`: `/feed`, `/dudes/:id`,
   `/dudes/me`, `/sphere`, `/admin/*`. It sends anonymous visitors to
   `/login?next=`. `/dudes/:id` is on the list because the API gives a profile
-  to signed-in callers only.
+  to logged-in callers only.
 - Every Nitro route that changes data re-checks `event.context.user`
   itself. Route middleware guards pages, not API calls.
 
@@ -215,7 +215,7 @@ The logged-in home. This is the Twitter part.
 The forum part. One abiding and the conversation under it.
 
 - The abiding from `GET /abidings/:id`, which is public and carries the
-  author's `displayName`. A signed-in visitor also gets the author's profile
+  author's `displayName`. A logged-in visitor also gets the author's profile
   from `GET /profiles/user/:id`. An anonymous visitor sees the abiding and
   the display name only, because profiles need a token.
 - No page shows another member's username. The API does not send one.
@@ -232,7 +232,7 @@ The forum part. One abiding and the conversation under it.
 A member's page.
 
 - `GET /profiles/user/:id` and `GET /abidings?userId=:id`, paginated like
-  the feed. Both need a signed-in visitor here, the first because profiles
+  the feed. Both need a logged-in visitor here, the first because profiles
   need a token.
 - The page is headed by the member's `displayName`, which the profile
   carries. `/dudes/me` also shows the member their own username, from
@@ -337,7 +337,7 @@ shared element between feed and thread.
 | Nitro `server/api/*`                | sign up, log in, post, edit, admin actions, the API hop                                     | each route re-checks `event.context.user`                    |
 | `server/middleware/auth.ts`         | verify the JWT once per request                                                             |                                                              |
 | `definePageMeta({ middleware })`    | page guards                                                                                 |                                                              |
-| `useState`                          | the signed-in member, shared SSR to client                                                  |                                                              |
+| `useState`                          | the logged-in member, shared SSR to client                                                  |                                                              |
 | `routeRules` with `swr`             | cache the splash for 60 s                                                                   |                                                              |
 | `useTemplateRef`                    | the canvas and the ball mesh                                                                | Vue 3.5                                                      |
 | `defineModel`                       | the compose box and filter chips                                                            | Vue 3.4                                                      |
