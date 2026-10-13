@@ -2,11 +2,10 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 
-import { RefreshTokensService } from "../../auth/sessions/refresh-tokens.service.js";
+import { SessionsService } from "../../auth/sessions/sessions.service.js";
 import { UsersService } from "../../users/users.service.js";
 import { ErrorCode } from "../error-codes.js";
 import { TokenMissingException } from "../exceptions/token-missing.exception.js";
-import { utcNowOrThrow } from "../utils/utc-clock.js";
 import type { AuthUser, RequestWithUser, VerifiedJwtPayload } from "./auth-user.js";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
 
@@ -24,7 +23,7 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 //
 // Depends on JwtService, which AuthModule registers globally, on Reflector,
 // which Nest provides everywhere, and on UsersService and
-// RefreshTokensService, whose modules AppModule imports. So it needs no
+// SessionsService, whose modules AppModule imports. So it needs no
 // module of its own.
 //
 // No @Inject on the constructor parameters, on purpose. `pnpm seed:run` and
@@ -46,7 +45,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
     private readonly usersService: UsersService,
-    private readonly refreshTokens: RefreshTokensService,
+    private readonly sessionsService: SessionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -150,7 +149,7 @@ export class JwtAuthGuard implements CanActivate {
       return false;
     }
 
-    return this.refreshTokens.isSessionLive(sessionId, utcNowOrThrow());
+    return this.sessionsService.isLive(sessionId);
   }
 
   // One answer for every token that is refused, so a caller cannot tell a

@@ -72,12 +72,13 @@ async function cleanup(label: string): Promise<void> {
       `DELETE FROM profile WHERE "userId" = ANY($1::int[])`,
       [ids],
     )) as [unknown, number];
-    // The refresh tokens before the users, and not by cascade. Their foreign
-    // key is ON DELETE RESTRICT, so Postgres refuses to delete a user who
-    // still has rows there. The app keeps those rows for 180 days as a
-    // record. For a throwaway e2e user there is nothing to keep.
-    const [, refreshTokens] = (await dataSource.query(
-      `DELETE FROM refresh_token WHERE "userId" = ANY($1::int[])`,
+    // The sessions before the users, and not by cascade. Their foreign key
+    // is ON DELETE RESTRICT, so Postgres refuses to delete a user who still
+    // has rows there. The app keeps those rows for 180 days as a record. For
+    // a throwaway e2e user there is nothing to keep. Each session's refresh
+    // tokens go with it: that foreign key does cascade.
+    const [, sessions] = (await dataSource.query(
+      `DELETE FROM session WHERE "userId" = ANY($1::int[])`,
       [ids],
     )) as [unknown, number];
     const [, users] = (await dataSource.query(`DELETE FROM "user" WHERE id = ANY($1::int[])`, [
@@ -86,7 +87,7 @@ async function cleanup(label: string): Promise<void> {
 
     console.log(
       `[e2e ${label}] removed ${users} users, ${profiles} profiles, ` +
-        `${refreshTokens} refresh tokens, ${abidings.deletedCount} abidings, ` +
+        `${sessions} sessions, ${abidings.deletedCount} abidings, ` +
         `${hashtags.deletedCount} hashtags`,
     );
   } finally {

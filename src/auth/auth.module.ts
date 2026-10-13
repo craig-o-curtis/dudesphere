@@ -10,13 +10,12 @@ import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
 import { PasswordResetToken } from "./password-reset/password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset/password-reset.service.js";
-import { RefreshTokensModule } from "./sessions/refresh-tokens.module.js";
-import { SessionsService } from "./sessions/sessions.service.js";
+import { SessionsModule } from "./sessions/sessions.module.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
-// that injects authConfig.KEY has to import it. There are two: AuthModule,
-// for PasswordResetService and SessionsService, and JwtModule, for the factory
-// below. Both import this one constant.
+// that injects authConfig.KEY has to import it. Two do so here: AuthModule,
+// for PasswordResetService, and JwtModule, for the factory below. Both import
+// this one constant. SessionsModule imports the namespace for itself.
 //
 // Not authConfig.asProvider(). That returns a ready-made set of registerAsync
 // options: this same import and inject, plus a factory that hands the config
@@ -34,14 +33,14 @@ const JWT_ALGORITHM = "HS256";
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, PasswordResetService, SessionsService],
+  providers: [AuthService, PasswordResetService],
   imports: [
     UsersModule,
     // For PasswordResetService: the mail it sends and the table it keeps.
     MailModule,
     TypeOrmModule.forFeature([PasswordResetToken]),
-    // For SessionsService: the refresh_token table and the service over it.
-    RefreshTokensModule,
+    // For SessionsService, which login, refresh and logout call.
+    SessionsModule,
     authConfigModule,
     // global: AppModule registers JwtAuthGuard as an APP_GUARD, and the guard
     // needs JwtService there. Global makes JwtService injectable in every

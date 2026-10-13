@@ -5,7 +5,7 @@ import { isValidUtc } from "@northguild/gmt";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import { RefreshTokensService } from "../auth/sessions/refresh-tokens.service.js";
+import { SessionsService } from "../auth/sessions/sessions.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -64,7 +64,7 @@ describe("UsersService", () => {
 
   // Ends a member's sessions. UsersService calls it when a password is set
   // and when an account is closed.
-  const refreshTokens = { revokeAllForUser: vi.fn() };
+  const sessionsService = { endAll: vi.fn() };
 
   // A fake hasher, so no test here runs bcrypt. hashPassword() wraps its
   // input, which makes a stored hash easy to tell from the password it came
@@ -95,7 +95,7 @@ describe("UsersService", () => {
         { provide: HashingProvider, useValue: hashingProvider },
         // The real one. It has no dependencies, and getUsers is tested through it.
         PaginationProvider,
-        { provide: RefreshTokensService, useValue: refreshTokens },
+        { provide: SessionsService, useValue: sessionsService },
       ],
     }).compile();
 
@@ -189,34 +189,6 @@ describe("UsersService", () => {
       queryBuilder.getOne.mockResolvedValue(null);
 
       await expect(service.getUserForToken(2_000_000_000, 1_800_000_000)).resolves.toBeNull();
-    });
-  });
-
-  // What SessionsService.refresh asks before it hands out a new pair.
-  describe("getLiveUser", () => {
-    it("returns who the member is now, in the shape the guards read", async () => {
-      usersRepository.findOne.mockResolvedValue({
-        id: 25,
-        username: "walter",
-        role: UserRole.USER,
-      });
-
-      await expect(service.getLiveUser(25)).resolves.toEqual({
-        userId: 25,
-        username: "walter",
-        role: UserRole.USER,
-      });
-      expect(usersRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 25 },
-        select: { id: true, username: true, role: true },
-      });
-    });
-
-    // findOne leaves soft-deleted rows out, so a closed account is null too.
-    it("returns null when the account is closed or was never there", async () => {
-      usersRepository.findOne.mockResolvedValue(null);
-
-      await expect(service.getLiveUser(25)).resolves.toBeNull();
     });
   });
 
@@ -729,7 +701,7 @@ describe("UsersService", () => {
         await service.updateUser(3, { password: "secret2" });
 
         expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-        expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
+        expect(sessionsService.endAll).toHaveBeenCalledWith(3, manager);
         // The password write does not go round the transaction.
         expect(usersRepository.update).not.toHaveBeenCalled();
       });
@@ -742,7 +714,7 @@ describe("UsersService", () => {
         await service.updateUser(3, { password: "secret2" });
 
         expect(manager.update.mock.invocationCallOrder[0]).toBeLessThan(
-          refreshTokens.revokeAllForUser.mock.invocationCallOrder[0],
+          sessionsService.endAll.mock.invocationCallOrder[0],
         );
       });
 
@@ -752,7 +724,7 @@ describe("UsersService", () => {
       it("rejects when ending the sessions fails, so the password rolls back", async () => {
         manager.update.mockResolvedValue({ affected: 1 });
         const failure = new Error("connection lost");
-        refreshTokens.revokeAllForUser.mockRejectedValueOnce(failure);
+        sessionsService.endAll.mockRejectedValueOnce(failure);
 
         await expect(service.updateUser(3, { password: "secret2" })).rejects.toBe(failure);
       });
@@ -764,7 +736,7 @@ describe("UsersService", () => {
           NotFoundException,
         );
 
-        expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+        expect(sessionsService.endAll).not.toHaveBeenCalled();
       });
     });
 
@@ -776,7 +748,7 @@ describe("UsersService", () => {
 
       await service.updateUser(3, { username: "donny" });
 
-      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+      expect(sessionsService.endAll).not.toHaveBeenCalled();
       // No second write to keep in step with, so no transaction either.
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
@@ -906,7 +878,7 @@ describe("UsersService", () => {
 
       expect(profilesService.softDeleteForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
-      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+      expect(sessionsService.endAll).not.toHaveBeenCalled();
     });
 
     // A closed account has no sessions. Through the same manager, so the
@@ -916,7 +888,7 @@ describe("UsersService", () => {
 
       await service.deleteUser(3);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
+      expect(sessionsService.endAll).toHaveBeenCalledWith(3, manager);
     });
 
     // Mongo stays last: it is outside the transaction and cannot be rolled
@@ -926,7 +898,7 @@ describe("UsersService", () => {
 
       await service.deleteUser(3);
 
-      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
+      expect(sessionsService.endAll.mock.invocationCallOrder[0]).toBeLessThan(
         userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0],
       );
     });
@@ -934,7 +906,7 @@ describe("UsersService", () => {
     it("rejects when ending the sessions fails, and leaves the abidings alone", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
       const failure = new Error("connection lost");
-      refreshTokens.revokeAllForUser.mockRejectedValueOnce(failure);
+      sessionsService.endAll.mockRejectedValueOnce(failure);
 
       await expect(service.deleteUser(3)).rejects.toBe(failure);
 
@@ -988,8 +960,8 @@ describe("UsersService", () => {
 
       await service.restoreUser(3);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
-      expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
+      expect(sessionsService.endAll).toHaveBeenCalledWith(3, manager);
+      expect(sessionsService.endAll.mock.invocationCallOrder[0]).toBeLessThan(
         userAbidingsService.restoreForUser.mock.invocationCallOrder[0],
       );
     });

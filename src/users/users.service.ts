@@ -8,7 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, IsNull, Not, Repository, type UpdateResult } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import { RefreshTokensService } from "../auth/sessions/refresh-tokens.service.js";
+import { SessionsService } from "../auth/sessions/sessions.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
@@ -55,7 +55,7 @@ export class UsersService {
     private readonly userAbidingsService: UserAbidingsService,
     private readonly hashingProvider: HashingProvider,
     private readonly paginationProvider: PaginationProvider,
-    private readonly refreshTokens: RefreshTokensService,
+    private readonly sessionsService: SessionsService,
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
@@ -117,23 +117,6 @@ export class UsersService {
       // arithmetic here.
       .andWhere(TOKEN_NOT_OLDER_THAN_PASSWORD, { issuedAt })
       .getOne();
-
-    return user ? { userId: user.id, username: user.username, role: user.role } : null;
-  }
-
-  // For SessionsService.refresh, before it hands a new pair of tokens to
-  // whoever holds a refresh token. Who that member is now, or null when the
-  // account is closed or gone.
-  //
-  // No password check here, unlike getUserForToken. A password change ends
-  // the member's sessions in the same transaction that stores the new
-  // password, in updateUser, so a refresh token from before it is already
-  // refused.
-  async getLiveUser(id: number): Promise<AuthUser | null> {
-    const user = await this.usersRepository.findOne({
-      where: { id },
-      select: { id: true, username: true, role: true },
-    });
 
     return user ? { userId: user.id, username: user.username, role: user.role } : null;
   }
@@ -362,7 +345,7 @@ export class UsersService {
     // commit, which credentialsStillHold waits on.
     await this.dataSource.transaction(async (manager) => {
       this.assertFound(await manager.update(User, liveUser, userFields), id);
-      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
+      await this.sessionsService.endAll(id, manager);
     });
     return this.getUserById(id);
   }
@@ -401,7 +384,7 @@ export class UsersService {
       // cannot be closed with its sessions left alive: if this fails, the
       // account stays open and the caller tries again. The sessions stay
       // ended if the account is restored, and the member signs in again.
-      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
+      await this.sessionsService.endAll(id, manager);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
       // failure throws and rolls back the user, the profile and the sessions.
@@ -430,7 +413,7 @@ export class UsersService {
       // closed. deleteUser ended them already. This makes the same true of a
       // session that slipped in around the delete, so nobody is signed in to
       // a restored account until they sign in to it.
-      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
+      await this.sessionsService.endAll(id, manager);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });
