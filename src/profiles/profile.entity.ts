@@ -69,3 +69,29 @@ export class Profile {
   @SoftDeleteUtcColumn()
   deletedAt: string | null;
 }
+
+// SQL equivalent
+// CREATE TABLE profile (
+//     id               SERIAL PRIMARY KEY,
+//     user_id          INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+//     "displayName"    CITEXT NOT NULL,
+//     bio              TEXT,
+//     "profileImageUrl" VARCHAR(255),
+//     "isDude"         BOOLEAN NOT NULL DEFAULT false,
+//     "ordainedDate"   TIMESTAMPTZ,
+//     "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT now(),
+//     "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT now(),
+//     "deletedAt"      TIMESTAMPTZ
+// );
+
+// -- One-to-one: the FK itself must be unique, otherwise a user could
+// -- have several profiles and it'd just be a many-to-one
+// ALTER TABLE profile
+//     ADD CONSTRAINT uq_profile_user_id UNIQUE (user_id),
+//     ADD CONSTRAINT uq_profile_displayName UNIQUE ("displayName"),
+//     ADD CONSTRAINT CHK_profile_displayName_length
+//         CHECK (char_length("displayName") <= 50);
+
+// CREATE TRIGGER trg_profile_updated_at
+//     BEFORE UPDATE ON profile
+//     FOR EACH ROW EXECUTE FUNCTION set_updated_at();

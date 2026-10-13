@@ -52,6 +52,7 @@ export class RefreshToken {
 
   // `user` is the related User object; the foreign-key value is stored in the
   // `userId` column above.
+  // TODO BUILD IN Tombstone idea of not allowing this
   @ManyToOne(() => User, {
     onDelete: "CASCADE", // when the user row is hard deleted, Postgres deletes these rows too
     nullable: false,
@@ -90,3 +91,28 @@ export class RefreshToken {
   @CreateUtcColumn()
   createdAt: string;
 }
+
+// SQL equivalent
+// CREATE TABLE refresh_token (
+//     id               VARCHAR(64) PRIMARY KEY,
+//     family_id        UUID NOT NULL,
+//     user_id          INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+//     expires_at       TIMESTAMPTZ NOT NULL,
+//     family_expires_at TIMESTAMPTZ NOT NULL,
+//     used_at          TIMESTAMPTZ,
+//     revoked          BOOLEAN NOT NULL DEFAULT false,
+//     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+
+// -- Composite: is any row of the family not past its end, and is any row
+// -- of it revoked (RefreshTokensService.isSessionLive)
+// CREATE INDEX idx_refresh_token_family_id_revoked
+//     ON refresh_token (family_id, revoked);
+
+// -- "Sign out everywhere" revokes a member's rows by userId
+// CREATE INDEX idx_refresh_token_user_id
+//     ON refresh_token (user_id);
+
+// -- Cleanup of expired families
+// CREATE INDEX idx_refresh_token_family_expires_at
+//     ON refresh_token (family_expires_at);

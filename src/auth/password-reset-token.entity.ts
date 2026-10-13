@@ -49,3 +49,21 @@ export class PasswordResetToken {
   @CreateUtcColumn()
   createdAt: string;
 }
+
+// SQL equivalent
+// CREATE TABLE password_reset_token (
+//     id          SERIAL PRIMARY KEY,
+//     user_id     INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+//     token_hash  VARCHAR(64) NOT NULL,
+//     expires_at  TIMESTAMPTZ NOT NULL,
+//     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+
+// -- Index for: "delete a user's earlier tokens" lookups by userId
+// CREATE INDEX idx_password_reset_token_user_id
+//     ON password_reset_token (user_id);
+
+// -- Unique constraint also creates a unique index for tokenHash lookups
+// ALTER TABLE password_reset_token
+//     ADD CONSTRAINT uq_password_reset_token_token_hash
+//     UNIQUE (token_hash);
