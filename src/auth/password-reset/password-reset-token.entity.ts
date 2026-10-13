@@ -8,9 +8,9 @@ import {
   type Relation,
 } from "typeorm";
 
-import { CreateUtcColumn } from "../shared/decorators/create-utc-column.decorator.js";
-import { UtcColumn } from "../shared/decorators/utc-column.decorator.js";
-import { User } from "../users/user.entity.js";
+import { CreateUtcColumn } from "../../shared/decorators/create-utc-column.decorator.js";
+import { UtcColumn } from "../../shared/decorators/utc-column.decorator.js";
+import { User } from "../../users/user.entity.js";
 
 // One row for each password reset link that can still be used.
 //

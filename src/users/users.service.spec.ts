@@ -5,7 +5,7 @@ import { isValidUtc } from "@northguild/gmt";
 import { DataSource, IsNull, Not } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
+import { RefreshTokensService } from "../auth/sessions/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
@@ -192,7 +192,7 @@ describe("UsersService", () => {
     });
   });
 
-  // What TokenService.refresh asks before it hands out a new pair.
+  // What SessionsService.refresh asks before it hands out a new pair.
   describe("getLiveUser", () => {
     it("returns who the member is now, in the shape the guards read", async () => {
       usersRepository.findOne.mockResolvedValue({
@@ -729,7 +729,7 @@ describe("UsersService", () => {
         await service.updateUser(3, { password: "secret2" });
 
         expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-        expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+        expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
         // The password write does not go round the transaction.
         expect(usersRepository.update).not.toHaveBeenCalled();
       });
@@ -916,7 +916,7 @@ describe("UsersService", () => {
 
       await service.deleteUser(3);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
     });
 
     // Mongo stays last: it is outside the transaction and cannot be rolled
@@ -988,7 +988,7 @@ describe("UsersService", () => {
 
       await service.restoreUser(3);
 
-      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, manager);
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(3, expect.any(String), manager);
       expect(refreshTokens.revokeAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
         userAbidingsService.restoreForUser.mock.invocationCallOrder[0],
       );

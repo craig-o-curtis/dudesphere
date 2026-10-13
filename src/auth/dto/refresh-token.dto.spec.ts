@@ -13,7 +13,7 @@ describe("RefreshTokenDto", () => {
   });
 
   // The DTO has no rule about a token's shape. A string that is not a token
-  // we issued passes here and gets a 401 from TokenService, the same answer
+  // we issued passes here and gets a 401 from SessionsService, the same answer
   // as a used or expired one.
   it("accepts a string that is not a real token, and leaves it to the service", () => {
     expect(invalidFields({ refreshToken: "not-a-token" })).toEqual([]);

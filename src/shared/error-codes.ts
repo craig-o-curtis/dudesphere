@@ -21,10 +21,10 @@
 //
 // - utcNowOrThrow, in UserAbidingsService.softDeleteForUser,
 //   HashtagsService.deleteBySlug, PasswordResetService.sendLink,
-//   UsersService.passwordChangedNow, TokenService.now and
+//   UsersService.passwordChangedNow, SessionsService.now and
 //   JwtAuthGuard.isSessionLive;
-// - orClockUnavailable, in PasswordResetService.sendLink, TokenService.after
-//   and TokenService.earlier.
+// - orClockUnavailable, in PasswordResetService.sendLink, SessionsService.after
+//   and SessionsService.earlier.
 //
 // Remove also the matching check in HashtagsService.registerTags and the
 // vi.mock of gmt in hashtags.service.spec.ts.

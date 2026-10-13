@@ -8,15 +8,14 @@ import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
-import { PasswordResetToken } from "./password-reset-token.entity.js";
-import { PasswordResetService } from "./password-reset.service.js";
-import { RefreshTokensModule } from "./refresh-tokens.module.js";
-import { TokenService } from "./token.service.js";
-import { TokensController } from "./tokens.controller.js";
+import { PasswordResetToken } from "./password-reset/password-reset-token.entity.js";
+import { PasswordResetService } from "./password-reset/password-reset.service.js";
+import { RefreshTokensModule } from "./sessions/refresh-tokens.module.js";
+import { SessionsService } from "./sessions/sessions.service.js";
 
 // Registers the "auth" config namespace. It is not global, so each module
 // that injects authConfig.KEY has to import it. There are two: AuthModule,
-// for PasswordResetService and TokenService, and JwtModule, for the factory
+// for PasswordResetService and SessionsService, and JwtModule, for the factory
 // below. Both import this one constant.
 //
 // Not authConfig.asProvider(). That returns a ready-made set of registerAsync
@@ -34,14 +33,14 @@ const authConfigModule = ConfigModule.forFeature(authConfig);
 const JWT_ALGORITHM = "HS256";
 
 @Module({
-  controllers: [AuthController, TokensController],
-  providers: [AuthService, PasswordResetService, TokenService],
+  controllers: [AuthController],
+  providers: [AuthService, PasswordResetService, SessionsService],
   imports: [
     UsersModule,
     // For PasswordResetService: the mail it sends and the table it keeps.
     MailModule,
     TypeOrmModule.forFeature([PasswordResetToken]),
-    // For TokenService: the refresh_token table and the service over it.
+    // For SessionsService: the refresh_token table and the service over it.
     RefreshTokensModule,
     authConfigModule,
     // global: AppModule registers JwtAuthGuard as an APP_GUARD, and the guard
@@ -54,7 +53,7 @@ const JWT_ALGORITHM = "HS256";
       // which checks every variable before any module loads.
       imports: [authConfigModule],
       inject: [authConfig.KEY],
-      // Set once here for signing and verifying. TokenService and JwtAuthGuard
+      // Set once here for signing and verifying. SessionsService and JwtAuthGuard
       // then call signAsync and verifyAsync with no options of their own, and
       // the guard rejects a token with the wrong audience, issuer or
       // algorithm. A call that does pass options has them laid over these, so

@@ -8,7 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, IsNull, Not, Repository, type UpdateResult } from "typeorm";
 
 import { UserAbidingsService } from "../abidings/user-abidings.service.js";
-import { RefreshTokensService } from "../auth/refresh-tokens.service.js";
+import { RefreshTokensService } from "../auth/sessions/refresh-tokens.service.js";
 import { HashingProvider } from "../hashing/hashing.provider.js";
 import { ProfileResponseDto } from "../profiles/dto/profile-response.dto.js";
 import { Profile } from "../profiles/profile.entity.js";
@@ -121,7 +121,7 @@ export class UsersService {
     return user ? { userId: user.id, username: user.username, role: user.role } : null;
   }
 
-  // For TokenService.refresh, before it hands a new pair of tokens to
+  // For SessionsService.refresh, before it hands a new pair of tokens to
   // whoever holds a refresh token. Who that member is now, or null when the
   // account is closed or gone.
   //
@@ -362,7 +362,7 @@ export class UsersService {
     // commit, which credentialsStillHold waits on.
     await this.dataSource.transaction(async (manager) => {
       this.assertFound(await manager.update(User, liveUser, userFields), id);
-      await this.refreshTokens.revokeAllForUser(id, manager);
+      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
     });
     return this.getUserById(id);
   }
@@ -401,7 +401,7 @@ export class UsersService {
       // cannot be closed with its sessions left alive: if this fails, the
       // account stays open and the caller tries again. The sessions stay
       // ended if the account is restored, and the member signs in again.
-      await this.refreshTokens.revokeAllForUser(id, manager);
+      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
       // failure throws and rolls back the user, the profile and the sessions.
@@ -430,7 +430,7 @@ export class UsersService {
       // closed. deleteUser ended them already. This makes the same true of a
       // session that slipped in around the delete, so nobody is signed in to
       // a restored account until they sign in to it.
-      await this.refreshTokens.revokeAllForUser(id, manager);
+      await this.refreshTokens.revokeAllForUser(id, utcNowOrThrow(), manager);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });

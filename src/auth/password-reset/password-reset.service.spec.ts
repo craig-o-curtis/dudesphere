@@ -10,10 +10,10 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { addUtc, getUtcNow, isAfterUtc } from "@northguild/gmt";
 
-import { MailProvider } from "../mail/mail.provider.js";
-import { ErrorCode } from "../shared/error-codes.js";
-import { UsersService } from "../users/users.service.js";
-import authConfig from "./config/auth.config.js";
+import { MailProvider } from "../../mail/mail.provider.js";
+import { ErrorCode } from "../../shared/error-codes.js";
+import { UsersService } from "../../users/users.service.js";
+import authConfig from "../config/auth.config.js";
 import { PasswordResetToken } from "./password-reset-token.entity.js";
 import { PasswordResetService } from "./password-reset.service.js";
 

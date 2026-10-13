@@ -78,7 +78,7 @@ describe("Error responses (e2e)", () => {
   it("404 names the resource", async () => {
     // GET /users/:id needs a token, so log in first.
     const login = await request(app.getHttpServer())
-      .post("/auth/token")
+      .post("/auth/login")
       .send({ identifier: credentials.email, password: credentials.password })
       .expect(200);
     const { accessToken: token } = login.body as { accessToken: string };

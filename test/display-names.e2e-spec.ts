@@ -130,7 +130,7 @@ describe("Display names (e2e)", () => {
       await postSignUp(sent).expect(409);
 
       await request(app.getHttpServer())
-        .post("/auth/token")
+        .post("/auth/login")
         .send({ identifier: sent.email, password: sent.password })
         .expect(401);
     });
