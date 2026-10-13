@@ -3,7 +3,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ErrorCode } from "../shared/error-codes.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { UsersService } from "../users/users.service.js";
-import { LoginDto } from "./dto/login.dto.js";
+import { LoginDto } from "./sessions/dto/login.dto.js";
 import { type TokenPair, SessionsService } from "./sessions/sessions.service.js";
 
 @Injectable()
