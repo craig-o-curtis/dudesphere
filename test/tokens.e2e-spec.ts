@@ -5,7 +5,7 @@ import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
-import { getUtcNow, subtractUtc } from "@northguild/gmt";
+import { addUtc, getUtcNow, subtractUtc } from "@northguild/gmt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -13,6 +13,7 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
+import { hashOf, newOneTimeToken } from "./../src/auth/one-time-token.js";
 import { RefreshTokensService } from "./../src/auth/refresh-tokens.service.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { UsersService } from "./../src/users/users.service.js";
@@ -562,7 +563,7 @@ describe("Tokens (e2e)", () => {
       await expectSignedOut(pair);
     });
 
-    // The table's only housekeeping: saving any new token clears out the
+    // Half of the table's housekeeping: saving any new token clears out the
     // rows of every session that has run out, whoever they belonged to.
     it("has its rows cleared out the next time anybody signs in", async () => {
       const { pair } = await newSession();
@@ -579,6 +580,110 @@ describe("Tokens (e2e)", () => {
       await newSession();
 
       expect(await storedToken(pair.refreshToken)).toBeDefined();
+    });
+  });
+
+  // The other half of the housekeeping. A session gains a row with every
+  // refresh, so one that stays busy would keep 30 days of spent tokens. Each
+  // refresh clears out the spent tokens of its own session whose time is up.
+  describe("spent tokens whose time is up", () => {
+    /** Moves one token's own end a minute into the past. Its session's end stays put. */
+    async function expireToken(refreshToken: string) {
+      await dataSource.query(`UPDATE "refresh_token" SET "expiresAt" = $1 WHERE "id" = $2`, [
+        aMinuteAgo(),
+        (await storedToken(refreshToken))?.id,
+      ]);
+    }
+
+    /** Saves one more token in a session, straight through the service. */
+    async function saveLateToken(familyId: string | undefined, userId: number) {
+      const now = getUtcNow();
+      await app.get(RefreshTokensService).save(
+        {
+          id: hashOf(newOneTimeToken()),
+          familyId: familyId ?? "",
+          userId,
+          expiresAt: addUtc(now, { days: 7 }),
+          familyExpiresAt: addUtc(now, { days: 30 }),
+        },
+        now,
+      );
+    }
+
+    it("are cleared out of their session at its next refresh", async () => {
+      const { pair: first } = await newSession();
+      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
+      await expireToken(first.refreshToken);
+
+      const third = (await refresh(second.refreshToken).expect(200)).body as Pair;
+
+      // Spent, and past its own time: gone.
+      expect(await storedToken(first.refreshToken)).toBeUndefined();
+      // Spent a moment ago and still inside its time: kept, so that using it
+      // again is still caught as a second use.
+      expect((await storedToken(second.refreshToken))?.usedAt).not.toBeNull();
+      // The newest one, not spent: untouched.
+      expect(await storedToken(third.refreshToken)).toMatchObject({ usedAt: null, revoked: false });
+    });
+
+    // The trim is for the session being renewed and no other. That is what
+    // lets it use the session's own index and not read the whole table.
+    it("are left alone by another member's sign-in and refresh", async () => {
+      const { pair: first } = await newSession();
+      await refresh(first.refreshToken).expect(200);
+      await expireToken(first.refreshToken);
+
+      const other = await newSession();
+      await refresh(other.pair.refreshToken).expect(200);
+
+      expect(await storedToken(first.refreshToken)).toBeDefined();
+    });
+
+    // What the trim gives up. A spent token is known as "used twice" only
+    // while its row exists. After that it is refused as unknown, and the
+    // session it once belonged to carries on.
+    it("are refused when they come back, and no longer end the session", async () => {
+      const { pair: first } = await newSession();
+      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
+      await expireToken(first.refreshToken);
+      const third = (await refresh(second.refreshToken).expect(200)).body as Pair;
+
+      const { body } = await refresh(first.refreshToken).expect(401);
+
+      expect(body).toEqual(refused);
+      await expectSignedIn(third);
+      await refresh(third.refreshToken).expect(200);
+    });
+
+    // A session counts as ended when any of its rows is revoked. If a
+    // refresh is in flight at the moment of a sign-out, it can save one more
+    // row a moment after the others were marked, and that row is not marked.
+    // The older, revoked rows are what keep it dead, so the trim must never
+    // delete one. Here the late row is saved by hand.
+    it("are kept when their session was signed out, so it stays signed out", async () => {
+      const { userId, pair: first } = await newSession();
+      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
+      const familyId = (await storedToken(first.refreshToken))?.familyId;
+      await revoke(second.refreshToken).expect(204);
+      await expireToken(first.refreshToken);
+
+      await saveLateToken(familyId, userId);
+
+      expect(await storedToken(first.refreshToken)).toMatchObject({ revoked: true });
+      await expectSignedOut(second);
+    });
+
+    // The member was away for more than a week. Their token ran out without
+    // being spent. It is not a spent token, so it stays until the session's
+    // end, and the answer to it is still "expired", not "unknown".
+    it("does not include a token that ran out without being spent", async () => {
+      const { userId, pair } = await newSession();
+      const familyId = (await storedToken(pair.refreshToken))?.familyId;
+      await expireToken(pair.refreshToken);
+
+      await saveLateToken(familyId, userId);
+
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ usedAt: null });
     });
   });
 

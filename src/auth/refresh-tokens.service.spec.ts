@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { type EntityManager, IsNull, LessThanOrEqual } from "typeorm";
+import { type EntityManager, IsNull, LessThanOrEqual, Not } from "typeorm";
 
 import { RefreshToken } from "./refresh-token.entity.js";
 import { RefreshTokensService } from "./refresh-tokens.service.js";
@@ -54,8 +54,38 @@ describe("RefreshTokensService", () => {
       expect(repository.insert).toHaveBeenCalledWith(token);
     });
 
-    // The table's only housekeeping. Without it the rows of every session
-    // that ever ran out would stay for good.
+    // The table's housekeeping, in two parts, both after the new row is in.
+    it("saves the new token before it clears anything out", async () => {
+      await service.save(token, now);
+
+      expect(repository.delete).toHaveBeenCalledTimes(2);
+      expect(repository.insert.mock.invocationCallOrder[0]).toBeLessThan(
+        repository.delete.mock.invocationCallOrder[0],
+      );
+    });
+
+    // Part two. A session gains a row with every refresh. Without this, one
+    // that is refreshed every 15 minutes would hold about 2,900 rows by its
+    // end. Each of the four conditions is there for a reason:
+    //
+    // - familyId: this session only, so the search never reads the table.
+    // - revoked false: a revoked row is what keeps an ended session dead.
+    // - usedAt set: only a spent token, so the newest one is never touched.
+    // - expiresAt past: only once its time is up, so a recent replay is
+    //   still caught as a second use.
+    it("clears out, in this token's session, the spent tokens whose time is up", async () => {
+      await service.save(token, now);
+
+      expect(repository.delete).toHaveBeenLastCalledWith({
+        familyId,
+        revoked: false,
+        usedAt: Not(IsNull()),
+        expiresAt: LessThanOrEqual(now),
+      });
+    });
+
+    // Part one. Without it the rows of every session that ever ran out would
+    // stay for good.
     it("then clears out the sessions that have run out", async () => {
       await service.save(token, now);
 
