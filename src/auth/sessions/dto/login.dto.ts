@@ -1,8 +1,8 @@
 import { Transform } from "class-transformer";
 import { IsByteLength, IsNotEmpty, IsString } from "class-validator";
 
-import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
-import { NoNulCharacter } from "../../shared/decorators/no-nul-character.decorator.js";
+import { MaxCodePoints } from "../../../shared/decorators/max-code-points.decorator.js";
+import { NoNulCharacter } from "../../../shared/decorators/no-nul-character.decorator.js";
 
 export class LoginDto {
   // A username or an email. UsersService.getUserByCredentials decides which.

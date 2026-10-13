@@ -1,6 +1,6 @@
 import { IsByteLength, IsNotEmpty, IsString, MaxLength, MinLength } from "class-validator";
 
-import { SameAs } from "../../shared/decorators/same-as.decorator.js";
+import { SameAs } from "../../../shared/decorators/same-as.decorator.js";
 
 export class ResetPasswordDto {
   // From the link in the reset email. The token says whose password this is,

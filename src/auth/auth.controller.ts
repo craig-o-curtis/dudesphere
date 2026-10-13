@@ -8,11 +8,12 @@ import { Public } from "../shared/guards/public.decorator.js";
 import { ThrottleByAccount } from "../shared/guards/throttle-by-account.decorator.js";
 import { CreateUserDto } from "../users/dto/create-user.dto.js";
 import { AuthService } from "./auth.service.js";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto.js";
-import { LoginDto } from "./dto/login.dto.js";
-import { RefreshTokenDto } from "./dto/refresh-token.dto.js";
-import { ResetPasswordDto } from "./dto/reset-password.dto.js";
+import { ForgotPasswordDto } from "./password-reset/dto/forgot-password.dto.js";
+import { ResetPasswordDto } from "./password-reset/dto/reset-password.dto.js";
 import { PasswordResetService } from "./password-reset/password-reset.service.js";
+import { LoginDto } from "./sessions/dto/login.dto.js";
+import { LogoutDto } from "./sessions/dto/logout.dto.js";
+import { RefreshDto } from "./sessions/dto/refresh.dto.js";
 import { SessionsService, type TokenPair } from "./sessions/sessions.service.js";
 
 // Every /auth route, in three groups:
@@ -79,7 +80,7 @@ export class AuthController {
   @Public()
   @Post("refresh")
   @HttpCode(200)
-  refresh(@Body() { refreshToken }: RefreshTokenDto): Promise<TokenPair> {
+  refresh(@Body() { refreshToken }: RefreshDto): Promise<TokenPair> {
     return this.sessionsService.refresh(refreshToken);
   }
 
@@ -95,7 +96,7 @@ export class AuthController {
   @Public()
   @Post("logout")
   @HttpCode(204)
-  logout(@Body() { refreshToken }: RefreshTokenDto): Promise<void> {
+  logout(@Body() { refreshToken }: LogoutDto): Promise<void> {
     return this.sessionsService.end(refreshToken);
   }
 

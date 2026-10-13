@@ -1,7 +1,7 @@
 import { Transform } from "class-transformer";
 import { IsEmail, IsNotEmpty, IsString } from "class-validator";
 
-import { MaxCodePoints } from "../../shared/decorators/max-code-points.decorator.js";
+import { MaxCodePoints } from "../../../shared/decorators/max-code-points.decorator.js";
 
 export class ForgotPasswordDto {
   // The same rules as an email at sign-up, so anything that could be on an
