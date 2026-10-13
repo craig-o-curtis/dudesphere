@@ -35,6 +35,8 @@ describe("validateEnv", () => {
     expect(env.JWT_EXPIRES_IN).toBe(900);
     expect(env.REFRESH_TOKEN_EXPIRES_IN).toBe(604800);
     expect(env.SESSION_EXPIRES_IN).toBe(2592000);
+    // 180 days.
+    expect(env.SESSION_RETENTION).toBe(15552000);
     expect(env.JWT_AUDIENCE).toBe("dudesphere-api");
     expect(env.JWT_ISSUER).toBe("dudesphere");
     // Rate limiting is on unless someone turns it off.
@@ -200,6 +202,28 @@ describe("validateEnv", () => {
       });
 
       expect(env.SESSION_EXPIRES_IN).toBe(86400);
+    });
+  });
+
+  // How long a session's rows are kept after the session ends.
+  describe("SESSION_RETENTION", () => {
+    it("is read as a whole number of seconds", () => {
+      const env = validateEnv({ ...required, SESSION_RETENTION: "31536000" });
+
+      expect(env.SESSION_RETENTION).toBe(31536000);
+    });
+
+    // Rows are then deleted as soon as their session ends.
+    it("accepts 0", () => {
+      const env = validateEnv({ ...required, SESSION_RETENTION: "0" });
+
+      expect(env.SESSION_RETENTION).toBe(0);
+    });
+
+    it.each(["-1", "1.5", "abc"])("throws when it is %s", (value) => {
+      expect(() => validateEnv({ ...required, SESSION_RETENTION: value })).toThrow(
+        /SESSION_RETENTION/,
+      );
     });
   });
 
