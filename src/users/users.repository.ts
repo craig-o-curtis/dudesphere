@@ -56,21 +56,37 @@ export class UsersRepository {
   }
 
   /**
-   * Stores a new hash. With `passwordChangedAt`, the password itself changed,
-   * and access tokens signed before that moment stop working (see JwtAuth).
-   * Without it, the same password was hashed again, as at sign-in when the
-   * old hash was bcrypt, and nothing else changes.
+   * Stores the hash of a new password, and stamps `passwordChangedAt`, so
+   * access tokens signed before that moment stop working (see JwtAuth).
    *
    * Resolves false when there is no such live member.
    */
   async updatePasswordHash(
     id: number,
     passwordHash: string,
-    passwordChangedAt?: string,
+    passwordChangedAt: string,
   ): Promise<boolean> {
     const { affected } = await this.users.update(
       { id, deletedAt: IsNull() },
-      { password: passwordHash, ...(passwordChangedAt ? { passwordChangedAt } : {}) },
+      { password: passwordHash, passwordChangedAt },
+    );
+    return affected === 1;
+  }
+
+  /**
+   * Swaps a hash for a newer hash of the same password, as sign-in does when
+   * the old one is bcrypt. The password did not change, so no token ends.
+   *
+   * Written only while `oldHash` is still the stored hash. A password change
+   * that lands between the sign-in's check and this write wins, and this
+   * write does nothing: otherwise it would put the old password back.
+   *
+   * Resolves false when nothing was written.
+   */
+  async replacePasswordHash(id: number, oldHash: string, newHash: string): Promise<boolean> {
+    const { affected } = await this.users.update(
+      { id, password: oldHash, deletedAt: IsNull() },
+      { password: newHash },
     );
     return affected === 1;
   }
