@@ -1,3 +1,6 @@
+# Every port below is bound to 127.0.0.1, so only this machine can reach it.
+# Without the address, Docker listens on every network the machine is on, and
+# anyone on the same Wi-Fi could try these logins.
 services:
   postgres:
     image: postgres:18-alpine
@@ -15,7 +18,7 @@ services:
       TZ: UTC
       PGTZ: UTC
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -33,7 +36,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MG_ADMIN_PW}
       MONGO_INITDB_DATABASE: dude-abidings
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -53,7 +56,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PW}
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +70,7 @@ services:
       ME_CONFIG_BASICAUTH_USERNAME: ${MG_ADMIN_USER}
       ME_CONFIG_BASICAUTH_PASSWORD: ${MG_ADMIN_PW}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       - mongo
 
@@ -79,8 +82,8 @@ services:
     container_name: dude-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025" # SMTP, where the app sends
-      - "8025:8025" # the web inbox
+      - "127.0.0.1:1025:1025" # SMTP, where the app sends
+      - "127.0.0.1:8025:8025" # the web inbox
 
 volumes:
   postgres_data:

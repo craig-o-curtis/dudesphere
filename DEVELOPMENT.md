@@ -31,6 +31,9 @@ This starts:
   here by default, and Mailpit delivers none of it. Open the page to read a
   password reset email and copy its link.
 
+Each port is bound to `127.0.0.1`, so only your own machine can reach these
+services. Other machines on the same network cannot.
+
 ### 3. Start NestJS App
 
 ```bash
@@ -42,6 +45,14 @@ The app runs on `http://localhost:3000` (or the port specified in `.env`).
 ## Environment Variables
 
 Copy `.env.example` to `.env` and fill in your values.
+
+Two git hooks stop a commit that would publish a value from your `.env`.
+`pnpm install` turns them on. `pre-commit` checks the lines a commit adds,
+and refuses any `.env` file but `.env.example`. `commit-msg` checks the
+message. Each names the variable and the line, and never prints the value.
+Values shorter than 8 characters are not checked, and neither is any value
+written in `.env.example`. So if a value is not secret, put it there. The
+check is in `src/dev/check-env-leaks.ts`.
 
 The app checks every variable when it starts, in `src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
 
