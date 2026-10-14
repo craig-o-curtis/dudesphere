@@ -1,4 +1,3 @@
-import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 // Run the e2e suites in a zone far from UTC. CI machines run in UTC, where a
@@ -15,7 +14,8 @@ process.env.TZ = "Asia/Tokyo";
 process.env.THROTTLE_ENABLED = "false";
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  // Resolves the path aliases declared in tsconfig.json, same as vitest.config.ts.
+  resolve: { tsconfigPaths: true },
   test: {
     globals: true,
     // The folder this file sits in, not the shell's working directory, so a
