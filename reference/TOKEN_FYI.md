@@ -3,32 +3,48 @@
 The short version of how tokens work in this code. Each step names the file
 and the method, so you can open it and read along.
 [TOKENS_AND_SESSIONS.md](./TOKENS_AND_SESSIONS.md) is the long version, with
-the reasons.
+the reasons and a table of old names and new ones.
+
+## What changed on 2026-10-14
+
+- **The auth now runs on two official packages**: `@nestjs/authentication`
+  0.1.1 signs members in, and `@nestjs/authorization` 0.1.0 decides what
+  they may do. The app is set up the way the NestJS docs show.
+- **The routes have the docs' names.** Sign in is `POST /auth/token`, not
+  `/auth/login`. The long version has the full map.
+- **One sign-in is now a "family" of refresh tokens**, not a row in a
+  `session` table. That table is gone.
+- **Bad news: signing out no longer stops the access token.** It keeps
+  working until it expires, up to 15 minutes. Before, it stopped on the next
+  request. The docs accept this. A password change, a password reset and a
+  closed account still stop it at once.
 
 ## The picture in one minute
 
-- **A login makes a session.** One login on one device is one session, and
-  it has one row in the `session` table.
-- **A session has refresh tokens.** Its first one, and one more each time it
-  is renewed. Each has a row in `refresh_token` that points at the session.
-- **The access token names its session.** It is a JWT, and it carries the
-  session's id.
+- **A sign-in makes a family.** One sign-in on one device is one family of
+  refresh tokens. They share a `family_id`.
+- **A family has refresh tokens.** Its first one, and one more each time it
+  is renewed. Each is a row in `refresh_tokens`.
+- **The access token names the member, and nothing else.** It is a JWT, and
+  it carries the member's id. It does not say which family it came from.
 
 ```text
-user ──< session ──< refresh_token
-            ▲
-            └── the access token carries this row's id, as `sid`
+user ──< family ──< refresh_tokens row
+            (rows that share a family_id)
+
+access token ──► user id only (`sub`). No family.
 ```
 
-Read `──<` as "has many". A user has many sessions, and a session has many
+Read `──<` as "has many". A member has many families, and a family has many
 refresh tokens.
 
-Everything about whether a member is still logged in is on the session row.
+Whether a family is still good is on its rows. Whether an access token is
+still good is on the member's own row in `user`.
 
 ## Three tokens, two jobs
 
-This app has three tokens. Two of them work together to keep a member logged
-in. The third has a different job: it lets a member who **cannot** log in
+This app has three tokens. Two of them work together to keep a member signed
+in. The third has a different job: it lets a member who **cannot** sign in
 choose a new password.
 
 | Token                | Its job                                               |
@@ -38,344 +54,367 @@ choose a new password.
 | Password reset token | Lets a member who forgot their password set a new one |
 
 The refresh token and the password reset token look the same: both are 43
-random characters, made by the same function. That is where the likeness
-ends. They live in different tables, last for different times, and are used
-up in different ways.
+random characters, made and hashed by the same package functions. That is
+where the likeness ends. They live in different tables, last for different
+times, and are used up in different ways.
 
 ## The three tokens, side by side
 
-|                          | Access token                       | Refresh token                              | Password reset token                      |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------- |
-| What it is               | A JWT, signed with `JWT_SECRET`    | 43 random characters. Not a JWT            | 43 random characters. Not a JWT           |
-| What is in it            | The user's id and the session's id | Nothing. It is a key to a row              | Nothing. It is a key to a row             |
-| How the member gets it   | In the answer to a login           | In the same answer                         | By email, inside a link                   |
-| Where it is sent back    | `Authorization: Bearer` header     | Body of `/auth/refresh` and `/auth/logout` | Body of `/auth/reset-password`            |
-| How long it lasts        | 15 minutes                         | 7 days                                     | 30 minutes                                |
-| How many times it works  | Any number, until it expires       | Once                                       | Once                                      |
-| What the server keeps    | Nothing                            | A SHA-256 hash, in `refresh_token`         | A SHA-256 hash, in `password_reset_token` |
-| Its row after it is used | There is no row                    | Kept for the record, then deleted          | Deleted at once                           |
-| Does it log anyone in?   | It is the proof of login           | It renews a login                          | No. It only changes the password          |
+|                          | Access token                      | Refresh token                                          | Password reset token              |
+| ------------------------ | --------------------------------- | ------------------------------------------------------ | --------------------------------- |
+| What it is               | A JWT, signed with `JWT_SECRET`   | 43 random characters. Not a JWT                        | 43 random characters. Not a JWT   |
+| What is in it            | The user's id, and `amr: ["pwd"]` | Nothing. It is a key to a row                          | Nothing. It is a key to a row     |
+| How the member gets it   | In the answer to a sign-in        | In the same answer                                     | By email, inside a link           |
+| Where it is sent back    | `Authorization: Bearer` header    | Body of `/auth/token/refresh` and `/auth/token/revoke` | Body of `/auth/password/reset`    |
+| How long it lasts        | 15 minutes                        | 7 days, and 30 days for its whole family               | 30 minutes                        |
+| How many times it works  | Any number, until it expires      | Once                                                   | Once                              |
+| What the server keeps    | Nothing                           | A SHA-256 hash, in `refresh_tokens`                    | A SHA-256 hash, in `email_tokens` |
+| Its row after it is used | There is no row                   | Kept until the family's 30-day end                     | Deleted at once                   |
+| Does a sign-out stop it? | **No. It runs out by itself**     | Yes, at once                                           | No. A sign-out does not touch it  |
+| Does it sign anyone in?  | It is the proof of sign-in        | It renews a sign-in                                    | No. It only changes the password  |
 
 There are no cookies. The API reads the header and the body, and nothing
 else.
 
 ## Three tables, side by side
 
-The access token has no table: the server stores nothing for it. Sessions
-have two tables that belong together, and the password reset link has one
-that stands apart.
+The access token has no table: the server stores nothing for it. The package
+keeps three tables. Only two of them ever get rows.
 
-|                                 | `session`                               | `refresh_token`                       | `password_reset_token`                |
-| ------------------------------- | --------------------------------------- | ------------------------------------- | ------------------------------------- |
-| What one row is                 | One login                               | One refresh token that was handed out | One reset link that can still be used |
-| Its key                         | `id`, a random UUID                     | `id`, the hash of the token           | `tokenHash`, the hash of the token    |
-| What it points at               | The user                                | Its session                           | The user                              |
-| What else it holds              | When it ends, and when it was ended     | When it expires, and when it was used | When it expires                       |
-| Rows for one member             | One for each login                      | One for each refresh of each session  | Normally one                          |
-| How it is "used up"             | `revokedAt` is set. The row stays       | `usedAt` is set. The row stays        | The row is deleted                    |
-| When a row is deleted           | 180 days after the session ends         | With its session                      | When it is used, replaced or expired  |
-| Is the row kept as a record?    | Yes                                     | Yes                                   | No                                    |
-| If the user row is hard-deleted | Postgres refuses (`ON DELETE RESTRICT`) | Not linked to the user directly       | The rows go with the user (`CASCADE`) |
-| The code that owns it           | `SessionsService`, `SessionsRepository` | The same two                          | `PasswordResetService`                |
+|                       | `refresh_tokens`                      | `email_tokens`                            | `sessions`                               |
+| --------------------- | ------------------------------------- | ----------------------------------------- | ---------------------------------------- |
+| What one row is       | One refresh token that was handed out | One reset link that can still be used     | One browser signed in with a cookie      |
+| Rows in this app      | One for each sign-in and each refresh | Normally none, or one while a link is out | **None, ever.** This API uses no cookies |
+| Its key               | `id`, the hash of the token           | `id`, the hash of the token               | `id`, the hash of the cookie             |
+| How rows group        | By `family_id`: one sign-in           | By `user_id` and `purpose`                | By `user_id`                             |
+| How it is "used up"   | `used_at` is set. The row stays       | The row is deleted                        | Not used here                            |
+| How it is ended early | `revoked` is set on the whole family  | A new email or password on the account    | Not used here                            |
+| When a row is deleted | After the family's 30-day end         | When used, or soon after it expires       | Not used here                            |
+| Link to `user`        | `user_id`, text, no foreign key       | `user_id`, text, no foreign key           | `user_id`, text, no foreign key          |
 
-**How to tell them apart in one line:** `session` says whether a login is
-still good, `refresh_token` says which keys to it were handed out, and
-`password_reset_token` forgets a link the moment it is used.
+All three are in
+[authentication.entities.ts](../src/typeorm/authentication.entities.ts), and
+[TypeOrmAuthenticationStore](../src/typeorm/typeorm-authentication.store.ts)
+runs every query on them.
 
-Flows 1 to 5 below are about the access token, the refresh token and the two
-session tables. Flow 6 is the password reset token and its table.
+**How to tell them apart in one line:** `refresh_tokens` says which keys to
+each sign-in were handed out and whether the sign-in still holds,
+`email_tokens` forgets a link the moment it is used, and `sessions` is there
+because the package needs it, and stays empty.
 
-## Logging in: the idea in five sentences
+**Why keep an empty table?** A password reset and a sign-out-everywhere end
+a member's sessions as well as their families. The package needs a place to
+look, even when there is nothing there.
 
-1. Logging in gives the client two tokens: an **access token** and a
-   **refresh token**.
-2. The access token goes with every request and dies after 15 minutes.
-3. The refresh token is swapped for a new pair when the access token dies,
-   and each refresh token works once.
-4. One login is one **session**, and the server can end a session at any
-   moment.
-5. Every logged-in request asks the database "is this session still going?",
-   so ending a session takes effect on the very next request.
+## Look-alike words
 
-## The two session tables
-
-**`session`**: one row for each login
-([session.entity.ts](../src/auth/sessions/session.entity.ts)).
-
-| Column      | In plain words                                               |
-| ----------- | ------------------------------------------------------------ |
-| `id`        | A random UUID. The access token carries it as `sid`          |
-| `userId`    | Whose session it is                                          |
-| `expiresAt` | When it ends by itself: 30 days after the login. Never moves |
-| `revokedAt` | When it was ended on purpose. Empty if nobody ended it       |
-
-**`refresh_token`**: one row for each refresh token
-([refresh-token.entity.ts](../src/auth/sessions/refresh-token.entity.ts)).
-
-| Column      | In plain words                                |
-| ----------- | --------------------------------------------- |
-| `id`        | The hash of the token                         |
-| `sessionId` | Which session it belongs to                   |
-| `expiresAt` | When this one token stops working (7 days)    |
-| `usedAt`    | When it was swapped. Empty means not used yet |
-
-**A session is live when its one row says so.** Both of these must hold:
-
-- `revokedAt` is empty, so nobody ended it, and
-- `expiresAt` is in the future, so it has not run out.
-
-Other writing, the NestJS docs included, has no session table. It calls the
-refresh tokens of one login a "token family" and marks each of them revoked.
-It is the same idea with the session's facts copied onto every token.
+| Word                | What it means now                                                 | What it meant before 2026-10-14    |
+| ------------------- | ----------------------------------------------------------------- | ---------------------------------- |
+| Sign in             | Swap a password for a pair, at `POST /auth/token`                 | "Log in", at `POST /auth/login`    |
+| Family              | Every refresh token of one sign-in                                | The same idea, called a session    |
+| Session             | A browser cookie sign-in, in `sessions`. Unused here              | One sign-in, a row in `session`    |
+| Revoke              | End a family: set `revoked` on its rows                           | End a session: set its `revokedAt` |
+| Sign out            | `POST /auth/token/revoke`: ends one family                        | "Log out", at `POST /auth/logout`  |
+| Sign out everywhere | `POST /auth/sign-out-everywhere`: ends every family of the member | `POST /auth/logout-all`            |
 
 ## Where the code is
 
 ```text
+src/app.module.ts                registers both packages, and AuthThrottlerGuard
 src/auth/
-  auth.controller.ts      every /auth route
-  auth.service.ts         signup, and the three steps of login
-  one-time-token.ts       makes and hashes a random token. Both folders use it
-  sessions/               logging in, staying logged in, logging out
-    sessions.module.ts        exports SessionsService, and nothing else
-    sessions.service.ts       the rules: start, refresh, end, endAll, isLive
-    sessions.repository.ts    the queries on both tables. It decides nothing
-    session.entity.ts         the session table
-    refresh-token.entity.ts   the refresh_token table
-    dto/                      login, refresh and logout request bodies
-  password-reset/         the emailed reset link
-    password-reset.service.ts        its rules and its queries
-    password-reset-token.entity.ts   the password_reset_token table
-    dto/                             forgot-password and reset-password bodies
-src/shared/guards/
-  jwt-auth.guard.ts       checks the access token on every request
+  auth.module.ts                 the app's parts of sign-in, listed in one module
+  tokens.controller.ts           sign in, refresh, sign out this device
+  sessions.controller.ts         sign out everywhere
+  auth.controller.ts             sign up
+  password-reset.controller.ts   forgot password, reset password
+  credentials.service.ts         checks a password at sign-in
+  jwt-auth.provider.ts           JwtAuth: loads the member on every request
+  password-reset.mailer.ts       finds the account, sends the email, stores the hash
+  auth.dto.ts                    every /auth request body
+  auth-throttler.guard.ts        rate limits
+  config/auth.config.ts          the lifetimes and the secret
+src/typeorm/
+  authentication.entities.ts     the three tables
+  typeorm-authentication.store.ts  every query on them. It decides nothing
+src/users/
+  users.repository.ts            findById, findCredentials, updatePasswordHash,
+                                 replacePasswordHash
+  password-hashes.ts             checks a bcrypt or a scrypt hash
+  user.policy.ts                 who may manage other members
+src/hashtags/hashtag.policy.ts   who may delete and restore hashtags
 ```
 
-**One door in.** Everything outside `sessions/` talks to `SessionsService`
-and to nothing else in that folder: the controller, `AuthService`,
-`UsersService` and the guard.
+The rules themselves are in the packages: `TokenService`, `SignInService`,
+`PasswordResetService`, `PasswordHasher`, and both guards. The app calls
+them, and never edits them.
 
 Each route, its request body, and the method it ends up in:
 
-| Route                        | Body                | Controller method               | Then                                         |
-| ---------------------------- | ------------------- | ------------------------------- | -------------------------------------------- |
-| `POST /auth/login`           | `LoginDto`          | `AuthController.login`          | `AuthService.login`, `SessionsService.start` |
-| `POST /auth/refresh`         | `RefreshDto`        | `AuthController.refresh`        | `SessionsService.refresh`                    |
-| `POST /auth/logout`          | `LogoutDto`         | `AuthController.logout`         | `SessionsService.end`                        |
-| `POST /auth/logout-all`      | none                | `AuthController.logoutAll`      | `SessionsService.endAll`                     |
-| `POST /auth/forgot-password` | `ForgotPasswordDto` | `AuthController.forgotPassword` | `PasswordResetService.requestEmail`          |
-| `POST /auth/reset-password`  | `ResetPasswordDto`  | `AuthController.resetPassword`  | `PasswordResetService.reset`                 |
+| Route                            | Body               | Controller method                      | Then                                              |
+| -------------------------------- | ------------------ | -------------------------------------- | ------------------------------------------------- |
+| `POST /auth/sign-up`             | `CreateUserDto`    | `AuthController.signUp`                | `UsersService.createUser`                         |
+| `POST /auth/token`               | `SignInDto`        | `TokensController.issue`               | `CredentialsService.verify`, `TokenService.issue` |
+| `POST /auth/token/refresh`       | `RefreshTokenDto`  | `TokensController.refresh`             | `TokenService.refresh`                            |
+| `POST /auth/token/revoke`        | `RefreshTokenDto`  | `TokensController.revoke`              | `TokenService.revoke`                             |
+| `POST /auth/sign-out-everywhere` | none               | `SessionsController.signOutEverywhere` | `SignInService.signOutEverywhere`                 |
+| `POST /auth/password/forgot`     | `EmailDto`         | `PasswordResetController.forgot`       | `PasswordResetService.request`                    |
+| `POST /auth/password/reset`      | `ResetPasswordDto` | `PasswordResetController.reset`        | `PasswordResetService.reset`                      |
 
 ## The six flows
 
-### 1. Log in: `POST /auth/login`
+### 1. Sign in: `POST /auth/token`
 
-1. `AuthController.login` takes `{ identifier, password }`
-   ([auth.controller.ts](../src/auth/auth.controller.ts)).
-2. `AuthService.login` checks the password with
-   `UsersService.getUserByCredentials`
-   ([auth.service.ts](../src/auth/auth.service.ts)).
-3. `SessionsService.start` saves a **session row**: a new id, the member, and
-   an end 30 days away
-   ([sessions.service.ts](../src/auth/sessions/sessions.service.ts)).
-4. `SessionsService.pair` makes a random refresh token and saves a **token
-   row** holding its hash and the session's id. Then `signToken` signs the
-   JWT, with the session's id in it as `sid`.
-5. `AuthService.login` checks the password once more
-   (`credentialsStillHold`), in case it changed in the last tenth of a
-   second.
+1. `AuthThrottlerGuard` counts the try. Five in 15 minutes are allowed for
+   one identifier from one IP address
+   ([auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)).
+2. `TokensController.issue` takes `{ identifier, password }`
+   ([tokens.controller.ts](../src/auth/tokens.controller.ts)).
+3. `CredentialsService.verify` finds the member with
+   `UsersRepository.findCredentials` and checks the password with
+   `verifyPassword`
+   ([credentials.service.ts](../src/auth/credentials.service.ts)). If the
+   stored hash is the old bcrypt kind, it stores a scrypt hash of the same
+   password.
+4. A wrong identifier or password is 401 `BAD_CREDENTIALS`.
+5. `TokenService.issue` (in the package) starts a **family**: a new
+   `family_id`, and an end 30 days away. It makes a random refresh token, and
+   `TypeOrmAuthenticationStore.saveRefreshToken` saves a **row** holding its
+   hash and the family id. Then it signs the JWT, with the member's id as
+   `sub`.
 6. The answer is `{ accessToken, refreshToken, expiresIn }`.
 
 ### 2. An ordinary request
 
-1. `JwtAuthGuard.canActivate` runs first, on every route
-   ([jwt-auth.guard.ts](../src/shared/guards/jwt-auth.guard.ts)). It is a
-   global guard, registered with `APP_GUARD` in `app.module.ts`.
-2. `verifyToken` checks the JWT's signature and expiry. No database.
-3. It then asks two questions side by side:
-   - `UsersService.getUserForToken`: does this member still exist?
-   - `SessionsService.isLive`: is the session named by `sid` still going?
-     That reads one session row by its id.
-4. If both say yes, it writes `request.user = { userId, username, role }`.
-5. `RolesGuard` checks the role that `@Auth()` asked for.
-6. `@CurrentUser()` hands `request.user` to the controller method.
+Three global guards run first, in this order:
 
-### 3. Refresh: `POST /auth/refresh`
+1. **`AuthThrottlerGuard`**: 100 requests a minute from one IP address.
+   Over that is 429.
+2. **The authentication guard** (from `AuthenticationModule`, in
+   `app.module.ts`): who is calling?
+   - No `Authorization: Bearer` header on a route that is not `@Public()`:
+     401 `missing_credentials`.
+   - The package checks the JWT's signature, algorithm, expiry, issuer and
+     audience. No database.
+   - `JwtAuth.validate` reads the member by `sub`
+     ([jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)). It refuses a
+     closed account, and a token signed before the member's last password
+     change. That is one query.
+   - If all pass, the member becomes `request.user`.
+3. **The authorization guard** (from `AuthorizationModule`): may this caller
+   use this route?
+   - `@Public()` or `@Can.Anyone()`: yes.
+   - `@Can(UserPolicy, "viewAll")`: asks
+     [UserPolicy](../src/users/user.policy.ts). An admin gets through;
+     anyone else gets 403.
+   - Nothing declared: no. The route is closed.
 
-All of it is `SessionsService.refresh`. One query,
-`SessionsRepository.findToken`, fetches the token's row, its session's row
-and the member. Then it refuses with 401 at the first check that fails:
+Then `@CurrentUser()` hands `request.user` to the controller method.
+
+**Authentication answers 401, authorization answers 403.** 401 means "I do
+not know who you are". 403 means "I know who you are, and you may not".
+
+### 3. Refresh: `POST /auth/token/refresh`
+
+All of it is `TokenService.refresh`, in the package.
+`TypeOrmAuthenticationStore.getRefreshToken` fetches the token's row. Then
+it refuses with 401 at the first check that fails:
 
 1. Is it shaped like one of our tokens? (Checked before the query.)
-2. Is there a row for its hash, in a session that is not over?
-3. Is the row unused? **If it was used before, end the session.**
-4. Is it inside its own 7 days?
-5. Does the member still have an account?
-6. Save the new token (`pair`), then mark the old one used
-   (`markTokenUsed`).
+2. Is there a row for its hash, in a family that is not revoked?
+   (`"Refresh token invalid"`)
+3. Is it inside its own 7 days, and its family's 30? (`"expired"`)
+4. Is the row unused? **If it was used before, revoke the whole family**
+   (`"reused"`).
+5. Save the new token, then mark the old one used
+   (`markRefreshTokenUsed`).
 
 The client gets a new pair and throws the old refresh token away. No new
-session row is made: a refresh renews a session, it never starts one.
+family is made: a refresh renews a sign-in, it never starts one.
 
-### 4. Log out
+### 4. Sign out
 
-- **This device:** `POST /auth/logout` → `SessionsService.end` →
-  `SessionsRepository.revokeSession`. It sets `revokedAt` on that one session
-  row.
-- **Every device:** `POST /auth/logout-all` → `SessionsService.endAll` →
-  `SessionsRepository.revokeSessionsOfUser`. The same, for every session the
-  member has now.
+- **This device:** `POST /auth/token/revoke` → `TokensController.revoke` →
+  `TokenService.revoke` → `TypeOrmAuthenticationStore.revokeRefreshTokenFamily`.
+  It sets `revoked` on every row of that one family. Always 204.
+- **Every device:** `POST /auth/sign-out-everywhere` →
+  `SessionsController.signOutEverywhere` →
+  `SignInService.signOutEverywhere` → `TokenService.revokeAll` →
+  `TypeOrmAuthenticationStore.revokeUserRefreshTokens`. The same, for every
+  family the member has now. Needs the access token.
 
-The guard's `isLive` then answers no, so the access token stops on its next
-request. The refresh tokens stop too, because refresh checks the same row.
+The refresh tokens stop at once. **The access tokens do not.** Nothing about
+a sign-out is on the member's row, and `JwtAuth.validate` reads only that
+row. So each access token works until its own 15 minutes are up.
 
 ### 5. Cleanup
 
-There is no scheduled job. Each time a token is saved, `SessionsService.pair`
-calls `SessionsRepository.deleteSessionsEndedBy`: one `DELETE` of every
-session that ended 180 days ago or more. Postgres deletes each session's
-tokens with it. So the tables are cleaned whenever someone logs in or
-refreshes.
+There is no scheduled job. Each time a refresh token is saved,
+`TypeOrmAuthenticationStore.saveRefreshToken` deletes every row whose family
+has passed its 30-day end. Each time a reset link is saved,
+`saveEmailToken` deletes the links that expired. So the tables are cleaned
+whenever someone signs in, refreshes or asks for a link.
 
 ### 6. Forgot password: the third token
 
-This flow has its own token, its own table and its own service. It makes no
-session and hands out no access token.
+This flow has its own token, its own table and its own route. It makes no
+family and hands out no access token. The package does most of it. The app's
+half is [PasswordResetMailer](../src/auth/password-reset.mailer.ts).
 
-The table is `password_reset_token`
-([password-reset-token.entity.ts](../src/auth/password-reset/password-reset-token.entity.ts)):
+The table is `email_tokens`. Its key columns:
 
-| Column      | In plain words                           |
-| ----------- | ---------------------------------------- |
-| `userId`    | Whose link it is                         |
-| `tokenHash` | The hash of the token in the link        |
-| `expiresAt` | When the link stops working (30 minutes) |
+| Column        | In plain words                                                |
+| ------------- | ------------------------------------------------------------- |
+| `id`          | The hash of the token in the link                             |
+| `user_id`     | Whose link it is                                              |
+| `email`       | The address it went to. A new address on the account kills it |
+| `fingerprint` | A hash of the password hash. A new password kills the link    |
+| `expires_at`  | When the link stops working (30 minutes)                      |
 
-**Asking for the link:** `POST /auth/forgot-password` with `{ email }`.
+**Asking for the link:** `POST /auth/password/forgot` with `{ email }`.
 
-1. `AuthController.forgotPassword` starts
-   `PasswordResetService.requestEmail` and does not wait for it
-   ([password-reset.service.ts](../src/auth/password-reset/password-reset.service.ts)).
+1. `AuthThrottlerGuard` allows 3 in 15 minutes for one email from one IP
+   address.
+2. `PasswordResetController.forgot` calls `PasswordResetService.request` and
+   does not wait for it
+   ([password-reset.controller.ts](../src/auth/password-reset.controller.ts)).
    The answer is 202 every time, so it does not reveal whether the email has
    an account.
-2. `sendLink` looks the member up by email. If there is none, it stops.
-3. It deletes that member's earlier links, and any link that has expired. So
-   only the newest link works.
-4. It makes a token with `newOneTimeToken()`, the same function the refresh
-   token uses ([one-time-token.ts](../src/auth/one-time-token.ts)), and saves
-   its hash with an `expiresAt` 30 minutes away.
-5. It emails `<FRONTEND_URL>/reset-password?token=<token>`.
+3. `PasswordResetMailer.findUser` looks the member up with
+   `UsersRepository.findCredentials`. If there is none, it stops.
+4. The package makes a token and saves its hash, the email and the
+   fingerprint, with an `expires_at` 30 minutes away.
+5. `PasswordResetMailer.send` emails
+   `<FRONTEND_URL>/reset-password?token=<token>`.
 
-**Using the link:** `POST /auth/reset-password` with
-`{ token, password, confirmPassword }`.
+Asking again sends a new link, and **the earlier link keeps working** until
+one of them is used. That is new: before, only the newest link worked.
 
-1. `AuthController.resetPassword` calls `PasswordResetService.reset`.
-2. `consume` runs one statement: `DELETE` the row with that hash, if it has
-   not expired, and return its `userId`. **Deleting the row is how the token
-   is used.** It cannot work twice, because the row is gone.
-3. `setPassword` calls `UsersService.updateUser`. That hashes the new
-   password and, in the same transaction, calls `SessionsService.endAll`.
-4. The answer is 204 with no body. No tokens come back. The member now logs
+**Using the link:** `POST /auth/password/reset` with `{ token, password }`.
+There is no `confirmPassword` any more. Typing the password twice is the web
+page's job.
+
+1. `PasswordResetController.reset` calls `PasswordResetService.reset`.
+2. `TypeOrmAuthenticationStore.consumeEmailToken` runs one statement:
+   `DELETE` the row with that hash, and return it. **Deleting the row is how
+   the token is used.** It cannot work twice, because the row is gone.
+3. The package checks the link has not expired, and that the account still
+   has the same email and the same password hash.
+4. `PasswordHasher` hashes the new password with scrypt.
+5. The package ends every family the member has. Then
+   `PasswordResetMailer.updatePassword` stores the hash and stamps
+   `passwordChangedAt`. Then the package deletes the member's other links,
+   and ends the families once more.
+6. The answer is 204 with no body. No tokens come back. The member now signs
    in with the new password, which is flow 1.
 
-A wrong, used or expired token gets 400 `RESET_TOKEN_INVALID`, one answer for
+A wrong, used or expired link gets 400 `RESET_TOKEN_INVALID`, one answer for
 all three.
 
-**Where the two worlds touch:** only at step 3. A password reset ends the
-member's sessions, so every refresh token they held stops working.
+**Where the two worlds touch:** only at step 5. A reset ends the member's
+families, so every refresh token they held stops. `passwordChangedAt` makes
+every access token they held stop too.
 
-## What ends a session
+## What ends what
 
-| What happened                            | What changes on the session row |
-| ---------------------------------------- | ------------------------------- |
-| Logging out, on one device or all        | `revokedAt` is set              |
-| A refresh token used twice               | `revokedAt` is set              |
-| A password change or a password reset    | `revokedAt` is set, on all      |
-| The account closed, or restored by admin | `revokedAt` is set, on all      |
-| 30 days passing since the login          | Nothing. `expiresAt` has passed |
+| What happened                                | Refresh tokens     | Access tokens                    |
+| -------------------------------------------- | ------------------ | -------------------------------- |
+| Sign out on one device                       | That family stops  | **Work until they expire**       |
+| Sign out everywhere                          | Every family stops | **Work until they expire**       |
+| A refresh token used twice                   | That family stops  | **Work until they expire**       |
+| A password change, by the member or an admin | Every family stops | Stop on the next request         |
+| A password reset                             | Every family stops | Stop on the next request         |
+| The account closed                           | Every family stops | Stop on the next request         |
+| The account restored by an admin             | Every family stops | Work again until they expire     |
+| 30 days since the sign-in                    | That family stops  | The last one runs its 15 minutes |
 
-## Tombstones and the 180 days
-
-- A **tombstone** is a row kept after it stopped being useful: a session
-  that is over, or a refresh token that is spent or expired. It stays as a
-  record.
-- A session row is deleted **180 days after the session ends**, and its
-  token rows go with it. The setting is `SESSION_RETENTION`, in seconds.
-- A session row says **when** it was ended, in `revokedAt`. That time is
-  written once and never changed.
-- A session that is over is never changed again. Logging out and "log out
-  everywhere" only touch sessions that are still going.
-- A user row cannot be hard-deleted while it has session rows. The foreign
-  key is `ON DELETE RESTRICT`, so Postgres refuses. The app only ever soft
-  deletes a user, so this never gets in its way.
-- Why 180 days: SOC 2 and ISO/IEC 27001 do not name a number. They ask for a
-  written period that is kept to. This is ours.
-- **A password reset token leaves no tombstone.** Its row is deleted the
-  moment it is used, replaced or expired.
+The access-token column follows one rule. `JwtAuth.validate` reads the
+member's row on every request. What changes that row (a new
+`passwordChangedAt`, or `deletedAt` being set) stops access tokens at once.
+What changes only `refresh_tokens` does not.
 
 ## Questions, with short answers
 
-**1. What is a session?**
-One login on one device. It is a row in the `session` table, made when the
-password is checked, and it is over when it is ended on purpose or 30 days
-have passed.
+**1. What is a family?**
+Every refresh token of one sign-in on one device. They are rows in
+`refresh_tokens` that share a `family_id`. A family is over when it is
+revoked, or 30 days have passed since the sign-in.
 
-**2. Why two tokens and not one?**
+**2. What is a session, then?**
+In this app now, a row in the `sessions` table: a browser signed in with a
+cookie. This API never makes one, so the table is empty. Older notes use
+"session" for what is now a family.
+
+**3. Why two tokens and not one?**
 The token sent with every request is the one most likely to leak, so it is
 short-lived. The long-lived one is sent rarely, so the member is not asked
 for a password every 15 minutes.
 
-**3. Why is the refresh token not a JWT?**
+**4. Why is the refresh token not a JWT?**
 The server has to look it up anyway, to see whether it was used. A signature
 would add nothing. Random text also cannot be mistaken for an access token.
 
-**4. Why store a hash of it?**
+**5. Why store a hash of it?**
 So someone who reads the table, or a backup of it, finds nothing they can
 use.
 
-**5. Why SHA-256 and not bcrypt?**
-bcrypt is slow to make short passwords costly to guess. A token is 32 random
+**6. Why SHA-256 and not scrypt?**
+scrypt is slow to make short passwords costly to guess. A token is 32 random
 bytes, so there is nothing to guess, and a fast hash can be found by an
 index.
 
-**6. Why does a refresh token work only once?**
+**7. Why does a refresh token work only once?**
 So a stolen one is noticed. If a spent token comes back, two parties hold
 it.
 
-**7. What happens when one is used twice?**
-The session ends. The server cannot tell the thief from the member, so both
-are logged out, and only the member knows the password.
+**8. What happens when one is used twice?**
+The family is revoked. The server cannot tell the thief from the member, so
+both lose their refresh tokens, and only the member knows the password. The
+thief's access token still works for up to 15 minutes.
 
-**8. A JWT cannot be cancelled. How does logging out work at once?**
-The JWT carries the session's id (`sid`), and the guard reads that session's
-row on every request. Logging out sets `revokedAt` on the row, so the next
-request is refused. The cost is two small queries per request.
+**9. A JWT cannot be cancelled. Does signing out stop it?**
+No. A sign-out ends the refresh tokens only. The access token works until it
+expires, up to 15 minutes. The old code stopped it at once, by putting the
+session id in the token and reading the session on every request. The
+package does not, and the NestJS docs accept that. Keep access tokens short.
 
-**9. Why is there no role in the JWT?**
+**10. Then how does a password change stop it?**
+`JwtAuth.validate` reads the member on every request, and compares the
+token's `iat` with the member's `passwordChangedAt`. A token signed in an
+earlier second is refused. A closed account is not found at all.
+
+**11. Why is there no role in the JWT?**
 A token cannot change after it is signed. A role in it would be wrong the
-moment an admin is demoted. The guard reads the role from the database.
+moment an admin is demoted. The policies read the role from the member that
+`JwtAuth.validate` loaded.
 
-**10. What if two requests send the same refresh token at the same moment?**
-One `UPDATE ... WHERE "usedAt" IS NULL` decides. Postgres lets one of them
+**12. What if two requests send the same refresh token at the same moment?**
+One `UPDATE ... WHERE "used_at" IS NULL` decides. Postgres lets one of them
 change the row. The other changes nothing, counts as a second use, and the
-session ends.
+family is revoked.
 
-**11. Why a session table, when the token rows could carry it all?**
-Because a session is a real thing with its own facts: whose it is, when it
-ends, when it was ended. With its own row, logging out changes one row, the
-guard reads one row, and the code can say "session" and mean one thing.
+**13. What is the difference between 401 and 403?**
+401 comes from the authentication guard: no token, or one that does not
+work. 403 comes from the authorization guard: the member is known, and a
+`@Can()` check said no.
 
-**12. Why keep dead sessions and tokens for 180 days?**
-For the record: which sessions a member had, when each ended, and when each
-token was used. A side benefit is that a replayed token is caught for the
-whole life of its session.
+**14. How long are rows kept?**
+A refresh token's row stays until its family's 30-day end. A reset link's
+row goes when it is used, or soon after it expires. There is no 180-day
+record any more.
 
-**13. How is the password reset token different from the refresh token?**
+**15. How is the password reset token different from the refresh token?**
 They are the same kind of string, hashed the same way. Everything else
-differs. The refresh token keeps a logged-in member logged in, lasts 7 days,
-and leaves a row behind as a record. The reset token is for someone who
-cannot log in, arrives by email, lasts 30 minutes, and its row is deleted
-the moment it is used.
+differs. The refresh token keeps a signed-in member signed in, lasts 7 days,
+and leaves a row behind until its family ends. The reset token is for
+someone who cannot sign in, arrives by email, lasts 30 minutes, and its row
+is deleted the moment it is used.
 
-**14. Does resetting a password log the member in?**
-No. The reset answers 204 with no tokens, and ends every session the member
-had. They log in again with the new password.
+**16. Does resetting a password sign the member in?**
+No. The reset answers 204 with no tokens, and ends every family the member
+had. They sign in again with the new password.
+
+**17. What is `pnpm dev:token`?**
+A 30-day access token for trying routes by hand. It is signed with the
+app's own key and options, so `JwtAuth` accepts it. It has no refresh token
+and no family, so a sign-out cannot end it. A password change or a closed
+account still does.

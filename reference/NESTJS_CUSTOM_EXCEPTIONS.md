@@ -25,8 +25,8 @@ throw new ForbiddenException("Not authorized to edit this abiding", {
 });
 ```
 
-Three places throw "not the owner". Each one has to remember that it is a
-403 and that its code is `NOT_OWNER`. Nothing stops a fourth from pairing the
+Four places throw "not the owner". Each one has to remember that it is a
+403 and that its code is `NOT_OWNER`. Nothing stops a fifth from pairing the
 code with a different status.
 
 With a class, the throw names the failure and nothing else.
@@ -109,21 +109,23 @@ All in [src/shared/exceptions/](../src/shared/exceptions/README.md).
 | ------------------------------ | ------ | -------------------------------------------------------------------- | ----------------- |
 | `ValueTakenException`          | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `DISPLAY_NAME_TAKEN`, `VALUE_TAKEN` | The field, if any |
 | `NotOwnerException`            | 403    | `NOT_OWNER`                                                          | The message       |
-| `TokenMissingException`        | 401    | `TOKEN_MISSING`                                                      | The message       |
 | `DatabaseUnavailableException` | 503    | `DATABASE_UNAVAILABLE`                                               | The cause         |
 | `InvalidValueException`        | 400    | None                                                                 | The cause         |
 | `TimeLimitExceededException`   | 408    | None                                                                 | The cause         |
 | `DatabaseFaultException`       | 500    | None                                                                 | The cause         |
+| `ClockUnavailableException`    | 503    | `CLOCK_UNAVAILABLE`                                                  | Nothing           |
 
-The last column sorts them into three kinds. Each kind is shown below.
+The last column sorts the first six into three kinds. Each kind is shown
+below. `ClockUnavailableException` takes nothing, and has a section of its
+own near the end.
 
 ## Kind 1: you pass the message
 
-`NotOwnerException` and `TokenMissingException`. The failure is always the
-same, but each place describes it in its own words: "edit this abiding",
-"delete this abiding", "edit this profile".
+`NotOwnerException` is the only one. The failure is always the same, but
+each place describes it in its own words: "edit this abiding", "delete this
+abiding", "edit this profile", "read this user".
 
-**EXISTING FILE:** one of the three places that throw it.
+**EXISTING FILE:** one of the four places that throw it.
 
 ```ts
 // src/profiles/profiles.service.ts
@@ -236,8 +238,8 @@ it only ever checks that one field.
   filters already turn it into the right class.
 - **A class is not for every throw.** If only one place throws it and nothing
   about it is worked out, use the built-in class.
-- **Throw the class, not the code.** For `NOT_OWNER`, `TOKEN_MISSING`,
-  `DATABASE_UNAVAILABLE` and the three `_TAKEN` codes, building the exception
+- **Throw the class, not the code.** For `NOT_OWNER`, `CLOCK_UNAVAILABLE`,
+  `DATABASE_UNAVAILABLE` and the four `_TAKEN` codes, building the exception
   by hand skips the one place that pairs the code with its status.
 
 ## How to test one
@@ -300,12 +302,21 @@ export class TooManyRequestsException extends HttpException {
 
 Nest then answers with status 429 and `{ "statusCode": 429, "message": "Slow down" }`.
 
-## One code that has no class
+## A class that takes nothing
 
-`CLOCK_UNAVAILABLE` is thrown from three places, so by the rule it would get a
-class. It does not, because it is temporary. The note in
-[src/shared/error-codes.ts](../src/shared/error-codes.ts) says when it goes
-away.
+`ClockUnavailableException` has a fixed message and a fixed code, so its
+constructor takes no argument.
+
+It got a class by the first rule: six places checked the clock and built
+the same 503 by hand. The check then moved into one helper,
+`orClockUnavailable` in
+[src/shared/utils/utc-clock.ts](../src/shared/utils/utc-clock.ts), and the
+class is now thrown only there. Every part of the app that needs the current
+time goes through that file.
+
+It is temporary. The note at `CLOCK_UNAVAILABLE` in
+[src/shared/error-codes.ts](../src/shared/error-codes.ts) says when the code,
+the class and that file go away.
 
 ## Where the code lives
 

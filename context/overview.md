@@ -30,65 +30,53 @@ The entities and schemas are the source of truth: `src/users/user.entity.ts`,
 | `id`                | serial PK              | Auto-increment                                                                                             |
 | `username`          | citext UNIQUE          | A login name. Up to 24 characters, no `@` and no whitespace. Shown to the member and to admins only        |
 | `email`             | citext UNIQUE          | Up to 100 characters. A login name                                                                         |
-| `password`          | varchar(255)           | bcrypt hash; never returned                                                                                |
+| `password`          | varchar(255)           | scrypt hash; never returned. Older rows may hold a bcrypt hash until that member signs in                  |
 | `role`              | enum `admin` or `user` | Defaults to `user`                                                                                         |
 | `passwordChangedAt` | timestamptz, nullable  | When the password was last changed or reset. Null means never. An access token signed before it is refused |
 | `createdAt`         | timestamptz            | Set by the database when the row is created                                                                |
 | `updatedAt`         | timestamptz            | Moved by TypeORM on every update                                                                           |
 | `deletedAt`         | timestamptz, nullable  | Soft delete. Null means the user is live                                                                   |
 
-### PostgreSQL — `password_reset_token` table
+### PostgreSQL — the sign-in tables
 
-One row for each password reset link that can still be used.
-
-| Column      | Type               | Description                                               |
-| ----------- | ------------------ | --------------------------------------------------------- |
-| `id`        | serial PK          | Auto-increment                                            |
-| `userId`    | int, FK to `user`  | `ON DELETE CASCADE`. Indexed                              |
-| `tokenHash` | varchar(64) UNIQUE | SHA-256 of the token in the link. The token is not stored |
-| `expiresAt` | timestamptz        | The link stops working at this instant                    |
-| `createdAt` | timestamptz        | Set by the database when the row is created               |
-
-A row is deleted when its link is used, so there is no "used" column.
-
-### PostgreSQL — `session` table
-
-One row for each login. That is a session: one login on one device.
+`@nestjs/authentication` keeps its state in three tables, which the app
+writes through `TypeOrmAuthenticationStore` in `src/typeorm/`. They are the
+tables of the NestJS docs, in `src/typeorm/authentication.entities.ts`.
 [reference/TOKEN_FYI.md](../reference/TOKEN_FYI.md) is the short guide to
-sessions and tokens, and
+the tokens, and
 [reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) the
 long one.
 
-| Column      | Type                  | Description                                                    |
-| ----------- | --------------------- | -------------------------------------------------------------- |
-| `id`        | uuid PK               | Made by the app at login. The access token's `sid` claim       |
-| `userId`    | int, FK to `user`     | `ON DELETE RESTRICT`. Indexed                                  |
-| `expiresAt` | timestamptz           | The session ends at this instant, 30 days after login. Indexed |
-| `revokedAt` | timestamptz, nullable | When the session was ended on purpose. Null if it was not      |
-| `createdAt` | timestamptz           | Set by the database when the row is created                    |
+In all three, `user_id` is the user's id as text, with no foreign key, as in
+the docs. Users are only soft-deleted, so no row is orphaned. A real delete
+of a user must delete that user's rows here first.
 
-A session is live while `revokedAt` is null and `expiresAt` is ahead.
+**`refresh_tokens`**: one row for each refresh token handed out. The tokens of
+one sign-in share a `family_id`.
 
-### PostgreSQL — `refresh_token` table
+| Column              | Type                  | Description                                                                      |
+| ------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| `id`                | text PK               | SHA-256 of the refresh token, in base64url. The token is not stored              |
+| `family_id`         | text                  | The sign-in this token belongs to. Indexed                                       |
+| `user_id`           | text                  | Indexed                                                                          |
+| `created_at`        | timestamptz           |                                                                                  |
+| `expires_at`        | timestamptz           | This one token stops working at this instant, 7 days after it was made           |
+| `family_expires_at` | timestamptz           | Every token of the sign-in stops at this instant, 30 days after sign-in. Indexed |
+| `used_at`           | timestamptz, nullable | When the token was swapped for its successor                                     |
+| `revoked`           | boolean               | True once the family was ended: a sign-out, a reset, a reuse                     |
+| `claims`            | jsonb, nullable       | What goes into every access token of the family: `amr`                           |
 
-One row for each refresh token handed out. Each belongs to one session.
+A family's rows are deleted once `family_expires_at` has passed, whenever
+anyone signs in or refreshes.
 
-| Column      | Type                  | Description                                           |
-| ----------- | --------------------- | ----------------------------------------------------- |
-| `id`        | varchar(64) PK        | SHA-256 of the refresh token. The token is not stored |
-| `sessionId` | uuid, FK to `session` | `ON DELETE CASCADE`. Indexed                          |
-| `expiresAt` | timestamptz           | This one token stops working at this instant          |
-| `usedAt`    | timestamptz, nullable | When the token was swapped for its successor          |
-| `createdAt` | timestamptz           | Set by the database when the row is created           |
+**`email_tokens`**: one row for each password reset link that can still be
+used. `purpose` is `password-reset`; email verification would add
+`email-verification`. `fingerprint` ties the link to the password hash it was
+sent for, so any password change kills it. Using a link deletes its row.
 
-Rows of both tables are kept after they stop being useful, as a record. A
-session row is deleted 180 days after the session ends
-(`SESSION_RETENTION`), and its token rows go with it. That happens whenever
-anyone logs in or refreshes, and nothing else deletes a row.
-
-`ON DELETE RESTRICT` protects that record: Postgres refuses to delete a user
-row while the user still has sessions. The app never does. Closing an
-account is a soft delete.
+**`sessions`**: browser sessions with a cookie. The API hands out bearer
+tokens only, so nothing writes here. The package still needs the table,
+because a reset and a sign-out everywhere end sessions too.
 
 ### PostgreSQL — `profile` table
 
@@ -183,8 +171,13 @@ Costs accepted with this design:
 
 ## API Endpoints
 
-Every route needs an access token unless it is marked public. An access token
-comes from `POST /auth/login`.
+Every route needs an access token unless it is marked `@Public()`. An access
+token comes from `POST /auth/token`.
+
+Auth is built on `@nestjs/authentication` and `@nestjs/authorization`, the way
+https://docs.nestjs.com/security/authentication and
+https://docs.nestjs.com/security/authorization build it. The routes and their
+names are the docs'.
 
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
@@ -196,128 +189,146 @@ full shape.
 
 | Method | Endpoint                | Access | Description                             |
 | ------ | ----------------------- | ------ | --------------------------------------- |
-| POST   | `/auth/signup`          | Public | Sign up. Creates the user and a profile |
-| POST   | `/auth/forgot-password` | Public | Email a password reset link. Always 202 |
-| POST   | `/auth/reset-password`  | Public | Set a new password with the link. 204   |
+| POST   | `/auth/sign-up`         | Public | Sign up. Creates the user and a profile |
+| POST   | `/auth/password/forgot` | Public | Email a password reset link. Always 202 |
+| POST   | `/auth/password/reset`  | Public | Set a new password with the link. 204   |
 
-### Tokens and sessions
+### Tokens
 
-| Method | Endpoint           | Access | Description                                       |
-| ------ | ------------------ | ------ | ------------------------------------------------- |
-| POST   | `/auth/login`      | Public | Log in with `{ identifier, password }`. 200       |
-| POST   | `/auth/refresh`    | Public | Swap `{ refreshToken }` for a new pair. 200       |
-| POST   | `/auth/logout`     | Public | Log out this device, with `{ refreshToken }`. 204 |
-| POST   | `/auth/logout-all` | Token  | Log out every device of the caller. 204           |
+| Method | Endpoint                    | Access | Description                                        |
+| ------ | --------------------------- | ------ | -------------------------------------------------- |
+| POST   | `/auth/token`               | Public | Sign in with `{ identifier, password }`. 200       |
+| POST   | `/auth/token/refresh`       | Public | Swap `{ refreshToken }` for a new pair. 200        |
+| POST   | `/auth/token/revoke`        | Public | Sign out this device, with `{ refreshToken }`. 204 |
+| POST   | `/auth/sign-out-everywhere` | Token  | Sign out every device of the caller. 204           |
 
-Logging in and refreshing both answer
-`{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`. The paths
-and the keys are the ones the NestJS docs use.
+Signing in and refreshing both answer
+`{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`.
 [reference/TOKENS_AND_SESSIONS.md](../reference/TOKENS_AND_SESSIONS.md) walks
-through each flow step by step, with the reasons for the design.
+through each flow step by step.
 
 A member holds two tokens:
 
 - **The access token** is a JWT. It goes with every request as
   `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
-  that lifetime in seconds. It holds the member's id and the id of their
-  session, and nothing else.
+  that lifetime in seconds. It holds the member's id and how they signed in
+  (`amr`), and nothing that can change.
 - **The refresh token** is 43 random characters, not a JWT. It goes to two
-  routes only, `POST /auth/refresh` and `POST /auth/logout`, and
-  lasts 7 days. The database keeps a hash
-  of it, never the token.
+  routes only, `POST /auth/token/refresh` and `POST /auth/token/revoke`, and
+  lasts 7 days. The database keeps a hash of it, never the token.
 
-One login is one session. A session lasts as long as the member keeps
-refreshing, and 30 days at most.
+The refresh tokens of one sign-in are a family. A family lasts as long as the
+member keeps refreshing, and 30 days at most.
 
 **A refresh token works once.** Swapping it returns a new pair, and the client
-keeps the new refresh token. A client must send one refresh at a time for a
-session. If a refresh token is used a second time, two parties hold it, so the
-whole session ends and the member logs in again.
+keeps the new refresh token. A client must send one refresh at a time. If a
+refresh token is used a second time, two parties hold it, so the whole family
+ends and the member signs in again.
 
-On every request the server reads the member and their session from the
-database. So the role is always the current one, and a client that needs it
-asks `GET /users/me`. The same read is why a session ends at once, access token
-included, with 401 `TOKEN_INVALID`, when:
+On every request `JwtAuth` reads the member from the database. So the role is
+always the current one, and a client that needs it asks `GET /users/me`. The
+same read ends the access token at once, with a 401, when:
 
-- the member logs out, on that device or on every device;
-- one of the session's refresh tokens is used twice;
-- the password is changed or reset. Every session of the member ends, and they
-  log in again with the new password;
+- the password is changed or reset;
 - the account is closed, by the member or by an admin.
 
-A refresh token that cannot be swapped gets 401 `REFRESH_TOKEN_INVALID`,
-whatever the reason. The client sends the member to log in.
+**A sign-out does not end the access token.** Signing out this device, signing
+out everywhere and a refresh token used twice all end the refresh tokens at
+once. An access token already handed out works until it expires, up to 15
+minutes. The NestJS docs accept this, and keep access tokens short for that
+reason. A password change or reset and a closed account are different: they
+end the access tokens too, through `JwtAuth`.
 
-A member who is no longer an admin gets 403 on admin routes from the next
-request, with the same token.
+The refusals come from the packages:
+
+- No token: 401 with `errorCode` `missing_credentials`.
+- A bad, expired or closed-account token: 401 whose `message` says why, and a
+  `WWW-Authenticate` header.
+- A refresh token that will not swap: 401 "Refresh token invalid", "expired"
+  or "reused". The client sends the member to sign in.
+- A route the member may not call: 403 "Forbidden". A member who is no longer
+  an admin gets it on admin routes from the next request, with the same token.
+
+Each route declares who may call it. `@Public()` is anyone. `@Can.Anyone()` is
+any signed-in member. `@Can(UserPolicy, "viewAll")` and the like run a policy,
+in `src/users/user.policy.ts` and `src/hashtags/hashtag.policy.ts`. A route
+that declares nothing is refused, and `src/auth/route-access.spec.ts` fails.
 
 The sign-up body is
 `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`.
 `profile` may also carry `bio`, `profileImageUrl`, `isDude` and `ordainedDate`.
 A display name in use answers 409 `DISPLAY_NAME_TAKEN`, as a taken email or
-username answers `EMAIL_TAKEN` or `USERNAME_TAKEN`.
+username answers `EMAIL_TAKEN` or `USERNAME_TAKEN`. A password is 6 to 128
+characters.
 
-The login body is `{ "identifier": "...", "password": "..." }`. `identifier` is
-a username or an email. A value with `@` is looked up as an email, and any
-other value as a username. Spaces around it are dropped.
+The sign-in body is `{ "identifier": "...", "password": "..." }`. The docs sign
+in with an email; here `identifier` is a username or an email. A value with `@`
+is looked up as an email, and any other value as a username. Spaces around it
+are dropped.
 
 `username` and `email` are `citext` columns, so both ignore letter case:
-`Walter` and `walter` are one username, at sign up and at login. The casing
+`Walter` and `walter` are one username, at sign up and at sign-in. The casing
 typed at sign up is what is stored and shown. A username cannot hold `@`, which
-is what lets login tell the two apart, and cannot hold whitespace.
+is what lets sign-in tell the two apart, and cannot hold whitespace.
 
-Every failed login answers 401 `BAD_CREDENTIALS` with one message, so the
+Every failed sign-in answers 401 `BAD_CREDENTIALS` with one message, so the
 response does not say which usernames and emails have an account.
+
+Passwords are hashed with scrypt by the package's `PasswordHasher`. Hashes
+stored before were bcrypt. Those still sign in, and `CredentialsService`
+replaces each with a scrypt hash at that sign-in.
 
 ### Forgot password
 
-1. `POST /auth/forgot-password` with `{ "email": "..." }` answers 202 with no
+1. `POST /auth/password/forgot` with `{ "email": "..." }` answers 202 with no
    body, every time. It starts the work and does not wait for it, so the answer
    is the same, and as fast, whether or not the address has an account.
 2. If a live user has that email, they are sent a link to
    `<FRONTEND_URL>/reset-password?token=<token>`. It works once, for
-   `PASSWORD_RESET_EXPIRES_IN` seconds, 30 minutes by default. Asking again
-   kills the earlier link.
-3. `POST /auth/reset-password` with `{ "token", "password", "confirmPassword" }`
-   answers 204 and sets the password. `password` follows the sign-up rules and
-   `confirmPassword` must equal it.
+   `PASSWORD_RESET_EXPIRES_IN` seconds, 30 minutes by default, and only while
+   the password is unchanged. Asking again sends a new link and leaves the
+   earlier one working. Using either kills the other.
+3. `POST /auth/password/reset` with `{ "token", "password" }` answers 204 and
+   sets the password. `password` follows the sign-up rules.
 4. A token that is wrong, used or expired gets one answer: 400
    `RESET_TOKEN_INVALID`, "Invalid or expired link".
 
-`PasswordResetService` in `src/auth/password-reset/` does this. Mail goes out through
-`MailProvider` in `src/mail/`, over SMTP with Nodemailer. In development the
-`MAIL_*` defaults send to the Mailpit container, which shows every email at
-http://localhost:8025 and delivers none.
+The package's `PasswordResetService` owns the links. `PasswordResetMailer` in
+`src/auth/` finds the account, sends the email and stores the new hash. Mail
+goes out through `MailProvider` in `src/mail/`, over SMTP with Nodemailer. In
+development the `MAIL_*` defaults send to the Mailpit container, which shows
+every email at http://localhost:8025 and delivers none.
 
-A reset ends every session of the member, the same as a password change does.
+A reset ends every refresh token of the member, and stamps
+`passwordChangedAt`, which ends their access tokens too.
 
 ### Rate limits
 
-| Route                        | Limit           | Counted per                |
-| ---------------------------- | --------------- | -------------------------- |
-| Every route                  | 100 a minute    | IP address                 |
-| `POST /auth/login`           | 5 in 15 minutes | identifier and IP together |
-| `POST /auth/forgot-password` | 3 in 15 minutes | email and IP together      |
+| Route                        | Limit           | Counted per                                                   |
+| ---------------------------- | --------------- | ------------------------------------------------------------- |
+| Every route                  | 100 a minute    | IP address, or account and IP where the body names an account |
+| `POST /auth/token`           | 5 in 15 minutes | identifier and IP together                                    |
+| `POST /auth/password/forgot` | 3 in 15 minutes | email and IP together                                         |
 
 A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
-the seconds to wait. Login counts every try, right or wrong. The identifier is
-counted as login reads it, so `Walter` and `walter` share one count. A username
-and an email are counted apart, because the limiter sees only what was typed.
+the seconds to wait. Sign-in counts every try, right or wrong. The identifier
+is counted as sign-in reads it, so `Walter` and `walter` share one count. A
+username and an email are counted apart, because the limiter sees only what
+was typed.
 
-The 100 a minute is counted for each route by itself. It runs on login and
-forgot-password too, beside their tighter counts, so an address that names a
-new account on every try is still stopped. Those two routes send a second set
-of headers for the tighter count, such as `X-RateLimit-Remaining-account`.
+The count is the docs' design: where the body names an account, it is kept
+for that account and IP together. So an address that names a new account on
+every try is not held by a count of its own on those two routes.
 
-The limiter counts the caller's IP address as Express reports it. Behind a
-reverse proxy that is the proxy's address, so every caller shares one count
-until Express is told to trust the proxy (`trust proxy`). Set that before a
-deploy behind one.
+The limiter counts the caller's IP address as Express reports it. `main.ts`
+sets `trust proxy` to `loopback`, so behind a proxy on the same machine each
+caller is counted by their own address. A proxy elsewhere needs its address
+there instead.
 
-`AuthThrottlerGuard` in `src/shared/guards/` does this, on top of
-`@nestjs/throttler`. The counts are kept in the app's memory: they reset on a
-restart and are not shared between two copies of the app. `THROTTLE_ENABLED=false`
-turns it off, which only the e2e suite does.
+`AuthThrottlerGuard` in `src/auth/` does this, on top of `@nestjs/throttler`.
+The counts are kept in the app's memory: they reset on a restart and are not
+shared between two copies of the app. `THROTTLE_ENABLED=false` turns it off,
+which only the e2e suite does.
 
 ### Users (PostgreSQL)
 
@@ -385,11 +396,12 @@ so a member who changes it sees the new one on their old abidings at once.
 
 - [x] PostgreSQL + MongoDB via Docker Compose
 - [x] User CRUD with roles (admin seeded)
-- [x] JWT auth: sign up with `POST /auth/signup`, log in with `POST /auth/login`
-      by username or email
-- [x] Rate limiting on every route, tighter on login
+- [x] Auth on `@nestjs/authentication`: sign up with `POST /auth/sign-up`,
+      sign in with `POST /auth/token` by username or email
+- [x] Route access on `@nestjs/authorization`: `@Can()` policies
+- [x] Rate limiting on every route, tighter on sign-in
 - [x] Forgot password: a reset link by email
-- [x] Refresh tokens, sessions and logout
+- [x] Refresh tokens and sign-out
 - [x] Abidings CRUD with replies
 - [x] ISO string timestamps on all entities
 - [ ] A priest role and priests-only endpoints (future)

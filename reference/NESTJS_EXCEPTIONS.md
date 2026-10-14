@@ -81,23 +81,29 @@ The options object takes three keys:
 - `cause` is the original error. Nest never sends it to the caller. This app's
   catch-all filter logs its stack for a 5xx.
 
-**EXISTING FILE:** the roles guard, with an `errorCode`.
+**EXISTING FILE:** the sign-in route, with an `errorCode`.
 
 ```ts
-// src/shared/guards/roles.guard.ts
-throw new ForbiddenException("Not authorized to perform this action", {
-  errorCode: ErrorCode.ROLE_REQUIRED,
+// src/auth/tokens.controller.ts
+throw new UnauthorizedException("Invalid username, email or password", {
+  errorCode: ErrorCode.BAD_CREDENTIALS,
 });
 ```
 
 ```json
 {
-  "message": "Not authorized to perform this action",
-  "error": "Forbidden",
-  "statusCode": 403,
-  "errorCode": "ROLE_REQUIRED"
+  "message": "Invalid username, email or password",
+  "error": "Unauthorized",
+  "statusCode": 401,
+  "errorCode": "BAD_CREDENTIALS"
 }
 ```
+
+`TokensController.issue` in
+[src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts) throws it
+at `POST /auth/token`. A wrong password and an account that does not exist
+get the same answer. The `errorCode` lets a client tell this 401 from the
+one for a missing token.
 
 ## A status with no class
 
@@ -120,5 +126,12 @@ explains how to write one and when a failure gets one.
 These exceptions need no filter. A filter is for an error that is not an
 `HttpException`, such as one a database driver throws. See
 [src/shared/filters/README.md](../src/shared/filters/README.md).
+
+The auth packages throw errors that are not `HttpException`s either:
+`AuthenticationError` from `@nestjs/authentication`, and
+`AuthorizationError` from `@nestjs/authorization`. They use a global
+interceptor instead of a filter. When one of those errors leaves a handler,
+the interceptor turns it into the matching built-in exception. A refused
+refresh token at `POST /auth/token/refresh` becomes a 401 this way.
 
 Docs: <https://docs.nestjs.com/exception-filters#built-in-http-exceptions>
