@@ -13,7 +13,9 @@ export default new DataSource({
   username: process.env.PG_ADMIN_USER || "postgres",
   password: process.env.PG_ADMIN_PW || "postgres",
   database: process.env.PG_DATABASE || "dudesphere",
-  entities: [__dirname + "../**/*.entity{.ts,.js}"],
+  // *.entities matches src/typeorm/authentication.entities.ts, which keeps
+  // the auth package's tables in one file, as the NestJS docs do.
+  entities: [__dirname + "../**/*.entity{.ts,.js}", __dirname + "../**/*.entities{.ts,.js}"],
   migrations: [__dirname + "migrations/*{.ts,.js}"],
   logging: false,
 });

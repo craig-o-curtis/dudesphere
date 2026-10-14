@@ -1,12 +1,12 @@
+import { CurrentUser } from "@nestjs/authentication";
+import { Can } from "@nestjs/authorization";
 import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
 
 import { PgIdParamDto } from "../shared/dto/pg-id-param.dto.js";
-import type { AuthUser } from "../shared/guards/auth-user.js";
-import { Auth } from "../shared/guards/auth.decorator.js";
-import { CurrentUser } from "../shared/guards/current-user.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
+import type { User } from "../users/user.entity.js";
 import { ProfileResponseDto } from "./dto/profile-response.dto.js";
 import { UpdateProfileDto } from "./dto/update-profile-dto.js";
 import { ProfilesService } from "./profiles.service.js";
@@ -18,7 +18,7 @@ export class ProfilesController {
     private readonly paginationProvider: PaginationProvider,
   ) {}
 
-  @Auth()
+  @Can.Anyone()
   @Get()
   async getProfiles(
     @Query() pageRequest: PaginationQueryDto,
@@ -33,32 +33,33 @@ export class ProfilesController {
   // Must come BEFORE @Get(":id"), or "me" gets matched as an :id.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/login with a username or email, and a password.
+  //   1. Frontend calls POST /auth/token with a username or email, and a
+  //      password.
   //   2. Backend checks the credentials and returns an access token (a
   //      signed JWT) and a refresh token.
   //   3. Frontend stores both and sends the access token on every protected
   //      request:
   //        Authorization: Bearer <accessToken>
-  //   4. JwtAuthGuard verifies the token's signature and expiry, then reads
-  //      the member and their session from the database, and populates
-  //      request.user with { userId, username, role }.
-  //   5. @CurrentUser() reads that user object from the request.
+  //   4. AuthenticationModule's global guard verifies the token's signature
+  //      and expiry, then JwtAuth.validate loads the member from the
+  //      database and the guard puts them on request.user.
+  //   5. @CurrentUser() hands that member to the handler.
   //   6. When the access token runs out, the frontend swaps the refresh
-  //      token for a new pair at POST /auth/refresh.
-  @Auth()
+  //      token for a new pair at POST /auth/token/refresh.
+  @Can.Anyone()
   @Get("me")
-  getMyProfile(@CurrentUser() user: AuthUser): Promise<ProfileResponseDto> {
-    return this.profilesService.getProfileByUserId(user.userId);
+  getMyProfile(@CurrentUser() user: User): Promise<ProfileResponseDto> {
+    return this.profilesService.getProfileByUserId(user.id);
   }
 
   // Must come BEFORE @Get(":id"), or "user" gets matched as an :id
-  @Auth()
+  @Can.Anyone()
   @Get("user/:id")
   getProfileByUserId(@Param() { id: userId }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileByUserId(userId);
   }
 
-  @Auth()
+  @Can.Anyone()
   @Get(":id")
   getProfileById(@Param() { id }: PgIdParamDto): Promise<ProfileResponseDto> {
     return this.profilesService.getProfileById(id);
@@ -70,25 +71,25 @@ export class ProfilesController {
   // param.
   //
   // Auth flow: same as GET /profiles/me — see that comment above.
-  @Auth()
+  @Can.Anyone()
   @Patch("me")
   async updateMyProfile(
     @Body() updateProfileDto: UpdateProfileDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
   ): Promise<ProfileResponseDto> {
-    const profile = await this.profilesService.getProfileByUserId(user.userId);
+    const profile = await this.profilesService.getProfileByUserId(user.id);
     return this.profilesService.updateProfile(profile.id, updateProfileDto, user);
   }
 
   // Any profile, by id. The service decides who may: an admin edits anyone's,
   // and everyone else only their own, which is the same rule PATCH /profiles/me
   // goes through above.
-  @Auth()
+  @Can.Anyone()
   @Patch(":id")
   updateProfile(
     @Param() { id }: PgIdParamDto,
     @Body() updateProfileDto: UpdateProfileDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
   ): Promise<ProfileResponseDto> {
     return this.profilesService.updateProfile(id, updateProfileDto, user);
   }

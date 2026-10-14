@@ -10,7 +10,12 @@
 // Why not an e2e test? The services are mocks, so no database is needed, and
 // it runs with the fast unit suite (pnpm test), not with pnpm test:e2e.
 
-import { INestApplication } from "@nestjs/common";
+import {
+  AuthenticationModule,
+  AuthenticationProvider,
+  AuthenticationRegistry,
+} from "@nestjs/authentication";
+import { INestApplication, Inject, Injectable } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -18,6 +23,7 @@ import type { App } from "supertest/types.js";
 import { listenOnLoopback } from "../../test/listen-on-loopback.js";
 import { configureApp } from "../app-setup.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -27,9 +33,42 @@ import { AbidingsService } from "./abidings.service.js";
 // existing at all. This file boots a real HTTP app so the pipe runs.
 //
 // Services are mocked, so this needs no Postgres and no Mongo and belongs with
-// the unit suite rather than test/*.e2e-spec.ts. No APP_GUARD is registered
-// either, because AppModule is not imported, so the routes are reachable
-// without a token and the ids are the only thing under test.
+// the unit suite rather than test/*.e2e-spec.ts. AppModule is not imported.
+// AuthenticationModule is, with SignedInAsCaller in place of JwtAuth, so every
+// request is signed in without a token and @CurrentUser() works as it does in
+// the app. AuthorizationModule is not, so no route is denied, and the ids are
+// the only thing under test.
+
+// The signed-in member: the User row JwtAuth loads, without the password
+// hash, as UsersRepository returns it.
+const caller = {
+  id: 1,
+  username: "walter",
+  email: "walter@example.com",
+  role: UserRole.USER,
+  passwordChangedAt: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  deletedAt: null,
+} as User;
+
+// Stands in for JwtAuth. AuthenticationModule's guard asks each registered
+// provider who the request is, and this one always answers with the user the
+// spec hands it, so no token is needed. Registering itself from the
+// constructor is how JwtAuth joins the guard's chain too. @Inject names the
+// tokens outright, because vitest emits no constructor types.
+@Injectable()
+class SignedInAsCaller extends AuthenticationProvider<User> {
+  constructor(@Inject(AuthenticationRegistry) registry: AuthenticationRegistry) {
+    super();
+    registry.registerProvider(this);
+  }
+
+  authenticate() {
+    return { user: caller };
+  }
+}
+
 describe("AbidingsController id params (over HTTP)", () => {
   let app: INestApplication<App>;
 
@@ -52,8 +91,10 @@ describe("AbidingsController id params (over HTTP)", () => {
     abidingService.getAbidings.mockResolvedValue({ items: [], total: 0 });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AuthenticationModule.forRoot({})],
       controllers: [AbidingsController],
       providers: [
+        SignedInAsCaller,
         { provide: AbidingsService, useValue: abidingService },
         // The real one: it has no dependencies, and it builds the links these tests read.
         PaginationProvider,
@@ -64,13 +105,6 @@ describe("AbidingsController id params (over HTTP)", () => {
     // The same pipeline as main.ts. GET /abidings/me takes a PaginationQueryDto,
     // and its limit and page only get their defaults from the ValidationPipe.
     configureApp(app);
-    // No APP_GUARD here, so nothing populates request.user and @CurrentUser()
-    // would hand the handlers undefined. This stands in for JwtAuthGuard, which
-    // has its own tests — the ids are what this file is about.
-    app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
-      req.user = { userId: 1, username: "walter", role: "user" };
-      next();
-    });
     await listenOnLoopback(app);
   });
 

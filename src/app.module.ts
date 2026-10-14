@@ -1,3 +1,5 @@
+import { AuthenticationModule } from "@nestjs/authentication";
+import { AuthorizationModule } from "@nestjs/authorization";
 import { Module } from "@nestjs/common";
 import { ConfigModule, type ConfigType } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
@@ -9,8 +11,9 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
+import { AuthThrottlerGuard } from "./auth/auth-throttler.guard.js";
 import { AuthModule } from "./auth/auth.module.js";
-import { SessionsModule } from "./auth/sessions/sessions.module.js";
+import authConfig from "./auth/config/auth.config.js";
 import appConfig from "./config/app.config.js";
 import { validateEnv } from "./config/env.validate.js";
 import mongoConfig from "./config/mongo.config.js";
@@ -19,10 +22,6 @@ import postgresConfig from "./config/postgres.config.js";
 import throttleConfig from "./config/throttle.config.js";
 import { HashtagsModule } from "./hashtags/hashtags.module.js";
 import { ProfilesModule } from "./profiles/profiles.module.js";
-import { AuthThrottlerGuard } from "./shared/guards/auth-throttler.guard.js";
-import { JwtAuthGuard } from "./shared/guards/jwt-auth.guard.js";
-import { RolesGuard } from "./shared/guards/roles.guard.js";
-import { ACCOUNT_THROTTLER } from "./shared/guards/throttle-by-account.decorator.js";
 import { REQUEST_TIMEOUT_MS } from "./shared/interceptors/timeout.interceptor.js";
 import { PaginationModule } from "./shared/pagination/pagination.module.js";
 import { UsersModule } from "./users/users.module.js";
@@ -41,13 +40,11 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       // itself, as AuthModule does with ConfigModule.forFeature.
       load: [appConfig, postgresConfig, mongoConfig, observeConfig, throttleConfig],
     }),
-    // Two counts. "default" is the limit every route gets: 100 requests a
-    // minute from one IP address. The second is tighter and counts by account
-    // and IP address together. It runs only on a route marked
-    // @ThrottleByAccount, as login and forgot-password are in
-    // AuthController, and AuthThrottlerGuard skips it everywhere else. @ThrottleByAccount
-    // always sets the route's own limit, so the 5 in 15 minutes here is only
-    // the value ThrottlerModule needs in order to register the count.
+    // The limit every route gets: 100 requests a minute from one IP address,
+    // as in the docs' "Rate-limit sign-in". AuthThrottlerGuard counts by
+    // account and IP address together where the body names an account, and
+    // the sign-in and forgot-password routes set tighter limits with
+    // @Throttle.
     //
     // The counts are kept in this process's memory, so they reset on a
     // restart and are not shared between two copies of the app.
@@ -55,12 +52,47 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [throttleConfig.KEY],
       useFactory: (throttle: ConfigType<typeof throttleConfig>) => ({
         skipIf: () => !throttle.enabled,
-        throttlers: [
-          { name: "default", ttl: minutes(1), limit: 100 },
-          { name: ACCOUNT_THROTTLER, ttl: minutes(15), limit: 5 },
-        ],
+        throttlers: [{ ttl: minutes(1), limit: 100 }],
       }),
     }),
+    // Authentication first: its guard sets request.user, which authorization
+    // reads. AuthorizationModule refuses to start in the other order.
+    //
+    // Registers a global guard, so every route needs a signed-in member
+    // unless it is marked @Public(). JwtAuth, in AuthModule, signs a request
+    // in from its bearer token. See https://docs.nestjs.com/security/authentication.
+    //
+    // Lifetimes are milliseconds, or strings such as "900s". A bare number of
+    // seconds would be read as milliseconds, so each is passed as "<n>s".
+    AuthenticationModule.forRootAsync({
+      imports: [ConfigModule.forFeature(authConfig)],
+      inject: [authConfig.KEY],
+      useFactory: (auth: ConfigType<typeof authConfig>) => ({
+        accessToken: {
+          key: auth.secret,
+          alg: "HS256",
+          issuer: auth.issuer,
+          audience: auth.audience,
+          ttl: `${auth.expiresIn}s`,
+        },
+        refreshToken: {
+          // One token, and every token of one sign-in together.
+          ttl: `${auth.refreshExpiresIn}s`,
+          absoluteTtl: `${auth.refreshAbsoluteExpiresIn}s`,
+        },
+        passwordReset: {
+          // The web app's page that reads ?token= and asks for a new password.
+          url: new URL("/reset-password", auth.frontendUrl).toString(),
+          ttl: `${auth.passwordResetExpiresIn}s`,
+        },
+      }),
+    }),
+    // Registers a global guard that refuses a route which declares nothing.
+    // Each route says who may call it: @Can(SomePolicy, "ability"),
+    // @Can.Anyone() for any signed-in member, or @Public(). At startup it
+    // logs every route it will refuse this way.
+    // See https://docs.nestjs.com/security/authorization.
+    AuthorizationModule.forRoot(),
     ObserveModule.forRootAsync({
       inject: [observeConfig.KEY],
       useFactory: (observe: ConfigType<typeof observeConfig>) => ({
@@ -119,30 +151,15 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ProfilesModule,
     HashtagsModule,
     PaginationModule,
-    // For JwtAuthGuard below, which asks SessionsService on every
-    // signed-in request whether the caller's session is still going.
-    SessionsModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    // All three guards run on every route in the app. Order matters and is
-    // the order they are listed in: AuthThrottlerGuard counts the request and
-    // refuses it with a 429 when the caller is over the limit, JwtAuthGuard
-    // verifies the token and puts the user on the request, then RolesGuard
-    // reads that user's role. The limiter goes first so that a guessed token
-    // is counted too.
-    //
-    // Because these are global, a route needs no @UseGuards. A route an
-    // anonymous caller is meant to reach carries @Public(). Every other route
-    // carries @Auth(), with the roles that may call it when it is limited to
-    // some. src/shared/guards/route-access.spec.ts requires one of the two.
-    //
-    // The three guards and their decorators live in src/shared/guards. Its
-    // README follows one request through all three.
+    // Counts every request, and refuses one over the limit with a 429. The
+    // root module's guards run before those of the modules it imports, so
+    // this runs before the authentication guard, and a guessed token counts
+    // too.
     { provide: APP_GUARD, useClass: AuthThrottlerGuard },
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

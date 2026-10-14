@@ -2,7 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { Types } from "mongoose";
 
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { UserRole } from "../users/user.entity.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { AbidingsController } from "./abidings.controller.js";
 import { AbidingsService } from "./abidings.service.js";
 
@@ -17,9 +17,20 @@ describe("AbidingsController", () => {
     deleteAbiding: vi.fn(),
   };
 
-  // The user JwtAuthGuard puts on the request. The write routes pass it
-  // straight through to the service, which owns the authorization rule.
-  const caller = { userId: 25, username: "walter", role: UserRole.USER };
+  // The user AuthenticationModule's guard puts on the request: the User row
+  // JwtAuth loads, without the password hash, as UsersRepository returns it.
+  // The write routes pass it straight through to the service, which owns the
+  // ownership rule.
+  const caller = {
+    id: 25,
+    username: "walter",
+    email: "walter@example.com",
+    role: UserRole.USER,
+    passwordChangedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
+  } as User;
 
   // What GetAbidingsDto holds when the caller sends no limit or page.
   // The defaults come from the ValidationPipe, which does not run here.
@@ -177,9 +188,7 @@ describe("AbidingsController", () => {
     it("passes the id from the token, not a request param", async () => {
       const mine = { id: "a1", userId: 25, message: "mine", displayName: "Walter" };
       abidingService.getAbidingsByUserId.mockResolvedValue(pageOf([mine]));
-      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
-
-      const result = await controller.getMyAbidings(mockUser, { ...firstPage });
+      const result = await controller.getMyAbidings(caller, { ...firstPage });
 
       expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25, firstPage);
       expect(result.data[0]).toBe(mine);
@@ -187,9 +196,7 @@ describe("AbidingsController", () => {
 
     it("passes limit and page to the service and links back to /abidings/me", async () => {
       abidingService.getAbidingsByUserId.mockResolvedValue(pageOf([], 12));
-      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
-
-      const result = await controller.getMyAbidings(mockUser, { limit: 5, page: 2 });
+      const result = await controller.getMyAbidings(caller, { limit: 5, page: 2 });
 
       expect(abidingService.getAbidingsByUserId).toHaveBeenCalledWith(25, { limit: 5, page: 2 });
       expect(result.meta.totalItems).toBe(12);

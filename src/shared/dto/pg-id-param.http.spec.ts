@@ -11,13 +11,19 @@
 // Why not an e2e test? The service is a mock, so no database is needed, and
 // it runs with the fast unit suite (pnpm test), not with pnpm test:e2e.
 
-import { INestApplication } from "@nestjs/common";
+import {
+  AuthenticationModule,
+  AuthenticationProvider,
+  AuthenticationRegistry,
+} from "@nestjs/authentication";
+import { INestApplication, Inject, Injectable } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
 import { listenOnLoopback } from "../../../test/listen-on-loopback.js";
 import { configureApp } from "../../app-setup.js";
+import { type User, UserRole } from "../../users/user.entity.js";
 import { UsersController } from "../../users/users.controller.js";
 import { UsersService } from "../../users/users.service.js";
 import { PaginationProvider } from "../pagination/pagination.provider.js";
@@ -30,6 +36,42 @@ import { PG_INT_MAX } from "./pg-id-param.dto.js";
 //
 // UsersController stands in for every route using PgIdParamDto; ProfilesController
 // shares the DTO and needs no second copy of these cases.
+//
+// AuthenticationModule is imported, with SignedInAsCaller in place of JwtAuth,
+// so every request is signed in without a token and @CurrentUser() works as
+// it does in the app. AuthorizationModule is not, so no route is denied, and
+// the id param is the only thing under test.
+
+// The stand-in for the signed-in caller: the User row JwtAuth loads, without
+// the password hash, as UsersRepository returns it.
+const caller = {
+  id: 7,
+  username: "walter",
+  email: "walter@example.com",
+  role: UserRole.USER,
+  passwordChangedAt: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  deletedAt: null,
+} as User;
+
+// Stands in for JwtAuth. AuthenticationModule's guard asks each registered
+// provider who the request is, and this one always answers with `caller`, so
+// no token is needed. Registering itself from the constructor is how JwtAuth
+// joins the guard's chain too. @Inject names the token outright, because
+// vitest emits no constructor types.
+@Injectable()
+class SignedInAsCaller extends AuthenticationProvider<User> {
+  constructor(@Inject(AuthenticationRegistry) registry: AuthenticationRegistry) {
+    super();
+    registry.registerProvider(this);
+  }
+
+  authenticate() {
+    return { user: caller };
+  }
+}
+
 describe("PgIdParamDto (over HTTP)", () => {
   let app: INestApplication<App>;
 
@@ -39,17 +81,16 @@ describe("PgIdParamDto (over HTTP)", () => {
     getUsers: vi.fn(),
   };
 
-  // The stand-in for the signed-in caller. See the middleware below.
-  const requestUser = { userId: 7, username: "walter", role: "user" };
-
   beforeEach(async () => {
     vi.resetAllMocks();
     usersService.getUserById.mockResolvedValue({ id: 1, username: "walter" });
     usersService.getUserForCaller.mockResolvedValue({ id: 1, username: "walter" });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AuthenticationModule.forRoot({})],
       controllers: [UsersController],
       providers: [
+        SignedInAsCaller,
         { provide: UsersService, useValue: usersService },
         // The real one: it has no dependencies, and it builds the links these tests read.
         PaginationProvider,
@@ -57,13 +98,6 @@ describe("PgIdParamDto (over HTTP)", () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    // No APP_GUARD in this module, so nothing populates request.user and
-    // @CurrentUser() would hand /users/me undefined. JwtAuthGuard has its own
-    // tests; the id param is what this file is about.
-    app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
-      req.user = requestUser;
-      next();
-    });
     // The same global setup as main.ts, so the ValidationPipe options here
     // cannot drift from the ones production runs with.
     configureApp(app);
@@ -77,14 +111,14 @@ describe("PgIdParamDto (over HTTP)", () => {
   it("passes a normal id through, coerced to a number", async () => {
     await request(app.getHttpServer()).get("/users/42").expect(200);
 
-    expect(usersService.getUserForCaller).toHaveBeenCalledWith(42, requestUser);
+    expect(usersService.getUserForCaller).toHaveBeenCalledWith(42, caller);
     expect(typeof usersService.getUserForCaller.mock.calls[0][0]).toBe("number");
   });
 
   it("accepts the largest value a Postgres integer holds", async () => {
     await request(app.getHttpServer()).get(`/users/${PG_INT_MAX}`).expect(200);
 
-    expect(usersService.getUserForCaller).toHaveBeenCalledWith(PG_INT_MAX, requestUser);
+    expect(usersService.getUserForCaller).toHaveBeenCalledWith(PG_INT_MAX, caller);
   });
 
   // The bug this DTO exists for. ParseIntPipe accepted 20 digits, parseInt
@@ -126,7 +160,7 @@ describe("PgIdParamDto (over HTTP)", () => {
   it("does not send GET /users/me through the id route", async () => {
     await request(app.getHttpServer()).get("/users/me").expect(200);
 
-    // 7 is the id on the stand-in request user, not anything from the URL.
+    // 7 is the id on the stand-in caller, not anything from the URL.
     expect(usersService.getUserById).toHaveBeenCalledWith(7);
     expect(usersService.getUserForCaller).not.toHaveBeenCalled();
   });

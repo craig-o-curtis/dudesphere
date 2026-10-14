@@ -71,9 +71,11 @@ describe("HashtagsController", () => {
     });
   });
 
-  // No role assertion here. The admin-only rule is @Auth() metadata read by
-  // RolesGuard, an APP_GUARD this testing module never registers, so a 403 is
-  // unreachable from a unit spec. test/hashtags.e2e-spec.ts proves it over HTTP.
+  // No role assertion here. The admin-only rule is @Can(HashtagPolicy,
+  // "delete") metadata, read by AuthorizationModule's guard, which this
+  // testing module never registers, so a 403 is unreachable from a unit spec.
+  // hashtag.policy.spec.ts tests the rule itself, and
+  // test/hashtags.e2e-spec.ts proves the 403 over HTTP.
   describe("deleteHashtagBySlug", () => {
     it("hands the slug to the service", async () => {
       hashtagsService.deleteBySlug.mockResolvedValue(undefined);

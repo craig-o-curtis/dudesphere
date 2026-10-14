@@ -88,20 +88,13 @@ export class EnvironmentVariables {
   @Min(60)
   REFRESH_TOKEN_EXPIRES_IN: number = 604800;
 
-  // How long a session lasts at most, in seconds, however often it is
-  // renewed. 30 days. After that the member signs in again. validateEnv
-  // below refuses a value shorter than REFRESH_TOKEN_EXPIRES_IN.
+  // How long one sign-in's refresh tokens last at most, in seconds, however
+  // often they are used. 30 days. After that the member signs in again. This
+  // is the package's `refreshToken.absoluteTtl`. validateEnv below refuses a
+  // value shorter than REFRESH_TOKEN_EXPIRES_IN.
   @IntFromDigits()
   @Min(60)
-  SESSION_EXPIRES_IN: number = 2592000;
-
-  // How long the rows of a session are kept after the session ends, in
-  // seconds. 180 days. Until then its row in the session table, and its
-  // tokens' rows in refresh_token, stay as a record of what the session did.
-  // Then they are deleted. 0 deletes a session's rows as soon as it ends.
-  @IntFromDigits()
-  @Min(0)
-  SESSION_RETENTION: number = 15552000;
+  REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN: number = 2592000;
 
   // Who a token is for, and who issued it. Both are written into every token
   // and checked on every request, so a token made for another app is rejected
@@ -116,7 +109,7 @@ export class EnvironmentVariables {
 
   // Rate limiting. On unless this is "false". The e2e suite turns it off,
   // because its files sign up and log in from one address far faster than a
-  // person would. See src/shared/guards/auth-throttler.guard.ts.
+  // person would. See src/auth/auth-throttler.guard.ts.
   @IsIn(["true", "false"])
   THROTTLE_ENABLED: "true" | "false" = "true";
 
@@ -209,11 +202,17 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
   const problems = errors.flatMap((error) => Object.values(error.constraints ?? {}));
 
   // A rule between two variables, which a decorator on one field cannot
-  // state. A refresh token never outlives its session, so a session shorter
-  // than one refresh token would quietly cut every token short. Checked only
-  // when both are numbers; otherwise the errors above already name them.
-  if (errors.length === 0 && validated.SESSION_EXPIRES_IN < validated.REFRESH_TOKEN_EXPIRES_IN) {
-    problems.push("SESSION_EXPIRES_IN must not be less than REFRESH_TOKEN_EXPIRES_IN");
+  // state. A refresh token never outlives its sign-in, so an absolute limit
+  // shorter than one refresh token would quietly cut every token short.
+  // Checked only when both are numbers; otherwise the errors above already
+  // name them.
+  if (
+    errors.length === 0 &&
+    validated.REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN < validated.REFRESH_TOKEN_EXPIRES_IN
+  ) {
+    problems.push(
+      "REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN must not be less than REFRESH_TOKEN_EXPIRES_IN",
+    );
   }
 
   if (problems.length > 0) {

@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 
 import { PaginationModule } from "../shared/pagination/pagination.module.js";
+import { HashtagPolicy } from "./hashtag.policy.js";
 import { Hashtag, HashtagSchema } from "./hashtag.schema.js";
 import { HashtagsController } from "./hashtags.controller.js";
 import { HashtagsService } from "./hashtags.service.js";
@@ -19,7 +20,7 @@ import { HashtagsService } from "./hashtags.service.js";
     PaginationModule,
   ],
   controllers: [HashtagsController],
-  providers: [HashtagsService],
+  providers: [HashtagsService, HashtagPolicy],
   exports: [HashtagsService],
 })
 export class HashtagsModule {}

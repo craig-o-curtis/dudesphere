@@ -1,9 +1,9 @@
+import { PasswordHasher } from "@nestjs/authentication";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { getUtcNow } from "@northguild/gmt";
 import { Repository } from "typeorm";
 
-import { HashingProvider } from "../hashing/hashing.provider.js";
 import { User, UserRole } from "./user.entity.js";
 
 @Injectable()
@@ -16,8 +16,8 @@ export class UsersSeedService {
     // @Inject names the token outright. `pnpm seed:run` runs through tsx, which
     // does not emit the constructor types Nest otherwise reads, so without it
     // this parameter arrives undefined there.
-    @Inject(HashingProvider)
-    private readonly hashingProvider: HashingProvider,
+    @Inject(PasswordHasher)
+    private readonly passwordHasher: PasswordHasher,
   ) {}
 
   // Returns the admin's id, so the seeds that follow can write rows as that
@@ -31,7 +31,7 @@ export class UsersSeedService {
     // The seed writes to the table directly, so it hashes for itself. Every
     // run stores a fresh hash of PASSWORD, which resets the admin's password
     // to the value in .env.
-    const passwordHash = await this.hashingProvider.hashPassword(adminPassword);
+    const passwordHash = await this.passwordHasher.hash(adminPassword);
 
     let admin = await this.usersRepository.findOne({
       where: { email: adminEmail },

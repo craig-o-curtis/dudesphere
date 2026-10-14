@@ -10,9 +10,11 @@ Nest and TypeORM read that information later.
 
 ### Auth
 
-The auth decorators are not in this folder. `@Public()`, `@Auth()`,
-`@CurrentUser()` and `@ThrottleByAccount()` live in `../guards/`, each one
-beside the guard that reads it. See `../guards/README.md`.
+The auth decorators are not in this folder, and not in this app.
+`@Public()`, `@CurrentUser()` and `@Authenticate()` come from
+`@nestjs/authentication`, and `@Can()` and `@Can.Anyone()` from
+`@nestjs/authorization`. `@Throttle()` comes from `@nestjs/throttler`. See
+`reference/TOKENS_AND_SESSIONS.md`.
 
 ### Validation
 

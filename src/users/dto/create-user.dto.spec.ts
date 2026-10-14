@@ -149,23 +149,22 @@ describe("CreateUserDto", () => {
     });
   });
 
-  // The password is not in sizedFields: its column holds a 60-character hash,
-  // so the limit that matters is bcrypt's 72 bytes of input, not the column.
+  // The password is not in sizedFields: its column holds a hash of fixed
+  // length, so the limit that matters is the one on what is hashed.
   describe("password", () => {
     function passwordErrors(password: string) {
       return validateSync(buildDto({ password })).filter((error) => error.property === "password");
     }
 
-    it("accepts 72 bytes and rejects 73", () => {
-      expect(passwordErrors("a".repeat(72))).toEqual([]);
-      expect(passwordErrors("a".repeat(73))).not.toEqual([]);
+    it("accepts 128 characters and rejects 129", () => {
+      expect(passwordErrors("a".repeat(128))).toEqual([]);
+      expect(passwordErrors("a".repeat(129))).not.toEqual([]);
     });
 
-    // "é" is 2 bytes, so 36 of them is 72 bytes and 37 is 74. A rule that
-    // counted characters would let 72 of them through, which is 144 bytes.
-    it("counts bytes, not characters", () => {
-      expect(passwordErrors("é".repeat(36))).toEqual([]);
-      expect(passwordErrors("é".repeat(37))).not.toEqual([]);
+    // bcrypt read 72 bytes at most, so the old rule counted bytes. scrypt
+    // reads all of it, so an accented password is no shorter than any other.
+    it("counts characters, not bytes", () => {
+      expect(passwordErrors("é".repeat(128))).toEqual([]);
     });
 
     it("still rejects fewer than 6 characters", () => {

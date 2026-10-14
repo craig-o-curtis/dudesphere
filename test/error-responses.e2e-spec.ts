@@ -39,7 +39,7 @@ describe("Error responses (e2e)", () => {
   // tests live in src/shared/filters.
   it("409 names the taken field and carries its errorCode", async () => {
     const { body } = await request(app.getHttpServer())
-      .post("/auth/signup")
+      .post("/auth/sign-up")
       .send(credentials)
       .expect(409);
 
@@ -51,20 +51,22 @@ describe("Error responses (e2e)", () => {
     });
   });
 
+  // The package's own answer to a request with no credentials: errorCode
+  // missing_credentials, and a WWW-Authenticate header naming what it accepts.
   it("401 says what is missing, with its errorCode", async () => {
-    const { body } = await request(app.getHttpServer()).get("/users/me").expect(401);
+    const response = await request(app.getHttpServer()).get("/users/me").expect(401);
 
-    expect(body).toEqual({
+    expect(response.body).toEqual({
       statusCode: 401,
-      message: "Missing or invalid authorization header",
-      error: "Unauthorized",
-      errorCode: "TOKEN_MISSING",
+      message: "Unauthorized",
+      errorCode: "missing_credentials",
     });
+    expect(response.headers["www-authenticate"]).toBe('Bearer realm="dudesphere"');
   });
 
   it("400 from validation lists each problem in message", async () => {
     const { body } = await request(app.getHttpServer())
-      .post("/auth/signup")
+      .post("/auth/sign-up")
       .send({ ...credentials, email: "not-an-email", extra: 1 })
       .expect(400);
 
@@ -78,7 +80,7 @@ describe("Error responses (e2e)", () => {
   it("404 names the resource", async () => {
     // GET /users/:id needs a token, so log in first.
     const login = await request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier: credentials.email, password: credentials.password })
       .expect(200);
     const { accessToken: token } = login.body as { accessToken: string };

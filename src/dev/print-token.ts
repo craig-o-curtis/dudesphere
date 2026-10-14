@@ -13,12 +13,16 @@ import * as dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import { ConfigService, type ConfigType } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 
 import { AppModule } from "../app.module.js";
 import appConfig from "../config/app.config.js";
-import { UsersService } from "../users/users.service.js";
+import { UsersRepository } from "../users/users.repository.js";
 import { createDevToken, DEV_TOKEN_DAYS } from "./dev-token.js";
 
 async function printToken() {
@@ -29,7 +33,13 @@ async function printToken() {
 
   try {
     const { environment } = app.get<ConfigType<typeof appConfig>>(appConfig.KEY);
-    const { token, user } = await createDevToken(app.get(JwtService), app.get(UsersService), {
+    // The same `accessToken` options AppModule gives AuthenticationModule.
+    const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+    if (!accessToken) {
+      throw new Error("AuthenticationModule has no accessToken options.");
+    }
+    const signer = new JwtSigner(accessToken);
+    const { token, user } = await createDevToken(signer, app.get(UsersRepository), {
       environment,
       adminEmail: app.get(ConfigService).get<string>("EMAIL"),
       identifier: process.argv[2],

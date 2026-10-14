@@ -11,7 +11,7 @@ import { listenOnLoopback } from "./listen-on-loopback.js";
 import { accessOf, findRoutes, type Route } from "./routes.js";
 
 // Proves the guards on every route, over real HTTP. The unit route-access
-// spec proves each route carries a label. This one proves the running app
+// spec proves each route declares @Public(), @Can() or @Can.Anyone(). This one proves the running app
 // acts on it: the guards are registered, they run in the right order, and
 // they refuse the caller the label says to refuse.
 //
@@ -28,15 +28,10 @@ const routes = await findRoutes();
 const publicRoutes = routes.filter((route) => accessOf(route).isPublic);
 const guardedRoutes = routes.filter((route) => !accessOf(route).isPublic);
 
-/** A role the route does not allow, or undefined when it allows every role. */
-function roleLeftOut(route: Route): UserRole | undefined {
-  const allowed = accessOf(route).roles ?? [];
-  return allowed.length > 0
-    ? Object.values(UserRole).find((role) => !allowed.includes(role))
-    : undefined;
-}
-
-const roleRoutes = guardedRoutes.filter((route) => roleLeftOut(route) !== undefined);
+// Routes with a @Can() check. Every policy here lets admins only, so a plain
+// member is the caller each of them must refuse. A policy that let members
+// through would need its own case.
+const checkedRoutes = guardedRoutes.filter((route) => accessOf(route).checks.length > 0);
 
 describe("Route access (e2e)", () => {
   let app: INestApplication<App>;
@@ -66,24 +61,26 @@ describe("Route access (e2e)", () => {
     // below empty, and they would pass.
     expect(publicRoutes.length).toBeGreaterThan(0);
     expect(guardedRoutes.length).toBeGreaterThan(0);
-    expect(roleRoutes.length).toBeGreaterThan(0);
+    expect(checkedRoutes.length).toBeGreaterThan(0);
   });
 
   describe("a route that is not @Public() refuses a caller with no token", () => {
     it.each(guardedRoutes)("$request answers 401", async (route) => {
       const response = await call(route).expect(401);
 
-      expect(response.body).toMatchObject({ errorCode: "TOKEN_MISSING" });
+      // AuthenticationModule's guard, before any policy runs.
+      expect(response.body).toMatchObject({ errorCode: "missing_credentials" });
     });
   });
 
-  describe("a route limited to a role refuses a signed-in caller without it", () => {
-    it.each(roleRoutes)("$request answers 403", async (route) => {
-      const token = await tokenFor(app, roleLeftOut(route) as UserRole);
+  describe("a route with a @Can() check refuses a plain member", () => {
+    it.each(checkedRoutes)("$request answers 403", async (route) => {
+      const token = await tokenFor(app, UserRole.USER);
 
       const response = await call(route).set(bearer(token)).expect(403);
 
-      expect(response.body).toMatchObject({ errorCode: "ROLE_REQUIRED" });
+      // AuthorizationModule's guard. The body never names the policy.
+      expect(response.body).toMatchObject({ statusCode: 403, message: "Forbidden" });
     });
   });
 

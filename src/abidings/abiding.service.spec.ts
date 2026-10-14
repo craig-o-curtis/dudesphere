@@ -7,9 +7,8 @@ import mongoose from "mongoose";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
-import type { AuthUser } from "../shared/guards/auth-user.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { UserRole } from "../users/user.entity.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { Abiding } from "./abiding.schema.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
@@ -52,11 +51,25 @@ describe("AbidingsService", () => {
     exists: vi.fn(),
   };
 
-  // Who is asking. The writes take a caller now, so these stand in for the
-  // user JwtAuthGuard puts on the request.
-  const author: AuthUser = { userId: 1, username: "walter", role: UserRole.USER };
-  const other: AuthUser = { userId: 2, username: "donny", role: UserRole.USER };
-  const admin: AuthUser = { userId: 9, username: "maude", role: UserRole.ADMIN };
+  // Who is asking. The writes take a caller, so these stand in for the user
+  // AuthenticationModule's guard puts on the request: the User row JwtAuth
+  // loads, without the password hash, as UsersRepository returns it.
+  function member(id: number, username: string, role: UserRole): User {
+    return {
+      id,
+      username,
+      email: `${username}@example.com`,
+      role,
+      passwordChangedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: null,
+    } as User;
+  }
+
+  const author = member(1, "walter", UserRole.USER);
+  const other = member(2, "donny", UserRole.USER);
+  const admin = member(9, "maude", UserRole.ADMIN);
 
   // The registry write is a side effect of posting, not part of the abiding
   // write — see HashtagsService.registerTags.
@@ -435,14 +448,14 @@ describe("AbidingsService", () => {
       const result = await service.createAbiding({ message: "new abiding" }, author);
 
       expect(profilesService.getProfileByUserId).toHaveBeenCalledWith(1);
-      // The display name from the database. The token holds the username,
-      // "walter", and that must not reach the response.
+      // The display name from the database. The caller carries the
+      // username, "walter", and that must not reach the response.
       expect(result.displayName).toBe("The Dude");
       expect(result).not.toHaveProperty("username");
       expect(result).toBeInstanceOf(AbidingResponseDto);
     });
 
-    // JwtAuthGuard refuses a deleted user's token, but an account can be
+    // JwtAuth refuses a deleted user's token, but an account can be
     // closed between the guard and the write. Without this, that request
     // would post an abiding with an author nobody can find.
     it("writes nothing when the caller's user is deleted or missing", async () => {

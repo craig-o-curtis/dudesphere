@@ -1,15 +1,14 @@
+import { CurrentUser, Public } from "@nestjs/authentication";
+import { Can } from "@nestjs/authorization";
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ParseObjectIdPipe } from "@nestjs/mongoose";
 import type { Types as MongooseTypes } from "mongoose";
 
-import type { AuthUser } from "../shared/guards/auth-user.js";
-import { Auth } from "../shared/guards/auth.decorator.js";
-import { CurrentUser } from "../shared/guards/current-user.decorator.js";
-import { Public } from "../shared/guards/public.decorator.js";
 import { PaginationQueryDto } from "../shared/pagination/dto/pagination-query.dto.js";
 import type { Paginated, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { splitCommaSeparated } from "../shared/utils/comma-separated.js";
+import type { User } from "../users/user.entity.js";
 import { AbidingsService } from "./abidings.service.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
@@ -62,25 +61,26 @@ export class AbidingsController {
   // id — see UsersController's deleteMe, which has the same ordering reason.
   //
   // Auth flow:
-  //   1. Frontend calls POST /auth/login with a username or email, and a password.
+  //   1. Frontend calls POST /auth/token with a username or email, and a
+  //      password.
   //   2. Backend checks the credentials and returns an access token (a
   //      signed JWT) and a refresh token.
   //   3. Frontend stores both and sends the access token on every protected
   //      request:
   //        Authorization: Bearer <accessToken>
-  //   4. JwtAuthGuard verifies the token's signature and expiry, then reads
-  //      the member and their session from the database, and populates
-  //      request.user with { userId, username, role }.
-  //   5. @CurrentUser() reads that user object from the request.
+  //   4. AuthenticationModule's global guard verifies the token's signature
+  //      and expiry, then JwtAuth.validate loads the member from the
+  //      database and the guard puts them on request.user.
+  //   5. @CurrentUser() hands that member to the handler.
   //   6. When the access token runs out, the frontend swaps the refresh
-  //      token for a new pair at POST /auth/refresh.
-  @Auth()
+  //      token for a new pair at POST /auth/token/refresh.
+  @Can.Anyone()
   @Get("me")
   public async getMyAbidings(
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
     @Query() query: PaginationQueryDto,
   ): Promise<Paginated<AbidingResponseDto>> {
-    const myAbidings = await this.abidingsService.getAbidingsByUserId(user.userId, query);
+    const myAbidings = await this.abidingsService.getAbidingsByUserId(user.id, query);
     return this.paginationProvider.toResponse(myAbidings, query, "/abidings/me");
   }
 
@@ -96,34 +96,34 @@ export class AbidingsController {
     return this.abidingsService.getAbidingById(id.toString());
   }
 
-  @Auth()
+  @Can.Anyone()
   @Post()
   public async postAbiding(
     @Body() createAbidingDto: CreateAbidingDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
   ): Promise<AbidingResponseDto> {
     // The service also checks that the author still exists.
     return this.abidingsService.createAbiding(createAbidingDto, user);
   }
 
   // Author or admin. The service enforces it, in the same filter as the write.
-  @Auth()
+  @Can.Anyone()
   @Patch(":id")
   public async patchAbiding(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
     @Body() updateAbidingDto: UpdateAbidingDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
   ): Promise<AbidingResponseDto> {
     return this.abidingsService.patchAbiding(id.toString(), updateAbidingDto, user);
   }
 
   // Author or admin, same rule as PATCH above.
-  @Auth()
+  @Can.Anyone()
   @Delete(":id")
   @HttpCode(204) // needs 204 No Content instead of default 200 OK
   async deleteAbiding(
     @Param("id", ParseObjectIdPipe) id: MongooseTypes.ObjectId,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: User,
   ): Promise<void> {
     await this.abidingsService.deleteAbiding(id.toString(), user);
   }

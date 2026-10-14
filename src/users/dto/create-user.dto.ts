@@ -1,11 +1,11 @@
 import { Type } from "class-transformer";
 import {
-  IsByteLength,
   IsDefined,
   IsEmail,
   IsNotEmpty,
   IsString,
   Matches,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -39,12 +39,10 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(6)
-  // 72 bytes, not characters, because that is all bcrypt reads: anything past
-  // it would be ignored, so two long passwords with the same first 72 bytes
-  // would both log in. An accented letter is 2 bytes and an emoji is 4.
-  @IsByteLength(0, 72, {
-    message: "password is too long: at most 72 letters or digits, fewer with accents or emoji",
-  })
+  // 128 characters at most, as in the NestJS docs. scrypt reads the whole
+  // password, so there is no hidden cut-off as bcrypt's 72 bytes was. The
+  // limit only keeps a request from making the server hash a huge string.
+  @MaxLength(128)
   password: string;
 
   // Required, because a profile's displayName is. A profile is always
