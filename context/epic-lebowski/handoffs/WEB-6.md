@@ -4,7 +4,7 @@
 - **Spec:** [issues/WEB-6.md](../issues/WEB-6.md)
 - **Branch:** `40-web-6-design-tokens-fonts-root-layout-and-motion`. Matches `feature/<id>-<slug>`: no. `worktree branch --github` named it. Not renamed.
 - **Blocked by:** WEB-5. Done: commit `5acc663` is on `main` through PR #87, and issue #39 is closed.
-- **Status:** Finalizing
+- **Status:** PR open
 
 ## Scope
 
@@ -233,3 +233,4 @@ Closes #40
 - 2026-10-14: qa-skeptic round 5: PASS. QA-15, QA-17, QA-18 fixed. All 14 failure paths and the two-tab cases end with the screen matching the cookie. The no-inline-script and no-IIFE rules hold. New nit QA-19: clicking straight into a stale window, the focus catch-up can change a button's meaning about 80 ms before the click lands.
 - 2026-10-14: owasp-hacker round 5: PASS. New nit SEC-3 (the docs say five other inline scripts; there are six, Turbopack's included). All three reviewers pass round 5. User decision: QA-19 accepted, with a code comment. SEC-3 docs fix and the QA-19 comment sent out.
 - 2026-10-14: QA-19 comment added; SEC-3 docs count fixed (six other inline scripts). Finalizing round 5: pr-finalizer adds commits on top of the pushed branch.
+- 2026-10-14: Round 5 committed on top of the user's commits (7095932 to ef82ac4). Checks: lint, format, typecheck, build, unit (web 210, API 1124), web e2e 30, API e2e 359, migration drift clean. PR #88 (https://github.com/craig-o-curtis/dudesphere/pull/88) body updated.
