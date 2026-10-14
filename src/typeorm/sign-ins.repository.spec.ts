@@ -1,3 +1,4 @@
+import { type AuthenticationStorage, SessionService, TokenService } from "@nestjs/authentication";
 import { getUtcNow } from "@northguild/gmt";
 import type { DataSource, EntityManager } from "typeorm";
 
@@ -16,7 +17,8 @@ const UTC_NOW = "2026-10-14T09:25:42.204006202Z";
 
 // These cases check what each method hands TypeORM, and what it does with
 // the answer. The SQL itself is proved against the real database in the e2e
-// tests.
+// tests: a revoked sign-in, a sign-in past its family's end, and another
+// member's sid all get 401 in test/tokens.e2e-spec.ts.
 describe("SignInsRepository", () => {
   const dataSource = { query: vi.fn() };
   const manager = { update: vi.fn(), delete: vi.fn() };
@@ -34,26 +36,26 @@ describe("SignInsRepository", () => {
   describe("isLive", () => {
     // The time is passed in, not read by Postgres, so the app's clock
     // decides when a sign-in's family has run out.
-    it("asks once, with the sid and the current time", async () => {
+    it("asks once, with the sid, the member and the current time", async () => {
       dataSource.query.mockResolvedValue([{ live: true }]);
 
-      await repository.isLive(sid);
+      await repository.isLive(sid, "25");
 
       expect(dataSource.query).toHaveBeenCalledTimes(1);
-      expect(dataSource.query).toHaveBeenCalledWith(expect.any(String), [sid, UTC_NOW]);
+      expect(dataSource.query).toHaveBeenCalledWith(expect.any(String), [sid, "25", UTC_NOW]);
     });
 
     it.each([true, false])("answers %s when the row says so", async (live) => {
       dataSource.query.mockResolvedValue([{ live }]);
 
-      await expect(repository.isLive(sid)).resolves.toBe(live);
+      await expect(repository.isLive(sid, "25")).resolves.toBe(live);
     });
 
     // Without a time, no sign-in could be judged. It fails before asking.
     it("asks nothing when the clock cannot be read", async () => {
       vi.mocked(getUtcNow).mockReturnValue("");
 
-      await expect(repository.isLive(sid)).rejects.toBeInstanceOf(ClockUnavailableException);
+      await expect(repository.isLive(sid, "25")).rejects.toBeInstanceOf(ClockUnavailableException);
 
       expect(dataSource.query).not.toHaveBeenCalled();
     });
@@ -89,6 +91,57 @@ describe("SignInsRepository", () => {
       await expect(repository.endAllForUser(25, manager as unknown as EntityManager)).rejects.toBe(
         down,
       );
+    });
+  });
+
+  // endAllForUser stands in for the package's two revokeAll calls, because
+  // they cannot join a transaction. Both run the functions in
+  // end-sign-ins.ts, so the writes cannot drift. What can drift is the
+  // package: a new version could make revokeAll reach another store method,
+  // and endAllForUser would quietly miss it. These build the package's own
+  // services on a store that records every call, and fail if that happens.
+  describe("matches the package's revokeAll", () => {
+    /** A store that records each method called on it, and does nothing. */
+    function recordingStore(calls: string[][]): object {
+      return new Proxy(
+        {},
+        {
+          get: (_target, method) =>
+            function record(...args: unknown[]) {
+              calls.push([String(method), ...args.map(String)]);
+              return Promise.resolve(undefined);
+            },
+        },
+      );
+    }
+
+    function storageWith(calls: string[][]): AuthenticationStorage {
+      return {
+        refreshTokens: recordingStore(calls),
+        sessions: recordingStore(calls),
+      } as unknown as AuthenticationStorage;
+    }
+
+    it("TokenService.revokeAll only revokes the member's refresh tokens", async () => {
+      const calls: string[][] = [];
+      // A key is needed for revokeAll to do anything; refresh tokens are on
+      // by default, as they are in this app.
+      const tokens = new TokenService(storageWith(calls), {
+        accessToken: { key: "a-key-only-for-this-test-at-least-32-bytes" },
+      });
+
+      await tokens.revokeAll("25");
+
+      expect(calls).toEqual([["revokeUserRefreshTokens", "25"]]);
+    });
+
+    it("SessionService.revokeAll only deletes the member's sessions", async () => {
+      const calls: string[][] = [];
+      const sessions = new SessionService(storageWith(calls), {});
+
+      await sessions.revokeAll("25");
+
+      expect(calls).toEqual([["deleteUserSessions", "25"]]);
     });
   });
 });

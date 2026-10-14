@@ -1,7 +1,9 @@
 import { AuthenticationRegistry, JwtBearerProvider, type JwtClaims } from "@nestjs/authentication";
 import { Inject, Injectable } from "@nestjs/common";
+import type { ConfigType } from "@nestjs/config";
 import { addUtc, convertUnixToUtc, isAfterUtc } from "@northguild/gmt";
 
+import appConfig from "../config/app.config.js";
 import { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import type { User } from "../users/user.entity.js";
 import { UsersRepository } from "../users/users.repository.js";
@@ -16,8 +18,8 @@ const MAX_USER_ID = 2_147_483_647;
 const SID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // What `pnpm dev:token` puts in `amr`, and nothing else beside it. See
-// src/dev/dev-token.ts.
-const DEV_TOKEN_AMR = "dev";
+// src/dev/dev-token.ts, which signs it from this constant.
+export const DEV_TOKEN_AMR = "dev";
 
 /**
  * Signs a request in from its bearer token. The docs' JwtAuth: the package
@@ -45,6 +47,7 @@ export class JwtAuth extends JwtBearerProvider<User> {
     @Inject(UsersRepository) private readonly usersRepository: UsersRepository,
     @Inject(SignInsRepository) private readonly signIns: SignInsRepository,
     @Inject(AuthenticationRegistry) registry: AuthenticationRegistry,
+    @Inject(appConfig.KEY) private readonly app: ConfigType<typeof appConfig>,
   ) {
     // The key, issuer and audience come from the `accessToken` options.
     // `realm` goes into the WWW-Authenticate header of a 401.
@@ -63,7 +66,7 @@ export class JwtAuth extends JwtBearerProvider<User> {
     // its tokens at once.
     const [user, signInIsLive] = await Promise.all([
       this.usersRepository.findById(Number(sub)),
-      this.signInIsLive(sid, amr),
+      this.signInIsLive(sid, amr, sub),
     ]);
     if (!user || !signInIsLive || !signedAfterPasswordChange(iat, user.passwordChangedAt)) {
       return null;
@@ -75,15 +78,24 @@ export class JwtAuth extends JwtBearerProvider<User> {
   // it is a dev token, which belongs to no sign-in. Only the app's key can
   // sign either, and a dev token still ends with the account or the
   // password.
-  private signInIsLive(sid: unknown, amr: unknown): Promise<boolean> {
+  //
+  // In production a dev token is refused too. `pnpm dev:token` will not sign
+  // one there, but if one were signed with the production key, nothing but
+  // its own 30 days would end it.
+  private signInIsLive(sid: unknown, amr: unknown, sub: string): Promise<boolean> {
     if (sid === undefined) {
-      return Promise.resolve(Array.isArray(amr) && amr.length === 1 && amr[0] === DEV_TOKEN_AMR);
+      return Promise.resolve(this.app.environment !== "production" && isDevToken(amr));
     }
     if (typeof sid !== "string" || !SID.test(sid)) {
       return Promise.resolve(false);
     }
-    return this.signIns.isLive(sid);
+    return this.signIns.isLive(sid, sub);
   }
+}
+
+// Whether `amr` is exactly the dev mark, and nothing beside it.
+function isDevToken(amr: unknown): boolean {
+  return Array.isArray(amr) && amr.length === 1 && amr[0] === DEV_TOKEN_AMR;
 }
 
 // Whether a token signed at `issuedAt`, in seconds since 1970, is not older

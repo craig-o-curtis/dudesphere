@@ -20,7 +20,7 @@ import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { UsersRepository } from "./../src/users/users.repository.js";
-import { bearer, tokenFor } from "./auth-helpers.js";
+import { bearer, claimsOf, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, type SignUpBody } from "./sign-up.js";
 
@@ -81,6 +81,16 @@ describe("Tokens (e2e)", () => {
 
   function whoAmI(accessToken: string) {
     return request(app.getHttpServer()).get("/users/me").set(bearer(accessToken));
+  }
+
+  /**
+   * An access token with these claims, signed with the app's own key, as
+   * TokenService would sign it. Lets a case pick the claims, so that only
+   * the check it is about can refuse the token.
+   */
+  function signedWith(claims: Record<string, unknown>): string {
+    const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+    return new JwtSigner(accessToken!).sign(claims);
   }
 
   function revoke(refreshToken: unknown) {
@@ -584,6 +594,12 @@ describe("Tokens (e2e)", () => {
 
       expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
       await refresh(pair.refreshToken).expect(401);
+      await whoAmI(pair.accessToken).expect(401);
+      // The same sign-in, in a token signed after the change. The password
+      // check lets it through, so only the ended sign-in refuses it.
+      await whoAmI(signedWith({ sub: String(userId), sid: claimsOf(pair.accessToken).sid })).expect(
+        401,
+      );
       const again = await signInAs({ ...sent, password: "set-by-an-admin-1" }).expect(200);
       await whoAmI((again.body as Pair).accessToken).expect(200);
     });
@@ -679,16 +695,11 @@ describe("Tokens (e2e)", () => {
   // A token with no `sid` belongs to no sign-in. JwtAuth lets one through
   // only when it is marked as a dev token.
   describe("a token that belongs to no sign-in", () => {
-    function signedWithoutSid(claims: Record<string, unknown>): string {
-      const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
-      return new JwtSigner(accessToken!).sign(claims);
-    }
-
     // What `pnpm dev:token` signs.
     it("works when it is marked as a dev token", async () => {
       const { userId } = await newSession();
 
-      const me = await whoAmI(signedWithoutSid({ sub: String(userId), amr: ["dev"] })).expect(200);
+      const me = await whoAmI(signedWith({ sub: String(userId), amr: ["dev"] })).expect(200);
       expect(me.body).toMatchObject({ id: userId });
     });
 
@@ -696,13 +707,56 @@ describe("Tokens (e2e)", () => {
     it("is refused without the dev mark", async () => {
       const { userId } = await newSession();
 
-      await whoAmI(signedWithoutSid({ sub: String(userId), amr: ["pwd"] })).expect(401);
+      await whoAmI(signedWith({ sub: String(userId), amr: ["pwd"] })).expect(401);
+    });
+
+    it("is refused with no sid and no amr", async () => {
+      const { userId } = await newSession();
+
+      await whoAmI(signedWith({ sub: String(userId) })).expect(401);
     });
 
     it("is refused with a sid that belongs to no sign-in", async () => {
       const { userId } = await newSession();
 
-      await whoAmI(signedWithoutSid({ sub: String(userId), sid: randomUUID() })).expect(401);
+      await whoAmI(signedWith({ sub: String(userId), sid: randomUUID() })).expect(401);
+    });
+
+    // TokensController only makes UUIDs, so JwtAuth refuses anything else
+    // without asking the database.
+    it("is refused with a sid that is not a UUID", async () => {
+      const { userId } = await newSession();
+
+      await whoAmI(signedWith({ sub: String(userId), sid: "not-a-uuid" })).expect(401);
+    });
+  });
+
+  // What SignInsRepository.isLive asks, beyond "was it revoked": the cases
+  // the sign-out tests above do not reach.
+  describe("an access token's sign-in", () => {
+    // A family lasts REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN at most. Its access
+    // tokens stop then too, not only its refresh tokens.
+    it("401 once its family is past its absolute end", async () => {
+      const { pair } = await newSession();
+      await whoAmI(pair.accessToken).expect(200);
+      await dataSource.query(
+        `UPDATE refresh_tokens SET family_expires_at = $1 WHERE family_id = $2`,
+        [aMinuteAgo(), (await storedToken(pair.refreshToken))?.family_id],
+      );
+
+      await whoAmI(pair.accessToken).expect(401);
+    });
+
+    // A live sign-in, but another member's. The token is signed with the
+    // app's key, so only the sid's owner refuses it.
+    it("401 with another member's sid", async () => {
+      const mine = await newSession();
+      const theirs = await newSession();
+
+      await whoAmI(
+        signedWith({ sub: String(mine.userId), sid: claimsOf(theirs.pair.accessToken).sid }),
+      ).expect(401);
+      await whoAmI(theirs.pair.accessToken).expect(200);
     });
   });
 

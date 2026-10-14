@@ -18,6 +18,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 // The id is a new UUID, not the family id: the package makes family ids as
 // 22 random characters, and JwtAuth accepts only a UUID as a `sid`.
 //
+// Run it while the app is stopped, then start the new code. A sign-in
+// started by the old code after this ran would have no `sid`, and the new
+// code would refuse every access token it refreshes into.
+//
 // down() drops the column and the index, and takes `sid` out of `claims`.
 export class SessionIdOnRefreshTokens1791967006363 implements MigrationInterface {
   name = "SessionIdOnRefreshTokens1791967006363";
@@ -26,6 +30,8 @@ export class SessionIdOnRefreshTokens1791967006363 implements MigrationInterface
     await queryRunner.query(`ALTER TABLE "refresh_tokens" ADD "sid" text`);
     await queryRunner.query(`CREATE INDEX "refresh_tokens_sid_idx" ON "refresh_tokens"  ("sid") `);
 
+    // EDITED BY HAND: the generated migration only added the column and the
+    // index. Without this, every sign-in from before it would be refused.
     // One new UUID for each family, the same on every row of it.
     await queryRunner.query(`
       WITH family AS (
@@ -42,8 +48,10 @@ export class SessionIdOnRefreshTokens1791967006363 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    // EDITED BY HAND: takes back the `sid` that up() put in `claims`. Rows
+    // whose claims were NULL before up() go back to NULL, not to {}.
     await queryRunner.query(
-      `UPDATE refresh_tokens SET claims = claims - 'sid' WHERE claims ? 'sid'`,
+      `UPDATE refresh_tokens SET claims = nullif(claims - 'sid', '{}'::jsonb) WHERE claims ? 'sid'`,
     );
     await queryRunner.query(`DROP INDEX "public"."refresh_tokens_sid_idx"`);
     await queryRunner.query(`ALTER TABLE "refresh_tokens" DROP COLUMN "sid"`);

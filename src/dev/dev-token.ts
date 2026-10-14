@@ -1,5 +1,6 @@
 import type { JwtSigner } from "@nestjs/authentication";
 
+import { DEV_TOKEN_AMR } from "../auth/jwt-auth.provider.js";
 import type { User } from "../users/user.entity.js";
 import type { UsersRepository } from "../users/users.repository.js";
 
@@ -66,7 +67,11 @@ export async function createDevToken(
   // `sub` is the user id as a string, as TokenService.issue signs it.
   // `amr: ["dev"]` marks it as a dev token. It has no `sid`, because it
   // belongs to no sign-in, and JwtAuth lets a token without one through only
-  // with this mark.
-  const token = signer.sign({ sub: String(user.id), amr: ["dev"] }, { ttl: `${DEV_TOKEN_DAYS}d` });
+  // with this mark, and never in production. The mark is JwtAuth's own
+  // constant, so the two cannot disagree.
+  const token = signer.sign(
+    { sub: String(user.id), amr: [DEV_TOKEN_AMR] },
+    { ttl: `${DEV_TOKEN_DAYS}d` },
+  );
   return { token, user };
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Public, TokenService } from "@nestjs/authentication";
-import { Body, Controller, HttpCode, Post, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, HttpCode, Logger, Post, UnauthorizedException } from "@nestjs/common";
 import { minutes, Throttle } from "@nestjs/throttler";
 
 import { ErrorCode } from "../shared/error-codes.js";
@@ -25,6 +25,8 @@ import { CredentialsService } from "./credentials.service.js";
 @Public()
 @Controller("auth/token")
 export class TokensController {
+  private readonly logger = new Logger(TokensController.name);
+
   constructor(
     private readonly credentialsService: CredentialsService,
     private readonly tokenService: TokenService,
@@ -57,11 +59,14 @@ export class TokensController {
     if (!(await this.credentialsService.stillValid(user))) {
       // The pair never leaves this method, so nobody holds the new refresh
       // token. Ending it is tidiness, and the answer is the same 401 whether
-      // or not that write succeeds.
+      // or not that write succeeds. A failure is logged, by member id only,
+      // never the token: the family then stays live, unheld, until its end.
       try {
         await this.tokenService.revoke(pair.refreshToken);
-      } catch {
-        // Nothing to do: see above.
+      } catch (error) {
+        this.logger.warn(
+          `Could not end the sign-in the recheck refused, for user ${user.id}: ${String(error)}`,
+        );
       }
       throw badCredentials();
     }

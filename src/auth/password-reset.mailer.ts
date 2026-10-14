@@ -67,8 +67,9 @@ export class PasswordResetMailer extends PasswordResetHandler {
 
   // Stores the hash, stamps passwordChangedAt, and ends every sign-in of the
   // member, in one transaction, so a reset never leaves the old sign-ins
-  // going. The package ends the sign-ins again around this call, which finds
-  // nothing left to end.
+  // going. The package also ends the sign-ins just before and just after this
+  // call. The one before does the real work. The one after usually finds
+  // nothing left; it catches a sign-in that started in between.
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
     const id = Number(userId);
     await this.dataSource.transaction(async (manager) => {

@@ -1,9 +1,11 @@
 import type { AuthenticationRegistry } from "@nestjs/authentication";
+import type { ConfigType } from "@nestjs/config";
 import { convertUtcToUnix } from "@northguild/gmt";
 
+import type appConfig from "../config/app.config.js";
 import type { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import type { UsersRepository } from "../users/users.repository.js";
-import { JwtAuth } from "./jwt-auth.provider.js";
+import { DEV_TOKEN_AMR, JwtAuth } from "./jwt-auth.provider.js";
 
 // The package checks the signature, `exp`, `iss` and `aud` before validate()
 // runs, and has its own tests for that. These call validate() directly with
@@ -12,6 +14,8 @@ describe("JwtAuth", () => {
   const usersRepository = { findById: vi.fn() };
   const signIns = { isLive: vi.fn() };
   const registry = { registerProvider: vi.fn() };
+  // Development, unless a case says otherwise.
+  const app = { environment: "development", port: 3000 } as ConfigType<typeof appConfig>;
 
   let provider: JwtAuth;
 
@@ -28,10 +32,12 @@ describe("JwtAuth", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    app.environment = "development";
     provider = new JwtAuth(
       usersRepository as unknown as UsersRepository,
       signIns as unknown as SignInsRepository,
       registry as unknown as AuthenticationRegistry,
+      app,
     );
     // Every sign-in is still going, unless a case says otherwise.
     signIns.isLive.mockResolvedValue(true);
@@ -102,7 +108,7 @@ describe("JwtAuth", () => {
         );
 
         expect(signIns.isLive).toHaveBeenCalledTimes(1);
-        expect(signIns.isLive).toHaveBeenCalledWith(sid);
+        expect(signIns.isLive).toHaveBeenCalledWith(sid, "25");
       });
 
       // A sign-out, a reset or a reused refresh token ended it. The access
@@ -133,10 +139,32 @@ describe("JwtAuth", () => {
       // marks it with `amr: ["dev"]`. See src/dev/dev-token.ts.
       it("accepts a dev token with no sid, without asking whether it is live", async () => {
         await expect(
-          provider.validate({ sub: "25", amr: ["dev"], iat: changedSecond }),
+          provider.validate({ sub: "25", amr: [DEV_TOKEN_AMR], iat: changedSecond }),
         ).resolves.toBe(walter);
 
         expect(signIns.isLive).not.toHaveBeenCalled();
+      });
+
+      // `pnpm dev:token` will not sign one in production. If one were signed
+      // with the production key anyway, nothing but its 30 days would end it.
+      it("refuses a dev token in production", async () => {
+        app.environment = "production";
+
+        await expect(
+          provider.validate({ sub: "25", amr: [DEV_TOKEN_AMR], iat: changedSecond }),
+        ).resolves.toBeNull();
+
+        expect(signIns.isLive).not.toHaveBeenCalled();
+      });
+
+      // Only a token with no sid is a dev token. In production a sign-in
+      // token is checked as anywhere else.
+      it("still accepts a sign-in token in production", async () => {
+        app.environment = "production";
+
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBe(
+          walter,
+        );
       });
 
       // Every other token carries a sid. One without it, and without the
@@ -165,7 +193,7 @@ describe("JwtAuth", () => {
         const result = provider.validate({ sub: "25", sid, iat: changedSecond });
 
         expect(usersRepository.findById).toHaveBeenCalledWith(25);
-        expect(signIns.isLive).toHaveBeenCalledWith(sid);
+        expect(signIns.isLive).toHaveBeenCalledWith(sid, "25");
 
         answerMember(walter);
         await expect(result).resolves.toBe(walter);

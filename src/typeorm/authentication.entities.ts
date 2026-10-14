@@ -64,6 +64,9 @@ export class SessionEntity {
 @Entity("refresh_tokens")
 @Index("refresh_tokens_family_id_idx", ["familyId"])
 @Index("refresh_tokens_sid_idx", ["sid"])
+// Only revoked rows, so SignInsRepository.isLive can tell at once that a
+// sign-in still going has none.
+@Index("refresh_tokens_revoked_sid_idx", ["sid"], { where: `"revoked"` })
 @Index("refresh_tokens_user_id_idx", ["userId"])
 @Index("refresh_tokens_family_expires_at_idx", ["familyExpiresAt"])
 export class RefreshTokenEntity {

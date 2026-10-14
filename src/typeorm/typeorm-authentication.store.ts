@@ -26,6 +26,7 @@ import {
   RefreshTokenEntity,
   SessionEntity,
 } from "./authentication.entities.js";
+import * as endSignIns from "./end-sign-ins.js";
 
 // A time as the package passes it: a JavaScript Date. Named through the
 // package's own record type, because the app never names Date itself (the
@@ -113,8 +114,9 @@ export class TypeOrmAuthenticationStore
     return rows.map(toSessionRecord);
   }
 
-  async deleteUserSessions(userId: string): Promise<void> {
-    await this.manager.delete(SessionEntity, { userId });
+  // The same write SignInsRepository.endAllForUser makes. See end-sign-ins.ts.
+  deleteUserSessions(userId: string): Promise<void> {
+    return endSignIns.deleteUserSessions(this.manager, userId);
   }
 
   // Refresh tokens
@@ -163,8 +165,9 @@ export class TypeOrmAuthenticationStore
     return this.manager.existsBy(RefreshTokenEntity, { familyId, revoked: true });
   }
 
-  async revokeUserRefreshTokens(userId: string): Promise<void> {
-    await this.manager.update(RefreshTokenEntity, { userId }, { revoked: true });
+  // The same write SignInsRepository.endAllForUser makes. See end-sign-ins.ts.
+  revokeUserRefreshTokens(userId: string): Promise<void> {
+    return endSignIns.revokeUserRefreshTokens(this.manager, userId);
   }
 
   // Password reset and email verification links

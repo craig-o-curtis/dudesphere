@@ -323,8 +323,9 @@ describe("Authorization (e2e)", () => {
     // Signed by this app, so the signature is good, but no user has this id.
     // The guard looks the user up and finds nobody.
     it("401 when the token's user does not exist", async () => {
-      // A live sign-in of a real member, so only the user is wrong.
-      const token = signer.sign({ sub: "2000000000", sid: claimsOf(owner.token).sid });
+      // A dev token belongs to no sign-in, so only the user is wrong. A real
+      // member's sid would fail too: isLive checks it belongs to `sub`.
+      const token = signer.sign({ sub: "2000000000", amr: ["dev"] });
 
       const response = await request(app.getHttpServer())
         .post("/abidings")

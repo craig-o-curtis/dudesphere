@@ -1,5 +1,5 @@
 import { TokenService } from "@nestjs/authentication";
-import { UnauthorizedException } from "@nestjs/common";
+import { Logger, UnauthorizedException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { CredentialsService } from "./credentials.service.js";
@@ -129,11 +129,17 @@ describe("TokensController", () => {
       tokenService.issue.mockResolvedValue(pair);
       credentialsService.stillValid.mockResolvedValue(false);
       tokenService.revoke.mockRejectedValue(new Error("the store is down"));
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
 
       const thrown: unknown = await controller.issue(body).catch((error: unknown) => error);
 
       expect(thrown).toBeInstanceOf(UnauthorizedException);
       expect((thrown as UnauthorizedException).errorCode).toBe("BAD_CREDENTIALS");
+      // Logged by member id, so the failure is seen. The token is not in it.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(`user ${walter.id}`);
+      expect(warn.mock.calls[0][0]).not.toContain(pair.refreshToken);
+      warn.mockRestore();
     });
 
     it("ends nothing when the recheck passes", async () => {
