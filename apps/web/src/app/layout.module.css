@@ -1,0 +1,11 @@
+/* body is a flex column (globals.css), so a growing main pushes the footer down. */
+.main {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+/* Keyboard focus (the skip link) gets the global 3px ring. A click gets none. */
+.main:focus:not(:focus-visible) {
+  outline: none;
+}

@@ -49,7 +49,7 @@ as it is on npm, before any page ships.
 ```text
 apps/web/src/
   app/
-    layout.tsx, globals.css, not-found.tsx, error.tsx, forbidden.tsx
+    layout.tsx, layout.module.css, not-found.tsx, error.tsx, forbidden.tsx
     (public)/page.tsx                        splash
     (public)/login, signup, forgot-password, reset-password
     (app)/feed/page.tsx, loading.tsx
@@ -66,9 +66,13 @@ apps/web/src/
   proxy.ts
   lib/api.ts          typed fetch to Nest, Bearer from the DAL, maps 400 field errors
   lib/session.ts      'server-only' Data Access Layer: verifySession = cache(...), cookie helpers
-  lib/actions/*.ts    Server Actions
+  lib/actions/*.ts    Server Actions (lib/actions/theme.ts sets the theme cookie)
+  lib/theme.ts        theme cookie name and value check
+  lib/motion.ts       motion/react presets that copy the --dur-* tokens
   components/*        each with a .module.css beside it
   styles/tokens.css   CSS variables, light and dark
+  styles/globals.css  reset and base rules
+  styles/motion.css   motion rules: .enter, reduced-motion View Transitions
 ```
 
 Route groups such as `(public)` and `(app)` share a layout only. They do not
@@ -442,13 +446,11 @@ page swaps and shared elements. CSS does the rest where it can.
 
 - **Page swaps.** Next wraps navigations in a transition, and
   `<ViewTransition>` animates the swap through the browser's View Transitions
-  API. Confirm when building whether Next 16.4 still needs
-  `experimental.viewTransition: true` in `next.config.ts`, and whether React
-  19.3 exports `ViewTransition` as stable or as `unstable_ViewTransition`.
+  API. It needs no config: `ViewTransition` comes from `'react'`, and there is
+  no `experimental.viewTransition` flag.
 - **Typed moves.** `transitionTypes` on `<Link>` names the move, such as
   `to-thread` or `back`. CSS picks the slide for each type through
-  `:active-view-transition-type()`. Confirm the `transitionTypes` prop name in
-  Next 16.4 when building.
+  `:active-view-transition-type()`.
 - **Shared elements.** The author avatar carries
   `<ViewTransition name="avatar-<id>">` from the feed card into the thread header.
 - **Micro-animations.** `motion/react` for button press, card enter and leave,
@@ -465,9 +467,61 @@ The rules:
 - Never block input. A button responds on press, not after its animation.
 - Every animation has a reduced-motion branch, through `useReducedMotion()` from
   `motion/react` or a CSS `prefers-reduced-motion` media query.
+- `MotionConfig reducedMotion="user"` wraps the app (`MotionProvider`), so
+  `motion/react` drops transform animations under reduced motion.
+- Under reduced motion, `tokens.css` sets `--dur-fast`, `--dur-base` and
+  `--dur-slow` to 0.01 ms and leaves `--dur-fade` (150 ms) alone, so state
+  changes still fade.
 - React does not skip a View Transition under reduced motion on its own. A
-  `@media (prefers-reduced-motion: reduce)` rule in `globals.css` turns every
-  `::view-transition-*` animation into a 150 ms opacity change.
+  `@media (prefers-reduced-motion: reduce)` rule in `styles/motion.css` turns
+  every `::view-transition-*` animation into a `--dur-fade` opacity change.
+
+**Theme.** The theme lives in a `theme` cookie (`lib/theme.ts`). An inline
+script in the root layout's `<head>` sets the theme attribute on `<html>`
+before first paint, so there is no flash. The toggle in the footer is two
+plain `type="button"` buttons, with no form post. A press updates the screen,
+then calls `setTheme(intent)` in `lib/actions/theme.ts` directly. The toggle
+sends its intent: the unpressed button sends its own theme, and the pressed
+button sends `system`. The action does exactly that. `light` or `dark` sets the
+cookie, `system` deletes it so the OS rules again, and anything else writes
+nothing. The server never decides from the cookie what a press means. The
+action returns the saved theme (or `null`) and the screen adopts that answer.
+If the call fails, the toggle reads the saved theme back from the cookie and
+shows "Could not save your theme. Try again." only if the save didn't land.
+When a tab becomes visible again it re-reads the cookie, so other tabs catch
+up. Next runs Server Actions one at a time, so quick presses stay in order. A
+press before hydration does nothing, and the streaming fallback can't act. If
+focus was on a placeholder button when the real toggle streams in, focus moves
+to the matching real button. After the skip link, `#main` shows the focus ring
+for keyboard focus only. With
+JavaScript off the inline script can't run, so a `<noscript>` style in the
+layout's `<head>` hides the toggle and the page follows the OS. The pressed
+state has a non-color cue for forced-colors mode, and the "press again" hint is
+visible. The toggle uses plain `useState` synced from its `current` prop, not
+`useOptimistic`, because the press calls the action directly and not inside a
+client transition. `ThemeSetting` reads `cookies()` inside `<Suspense>`, so `/` is
+Partial Prerender: a static shell, with the toggle as the one dynamic hole.
+Three things to remember:
+
+- The `themeColor` hex values in `layout.tsx` copy `--color-bg`. Change them
+  together.
+- The layout owns `<main id="main" tabIndex={-1}>`. Pages render no `<main>`.
+- A future CSP (WEB-45) can't allow the inline theme script by hash. The page
+  carries six other inline scripts from Next, React and Turbopack: the
+  `self.__next_f.push` flight payload and the `$RB` and `$RV` reveal scripts.
+  They change with the build and, for the streamed part, with each request, so
+  they can't be hashed ahead of time. Under CSP Level 2 and later, any hash in
+  `script-src` also makes the browser ignore `'unsafe-inline'`. Next's CSP
+  guide also says a nonce CSP doesn't work with Partial Prerender. So the real
+  choice is `'unsafe-inline'` with no hash, or nonces that make every page
+  dynamic, or another plan.
+
+**Fonts.** `next/font` sets `--font-bowlby` (Bowlby One) and `--font-atkinson`
+(Atkinson Hyperlegible Next). Bowlby One comes from `next/font/google`.
+Atkinson is self-hosted with `next/font/local` from `app/fonts/` (latin subset
+only, with its OFL licence), so Next builds a size-matched Arial fallback.
+Letters outside the latin subset use that fallback. The tokens `--font-display`
+and `--font-text` point at them.
 
 ## The World, after the MVP
 

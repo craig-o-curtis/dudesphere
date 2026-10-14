@@ -1,0 +1,63 @@
+/*
+ * Motion rules. Use the --dur-* and --ease-* tokens from tokens.css, never raw times.
+ * Under reduced motion tokens.css sets --dur-fast, --dur-base and --dur-slow to
+ * 0.01ms and leaves --dur-fade alone, so state changes still fade.
+ */
+
+/* Entry on mount, no JS. Add the class to an element that appears. */
+.enter {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A fade, not a fall. */
+  .enter {
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
+
+  /* Every View Transition becomes a fade. Nothing moves or scales. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: var(--dur-fade);
+    animation-timing-function: var(--ease-out);
+  }
+
+  ::view-transition-group(*) {
+    animation: none;
+  }
+
+  ::view-transition-old(*) {
+    animation-name: motion-fade-out;
+  }
+
+  ::view-transition-new(*) {
+    animation-name: motion-fade-in;
+  }
+}
+
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-fade-out {
+  to {
+    opacity: 0;
+  }
+}

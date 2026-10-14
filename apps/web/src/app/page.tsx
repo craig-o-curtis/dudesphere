@@ -6,10 +6,10 @@ import styles from "./page.module.css";
 // request-time reads, so it is prerendered into the static shell.
 export default function Home() {
   return (
-    <main className={styles.main}>
+    <section className={styles.main}>
       <h1 className={styles.title}>The Dudesphere</h1>
       <p className={styles.tagline}>The Dude abides. The lanes open soon.</p>
       <p className={styles.note}>{FRAMES_PER_GAME} frames, no hurry. Take it easy, man.</p>
-    </main>
+    </section>
   );
 }

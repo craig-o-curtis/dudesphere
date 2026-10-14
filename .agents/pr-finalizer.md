@@ -51,12 +51,14 @@ Run each check as its own command, so one failure doesn't hide another:
 | Typecheck       | `pnpm typecheck`                                |
 | Unit tests      | `pnpm test`                                     |
 | Build           | `pnpm build`                                    |
-| End-to-end      | `pnpm test:e2e`                                 |
+| API end-to-end  | `pnpm test:e2e`                                 |
+| Web end-to-end  | `pnpm --filter @dudesphere/web test:e2e`        |
 | Migration drift | `pnpm --filter @dudesphere/api migration:check` |
 
 Rules for the results:
 
 - The bar is zero errors and zero warnings.
+- The root `pnpm test:e2e` runs only the API suite. The web suite is its own row. Its Playwright config builds the app and serves it on port 3001, the same port as the user's `pnpm dev:web`. If `lsof -iTCP:3001 -sTCP:LISTEN` shows a listener, don't stop it. Run `E2E_PORT=3101 pnpm --filter @dudesphere/web test:e2e` instead.
 - Note the test counts.
 - A check that couldn't run, such as e2e with no database, is "not run", with the reason. It is never a pass.
 - If any check fails, stop. Return the failing command and its output to the driver.
@@ -83,7 +85,7 @@ A missing line is a failure. Return it to the driver.
   4. BFF Route Handlers and Server Actions;
   5. UI components and their specs;
   6. motion;
-  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, and the tracker row set to `Done`.
+  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
 - Stage files by name: `git add <path> <path>`. When one file belongs in two commits, write the hunks for the first commit to a patch in the scratch space, then run `git apply --cached <patch>`. `git add -p` is interactive and won't work here.
 - Write messages in the repo's style. The subject is in the imperative and in sentence case, with no type prefix, such as "Add the replies list and reply count to GET /abidings". The body, when one is needed, is plain English: what changed and why.
 - Never add a `Co-Authored-By` trailer, a "Generated with" line, or any other attribution. Check each message before you commit it.
