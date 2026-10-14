@@ -141,7 +141,7 @@ describe("EmailDto", () => {
 });
 
 describe("ResetPasswordDto", () => {
-  const valid = { token: "t".repeat(43), password: "secret1" };
+  const valid = { token: "t".repeat(43), password: "a-long-secret-1" };
 
   it("accepts a token and a password", () => {
     expect(invalidFields(ResetPasswordDto, valid)).toEqual([]);
@@ -165,9 +165,10 @@ describe("ResetPasswordDto", () => {
   });
 
   describe("password", () => {
-    it("accepts 6 characters and rejects 5", () => {
-      expect(invalidFields(ResetPasswordDto, { ...valid, password: "abcdef" })).toEqual([]);
-      expect(invalidFields(ResetPasswordDto, { ...valid, password: "abcde" })).toEqual([
+    // The sign-up rule, as in the NestJS docs.
+    it("accepts 12 characters and rejects 11", () => {
+      expect(invalidFields(ResetPasswordDto, { ...valid, password: "a".repeat(12) })).toEqual([]);
+      expect(invalidFields(ResetPasswordDto, { ...valid, password: "a".repeat(11) })).toEqual([
         "password",
       ]);
     });

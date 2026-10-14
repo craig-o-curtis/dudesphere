@@ -39,7 +39,7 @@ describe("Password reset (e2e)", () => {
     },
   };
 
-  const oldPassword = "secret123";
+  const oldPassword = "a-long-secret-123";
   const newPassword = "a-brand-new-secret";
 
   const refused = {

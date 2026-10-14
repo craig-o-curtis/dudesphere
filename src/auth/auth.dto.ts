@@ -70,7 +70,7 @@ export class ResetPasswordDto {
   token: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(12)
   @MaxLength(128)
   password: string;
 }

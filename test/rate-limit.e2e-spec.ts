@@ -24,7 +24,7 @@ describe("Rate limiting (e2e)", () => {
   let app: INestApplication<App>;
 
   const tag = randomUUID().slice(0, 8);
-  const password = "secret123";
+  const password = "a-long-secret-123";
 
   function login(identifier: string, withPassword = "not-the-password") {
     return request(app.getHttpServer())
