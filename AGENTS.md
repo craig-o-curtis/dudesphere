@@ -71,6 +71,8 @@ The flow for one story:
 3. `claude --agent driver` in the same worktree builds, reviews and finalizes from the handoff.
 4. To finish a story by hand, run `claude --agent pr-finalizer` on its own.
 
+You don't have to launch the agents yourself. In an ordinary Claude session in the worktree, you can ask for the planner subagent. The session passes its questions on to you, and once you approve the plan, it drives the build itself by following `.agents/driver.md`. Don't run the driver as a subagent. A subagent can't start the builders or ask you questions.
+
 The builders and reviewers never commit. pr-finalizer makes every commit, and asks before every push.
 
 ## Git
