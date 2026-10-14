@@ -29,7 +29,12 @@ export function configureApp(
   // ten seconds. main.ts passes nothing.
   { requestTimeoutMs = REQUEST_TIMEOUT_MS }: { requestTimeoutMs?: number } = {},
 ): void {
-  // First, so guards, pipes, and filters all see the id.
+  // Sets the standard security headers on every response, with helmet 8's
+  // defaults, and removes X-Powered-By. The docs call it straight after
+  // NestFactory.create(). https://docs.nestjs.com/security/helmet
+  app.useSecurityHeaders();
+
+  // Next, so guards, pipes, and filters all see the id.
   app.use(requestId);
 
   app.useGlobalInterceptors(
