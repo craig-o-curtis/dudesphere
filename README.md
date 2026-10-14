@@ -142,7 +142,18 @@ pnpm run migration:revert
 5. Run `pnpm run migration:run`, then `pnpm run migration:check` again. It should report no changes.
 6. Commit the migration file together with the entity change.
 
-Never edit a migration that has already been committed. Databases that have already run it won't run it again. Add a new migration instead.
+Never edit a migration that a database you can't wipe has run. That database records each migration it ran by name and won't run it again, so an edit never reaches it and the two disagree. Add a new migration instead. From the first `migration:run` against Neon, that is every migration.
+
+Until then, migrations can be squashed. On 2026-10-14, before any deploy, 16 migrations were folded into one, `InitialSchema`. The old files are under the git tag `pre-migration-squash`, and [reference/SCHEMA_HISTORY.md](reference/SCHEMA_HISTORY.md) keeps what they teach. To rebuild a local database from it, reset Postgres alone, then run the migration and the seed:
+
+```bash
+# Drops and recreates the Postgres database only. Mongo keeps its data.
+docker compose exec postgres sh -c 'dropdb -U "$POSTGRES_USER" --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
+pnpm migration:run
+pnpm seed:run
+```
+
+Don't use `docker compose down -v` for this: `-v` deletes every volume, Mongo's included.
 
 ## Continuous Integration
 

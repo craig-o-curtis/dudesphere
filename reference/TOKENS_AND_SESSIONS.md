@@ -111,18 +111,24 @@ read older notes, commits and the course.
 | `SESSION_RETENTION` (180 days)       | Gone. A family's rows go when the family reaches its end                                                                           |
 
 The migration
-[1791960794027-AuthenticationTables.ts](../src/database/migrations/1791960794027-AuthenticationTables.ts)
+[1791960794027-AuthenticationTables.ts](https://github.com/craig-o-curtis/dudesphere/blob/pre-migration-squash/src/database/migrations/1791960794027-AuthenticationTables.ts)
 copied every old refresh token and reset link into the new tables, so nobody
 was signed out and no reset link stopped working. Each old session became a
 family with the same id.
 
 A second migration,
-[1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts),
+[1791967006363-SessionIdOnRefreshTokens.ts](https://github.com/craig-o-curtis/dudesphere/blob/pre-migration-squash/src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts),
 added the `sid` column. It gave every family that already existed a new
 UUID, written to the column and into `claims`. So a member signed in before
 it stays signed in. The access token they held then has no `sid`, so it is
 refused once, and the client refreshes as it does after any 401. Every
 access token from that refresh on carries the `sid`.
+
+Both migrations were later folded into one, `InitialSchema`, before any
+deploy. A database built today starts with these tables and the `sid`
+column, so there is nothing to copy. The two old files are kept under the
+git tag `pre-migration-squash`, and
+[SCHEMA_HISTORY.md](SCHEMA_HISTORY.md) explains the squash.
 
 ## The two tokens
 
@@ -761,8 +767,11 @@ since the e2e tests never run as production.
 
 ### Members who signed in before the column
 
+This only mattered for a database built before the migrations were squashed
+into `InitialSchema`. A database built since starts with the column.
+
 The migration
-[1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts)
+[1791967006363-SessionIdOnRefreshTokens.ts](https://github.com/craig-o-curtis/dudesphere/blob/pre-migration-squash/src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts)
 gave every family that already existed a new UUID, in the `sid` column and
 in `claims`. Their refresh tokens keep working, and each refresh hands out
 an access token with the `sid`. Only the access token they held at the time
@@ -1092,33 +1101,33 @@ An env file that sets one of these wins over the default.
 
 ## Where the code is
 
-| File                                                                                                                                      | Its job                                                                                                            |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [src/app.module.ts](../src/app.module.ts)                                                                                                 | Registers both packages with their options, and `AuthThrottlerGuard`                                               |
-| [src/auth/auth.module.ts](../src/auth/auth.module.ts)                                                                                     | The app's parts: four controllers, `JwtAuth`, `CredentialsService`, the mailer, the store. Imports `SignInsModule` |
-| [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)                                                                         | `POST /auth/token`, `/auth/token/refresh`, `/auth/token/revoke`                                                    |
-| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                                                                     | `POST /auth/sign-out-everywhere`                                                                                   |
-| [src/auth/auth.controller.ts](../src/auth/auth.controller.ts)                                                                             | `POST /auth/sign-up`                                                                                               |
-| [src/auth/password-reset.controller.ts](../src/auth/password-reset.controller.ts)                                                         | `POST /auth/password/forgot` and `/auth/password/reset`                                                            |
-| [src/auth/credentials.service.ts](../src/auth/credentials.service.ts)                                                                     | `verify`: checks a password at sign-in, and upgrades a bcrypt hash. `stillValid`: the recheck                      |
-| [src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)                                                                         | `JwtAuth.validate`: loads the member and checks the sign-in, on every signed-in request                            |
-| [src/auth/password-reset.mailer.ts](../src/auth/password-reset.mailer.ts)                                                                 | Finds the account, sends the reset email, stores the new hash and ends the sign-ins in one transaction             |
-| [src/auth/auth.dto.ts](../src/auth/auth.dto.ts)                                                                                           | `SignInDto`, `RefreshTokenDto`, `EmailDto`, `ResetPasswordDto`                                                     |
-| [src/auth/auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)                                                                   | Rate limits, by account and address                                                                                |
-| [src/auth/auth-types.ts](../src/auth/auth-types.ts)                                                                                       | Tells the package that a signed-in user is a `User`                                                                |
-| [src/auth/config/auth.config.ts](../src/auth/config/auth.config.ts)                                                                       | The settings, read from the environment                                                                            |
-| [src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts)                                                       | The `sessions`, `refresh_tokens` and `email_tokens` tables                                                         |
-| [src/typeorm/typeorm-authentication.store.ts](../src/typeorm/typeorm-authentication.store.ts)                                             | Every query the package asks for on those tables. Copies `sid` into its column. It decides nothing                 |
-| [src/typeorm/sign-ins.repository.ts](../src/typeorm/sign-ins.repository.ts)                                                               | The app's own two: `isLive`, for `JwtAuth`, and `endAllForUser`, inside a caller's transaction                     |
-| [src/typeorm/sign-ins.module.ts](../src/typeorm/sign-ins.module.ts)                                                                       | Provides `SignInsRepository` to `AuthModule` and `UsersModule`, and registers the three tables                     |
-| [src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts) | Adds the `sid` column, and gives every family that existed a `sid`                                                 |
-| [src/users/users.repository.ts](../src/users/users.repository.ts)                                                                         | `findById`, `findCredentials`, `updatePasswordHash`, `replacePasswordHash`, `signInStillValid`                     |
-| [src/users/password-hashes.ts](../src/users/password-hashes.ts)                                                                           | Checks a bcrypt or scrypt hash                                                                                     |
-| [src/users/users.service.ts](../src/users/users.service.ts)                                                                               | Calls `endAllForUser` inside the transaction of a password change, a close and a restore                           |
-| [src/users/user.policy.ts](../src/users/user.policy.ts)                                                                                   | Who may manage other members: admins only                                                                          |
-| [src/hashtags/hashtag.policy.ts](../src/hashtags/hashtag.policy.ts)                                                                       | Who may delete and restore hashtags: admins only                                                                   |
-| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                                                                                     | The flows in this document, over real HTTP and the real database                                                   |
-| [test/typeorm-authentication.store.e2e-spec.ts](../test/typeorm-authentication.store.e2e-spec.ts)                                         | The package's own test suite, run against this app's store                                                         |
+| File                                                                                                                | Its job                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [src/app.module.ts](../src/app.module.ts)                                                                           | Registers both packages with their options, and `AuthThrottlerGuard`                                               |
+| [src/auth/auth.module.ts](../src/auth/auth.module.ts)                                                               | The app's parts: four controllers, `JwtAuth`, `CredentialsService`, the mailer, the store. Imports `SignInsModule` |
+| [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)                                                   | `POST /auth/token`, `/auth/token/refresh`, `/auth/token/revoke`                                                    |
+| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                                               | `POST /auth/sign-out-everywhere`                                                                                   |
+| [src/auth/auth.controller.ts](../src/auth/auth.controller.ts)                                                       | `POST /auth/sign-up`                                                                                               |
+| [src/auth/password-reset.controller.ts](../src/auth/password-reset.controller.ts)                                   | `POST /auth/password/forgot` and `/auth/password/reset`                                                            |
+| [src/auth/credentials.service.ts](../src/auth/credentials.service.ts)                                               | `verify`: checks a password at sign-in, and upgrades a bcrypt hash. `stillValid`: the recheck                      |
+| [src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)                                                   | `JwtAuth.validate`: loads the member and checks the sign-in, on every signed-in request                            |
+| [src/auth/password-reset.mailer.ts](../src/auth/password-reset.mailer.ts)                                           | Finds the account, sends the reset email, stores the new hash and ends the sign-ins in one transaction             |
+| [src/auth/auth.dto.ts](../src/auth/auth.dto.ts)                                                                     | `SignInDto`, `RefreshTokenDto`, `EmailDto`, `ResetPasswordDto`                                                     |
+| [src/auth/auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)                                             | Rate limits, by account and address                                                                                |
+| [src/auth/auth-types.ts](../src/auth/auth-types.ts)                                                                 | Tells the package that a signed-in user is a `User`                                                                |
+| [src/auth/config/auth.config.ts](../src/auth/config/auth.config.ts)                                                 | The settings, read from the environment                                                                            |
+| [src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts)                                 | The `sessions`, `refresh_tokens` and `email_tokens` tables                                                         |
+| [src/typeorm/typeorm-authentication.store.ts](../src/typeorm/typeorm-authentication.store.ts)                       | Every query the package asks for on those tables. Copies `sid` into its column. It decides nothing                 |
+| [src/typeorm/sign-ins.repository.ts](../src/typeorm/sign-ins.repository.ts)                                         | The app's own two: `isLive`, for `JwtAuth`, and `endAllForUser`, inside a caller's transaction                     |
+| [src/typeorm/sign-ins.module.ts](../src/typeorm/sign-ins.module.ts)                                                 | Provides `SignInsRepository` to `AuthModule` and `UsersModule`, and registers the three tables                     |
+| [src/database/migrations/1791988445282-InitialSchema.ts](../src/database/migrations/1791988445282-InitialSchema.ts) | Creates `refresh_tokens` with its `sid` column and both `sid` indexes, and every other table                       |
+| [src/users/users.repository.ts](../src/users/users.repository.ts)                                                   | `findById`, `findCredentials`, `updatePasswordHash`, `replacePasswordHash`, `signInStillValid`                     |
+| [src/users/password-hashes.ts](../src/users/password-hashes.ts)                                                     | Checks a bcrypt or scrypt hash                                                                                     |
+| [src/users/users.service.ts](../src/users/users.service.ts)                                                         | Calls `endAllForUser` inside the transaction of a password change, a close and a restore                           |
+| [src/users/user.policy.ts](../src/users/user.policy.ts)                                                             | Who may manage other members: admins only                                                                          |
+| [src/hashtags/hashtag.policy.ts](../src/hashtags/hashtag.policy.ts)                                                 | Who may delete and restore hashtags: admins only                                                                   |
+| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                                                               | The flows in this document, over real HTTP and the real database                                                   |
+| [test/typeorm-authentication.store.e2e-spec.ts](../test/typeorm-authentication.store.e2e-spec.ts)                   | The package's own test suite, run against this app's store                                                         |
 
 `TokenService`, `SignInService`, `PasswordResetService`, `PasswordHasher`,
 `JwtSigner` and both guards are in the packages, under

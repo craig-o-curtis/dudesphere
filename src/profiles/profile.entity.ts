@@ -16,7 +16,7 @@ import { User } from "../users/user.entity.js";
 
 // The check is the database's own copy of a rule CreateProfileDto already
 // applies, so a writer that skips the DTO, such as the seed, cannot break it.
-// The name matches the migration ProfileDisplayName.
+// The InitialSchema migration creates it under this name.
 @Entity("profile")
 @Check("CHK_profile_displayName_length", `char_length("displayName") <= 50`)
 export class Profile {

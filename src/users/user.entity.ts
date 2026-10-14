@@ -19,7 +19,7 @@ export enum UserRole {
 //
 // The three checks are the database's own copy of rules CreateUserDto already
 // applies, so a writer that skips the DTO, such as the seed, cannot break them.
-// The names match the migration CaseInsensitiveUsernameAndEmail.
+// The InitialSchema migration creates them under these names.
 @Entity("user")
 @Check("CHK_user_username_length", `char_length("username") <= 24`)
 @Check("CHK_user_email_length", `char_length("email") <= 100`)
