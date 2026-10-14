@@ -480,12 +480,20 @@ The rules:
 script in the root layout's `<head>` sets the theme attribute on `<html>`
 before first paint, so there is no flash. The toggle in the footer is two
 plain `type="button"` buttons, with no form post. A press updates the screen,
-then calls `setTheme(theme)` in `lib/actions/theme.ts` directly. The action
-deletes the cookie when it already holds that theme, so pressing the pressed
-button returns to the OS, and saves it otherwise. It returns the saved theme
-(or `null`) and the screen adopts that answer, so two tabs can't drift. Next
-runs Server Actions one at a time, so quick presses stay in order. A press
-before hydration does nothing, and the streaming fallback can't act. With
+then calls `setTheme(intent)` in `lib/actions/theme.ts` directly. The toggle
+sends its intent: the unpressed button sends its own theme, and the pressed
+button sends `system`. The action does exactly that. `light` or `dark` sets the
+cookie, `system` deletes it so the OS rules again, and anything else writes
+nothing. The server never decides from the cookie what a press means. The
+action returns the saved theme (or `null`) and the screen adopts that answer.
+If the call fails, the toggle reads the saved theme back from the cookie and
+shows "Could not save your theme. Try again." only if the save didn't land.
+When a tab becomes visible again it re-reads the cookie, so other tabs catch
+up. Next runs Server Actions one at a time, so quick presses stay in order. A
+press before hydration does nothing, and the streaming fallback can't act. If
+focus was on a placeholder button when the real toggle streams in, focus moves
+to the matching real button. After the skip link, `#main` shows the focus ring
+for keyboard focus only. With
 JavaScript off the inline script can't run, so a `<noscript>` style in the
 layout's `<head>` hides the toggle and the page follows the OS. The pressed
 state has a non-color cue for forced-colors mode, and the "press again" hint is
@@ -499,7 +507,7 @@ Three things to remember:
   together.
 - The layout owns `<main id="main" tabIndex={-1}>`. Pages render no `<main>`.
 - A future CSP (WEB-45) can't allow the inline theme script by hash. The page
-  carries five other inline scripts from Next and React: the
+  carries six other inline scripts from Next, React and Turbopack: the
   `self.__next_f.push` flight payload and the `$RB` and `$RV` reveal scripts.
   They change with the build and, for the streamed part, with each request, so
   they can't be hashed ahead of time. Under CSP Level 2 and later, any hash in

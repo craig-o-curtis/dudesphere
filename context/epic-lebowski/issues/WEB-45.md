@@ -28,7 +28,7 @@ Everything so far runs on a laptop. Nobody else can use it. The production to-do
 - Node runtime only. No Edge.
 - `poweredByHeader: false` in `next.config.ts`, which turns off `X-Powered-By: Next.js`.
 - Behind a proxy, Next's Origin check trusts `X-Forwarded-Host`. The proxy must overwrite that header, not pass on the client's value.
-- CSP: the root layout's inline theme script (WEB-6) can't be allowed by hash. The page carries five other inline scripts from Next and React (the `self.__next_f.push` flight payload and the `$RB` and `$RV` reveal scripts) that change with the build and each request, and under CSP Level 2 and later a hash in `script-src` makes the browser ignore `'unsafe-inline'`. Next's CSP guide says a nonce CSP doesn't work with Partial Prerender. Choose `'unsafe-inline'` with no hash, nonces that make every page dynamic, or another plan, and record the choice.
+- CSP: the root layout's inline theme script (WEB-6) can't be allowed by hash. The page carries six other inline scripts from Next, React and Turbopack (the `self.__next_f.push` flight payload and the `$RB` and `$RV` reveal scripts) that change with the build and each request, and under CSP Level 2 and later a hash in `script-src` makes the browser ignore `'unsafe-inline'`. Next's CSP guide says a nonce CSP doesn't work with Partial Prerender. Choose `'unsafe-inline'` with no hash, nonces that make every page dynamic, or another plan, and record the choice.
 
 **Docs:**
 

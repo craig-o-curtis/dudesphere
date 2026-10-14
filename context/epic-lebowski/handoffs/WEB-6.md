@@ -14,7 +14,7 @@ Every page gets one visual system: color, space, type and motion tokens in light
 
 - How the theme reaches `<html>`: a static inline `<head>` script reads the `theme` cookie before paint and sets `data-theme`. `<html>` carries `suppressHydrationWarning`. The footer's toggle reads `cookies()` inside `<Suspense>` to show the current choice. That read is the story's Suspense lesson.
 - Theme cookie: `theme`, values `light` or `dark`, `path=/`, one year, `SameSite=Lax`, `Secure` in production. Not httpOnly, because the inline script reads it. It holds no secret. No cookie means the OS decides.
-- Toggle: in the footer, a `<div data-theme-toggle>` with two plain `type="button"` toggle buttons, Light and Dark, in a group named "Theme", each with `aria-pressed`. There is no System button and no form post. With no cookie, neither button is pressed. A press changes `data-theme` and the pressed state at once (plain `useState` synced from `current`, not `useOptimistic`). It then calls `setTheme(theme)`, which deletes the cookie when it already holds that theme (back to the OS) and saves it otherwise, and returns the saved theme or `null`. The screen adopts that answer, and the newest press wins. The buttons are `aria-disabled` until hydrated, and the Suspense fallback (`pending`) never acts. A visible hint explains the press-again reset, and the pressed button shows a check mark that works in forced-colors mode. With JS off, a `<noscript>` style hides the toggle and the page follows the OS. (Changed in fix rounds 1 to 3.)
+- Toggle: in the footer, a `<div data-theme-toggle>` with two plain `type="button"` toggle buttons, Light and Dark, in a group named "Theme", each with `aria-pressed`. There is no System button and no form post. With no cookie, neither button is pressed. A press changes `data-theme` and the pressed state at once (plain `useState` synced from `current`, not `useOptimistic`). It then sends its intent: the unpressed button sends its theme, and the pressed button sends `system`. `setTheme(intent)` does exactly that (`light` or `dark` saves, `system` deletes) and returns the saved theme or `null`. The screen adopts that answer, and the newest press wins. The buttons are `aria-disabled` until hydrated, and the Suspense fallback (`pending`) never acts. A visible hint explains the press-again reset, and the pressed button shows a check mark that works in forced-colors mode. With JS off, a `<noscript>` style hides the toggle and the page follows the OS. (Changed in fix rounds 1 to 5.)
 - Server Action location: `apps/web/src/lib/actions/theme.ts`, per `frontend-architecture.md`.
 - Reduced motion: `--dur-fast`, `--dur-base` and `--dur-slow` become `0.01ms`. A new `--dur-fade: 150ms` never changes. Every `::view-transition-*` animation becomes a fade over `--dur-fade`.
 - Motion hook: a client `MotionProvider` with `<MotionConfig reducedMotion="user">` wraps the body. `lib/motion.ts` re-exports `useReducedMotion` from `motion/react` and holds the presets. The spec's custom `usePrefersReducedMotion()` is dropped. TS timing constants copy `tokens.css`, and a spec checks that they match.
@@ -110,12 +110,13 @@ Every page now has one look: color, space, type and motion tokens in light and d
 All changes are in `apps/web`, apart from two Vitest config files in `apps/api`.
 
 - `styles/tokens.css`: palettes, space, radii, type and motion tokens. `tokens.spec.ts` checks WCAG contrast for every text pair, focus and control borders, in both themes.
-- `styles/globals.css` and `styles/motion.css`: reset, token-based base styles, a 3px focus outline, the `.enter` rule, and the reduced-motion View Transition rule. `lib/motion.ts` holds the same durations for `motion/react`, and a spec fails if the two drift.
+- `styles/globals.css` and `styles/motion.css`: reset, token-based base styles, a 3px focus outline, a keyboard-only focus ring on `#main` (A11Y-3), the `.enter` rule, and the reduced-motion View Transition rule. `lib/motion.ts` holds the same durations for `motion/react`, and a spec fails if the two drift.
 - Fonts: Bowlby One (display) through `next/font/google`. Atkinson Hyperlegible Next (text) is self-hosted, latin subset, with its OFL licence.
 - Theme: `lib/theme.ts` (cookie name, init script, cookie reader) and `lib/actions/theme.ts` (`setTheme`).
 - Components: `SkipLink`, `ThemeToggle`, `SiteFooter`, `MotionProvider`. The root layout owns `<main id="main">`.
 - Tests: a minimal `playwright.config.ts` and `e2e/shell.spec.ts`, run with `pnpm --filter @dudesphere/web test:e2e`. CI wiring stays with WEB-46.
 - Vitest configs in both apps now use Vite's built-in tsconfig paths. The `vite-tsconfig-paths` plugin is gone, and so are its warnings.
+- `context/stage-prod-setup.md`: a free-tier plan for staging and production (Vercel Hobby, Neon, MongoDB Atlas, Brevo). It is the user's own commit `c14c36f` and does not touch the code.
 - Docs: the spec, `rendering-strategies.md`, `frontend-architecture.md`, CSP notes in the WEB-45 spec, and the tracker.
 - Process docs, in their own commit: `AGENTS.md`, the planner, driver and pr-finalizer agents, and the tracker status format (REPO-1 to REPO-4 and WEB-5 are marked Done).
 
@@ -123,7 +124,8 @@ All changes are in `apps/web`, apart from two Vitest config files in `apps/api`.
 
 - **Inline head script.** A constant script in `<head>` reads the `theme` cookie before paint and sets `data-theme`. Reading `cookies()` in the layout would make every route dynamic, and a streamed script would flash. The cookie is not httpOnly, because the script reads it. It holds no secret.
 - **Light and Dark only.** There is no System button. Pressing the chosen button again deletes the cookie, and the OS decides.
-- **No form post.** The toggle uses plain buttons. A press updates the screen, then calls `setTheme`, and the screen adopts the answer. If the save fails, the screen reads the saved theme back from the cookie, and a status line says the save failed. The buttons stay `aria-disabled` until hydrated.
+- **No form post.** The toggle uses plain buttons. A press updates the screen, then calls `setTheme` with the button's intent: `light`, `dark`, or `system` to clear. `setTheme` saves exactly that and no longer decides from the cookie. If the save fails, the screen reads the saved theme back from the cookie, and a status line says the save failed only if the save did not land. Other tabs catch up with the saved theme when they become visible or focused. The buttons stay `aria-disabled` until hydrated, and the placeholder toggle shown while the real one streams in is inert.
+- **One inline script, and no IIFE.** The theme script is the only inline script of ours. The user ruled out new inline scripts, so a focus-tracking script was dropped and the placeholder was made inert instead. The user also added a "no IIFEs" rule to `context/coding-standards.md` (their own commit), and the theme script is now a plain `try` block with `let` and `const`.
 - **Toggle hidden without JS.** A `<noscript>` style hides it, so no one sees a button that does nothing.
 - **Self-hosted Atkinson.** Next can then build a size-matched fallback font, and the build warning goes away.
 - **Vite warnings fixed here.** The warning came from the web and API test configs, so both are fixed in one commit.
@@ -137,28 +139,27 @@ All changes are in `apps/web`, apart from two Vitest config files in `apps/api`.
 
 - `pnpm lint`: no warnings.
 - `pnpm format:check`, `pnpm typecheck` and `pnpm build`: pass.
-- `pnpm test`: web 189 tests, API 1124 tests, lane-engine 2 tests plus 11 todo. No Vite warnings. (The API suite logs expected "mongo is down" errors from its own failure tests.)
-- Web end-to-end: 27 of 27 pass.
+- `pnpm test`: web 210 tests, API 1124 tests, lane-engine 2 tests plus 11 todo. No Vite warnings. (The API suite logs expected "mongo is down" errors from its own failure tests.)
+- Web end-to-end: 30 of 30 pass.
 - API end-to-end: 359 of 359 pass. This story changed `apps/api/vitest.config.e2e.ts`.
 - Migration drift: no schema changes found. This story has no schema change.
 
 ## Review rounds
 
-Four rounds with qa-skeptic, owasp-hacker and a11y-expert. All three pass round 4, with no blocker, major or minor open.
+Five rounds with qa-skeptic, owasp-hacker and a11y-expert. All three pass round 5, with no blocker, major or minor open.
 
 1. Round 1: a11y failed (pressed state shown by color only in forced-colors mode, and the press-again hint was hidden). qa failed (a press before hydration posted the form and returned a blank page, two tabs disagreed with the cookie, and the streaming fallback showed nothing pressed). owasp passed, and found that the CSP note was wrong and that `setTheme` threw a 500 on a non-FormData body.
 2. Round 2: a11y and owasp passed. qa failed: a failed save left an unsaved theme on screen, the real toggle was not `aria-disabled` before hydration, and the API test config had the same Vite warning.
 3. Round 3: all three passed. New minors: a save cut off after its headers changed the cookie but not the screen, and a failed save reverted silently.
 4. Round 4: all three passed with the minors fixed. The cookie reader was fuzzed with about 200,000 headers and always matched Next and the init script.
+5. Round 5 (after the user asked for the nits to be fixed): all three passed. `setTheme` takes the button's intent (QA-17), other tabs catch up (QA-15), the failure message shows only when the save did not land (QA-18), the placeholder toggle is inert (A11Y-4), and `#main` has a keyboard focus ring (A11Y-3). The theme script has no IIFE. New nits: QA-19 (accepted, below) and SEC-3 (the docs now count six other inline scripts, Turbopack's included), which is fixed.
 
 ## Nits left
 
-- A11Y-3: the outline on `#main` after a skip-link jump.
-- A11Y-4: not verified, focus on a fallback toggle button may drop when the real toggle streams in.
-- QA-10: the process-doc changes are in this PR. They are in their own commit.
-- QA-15: other open tabs show the old theme until they reload.
-- QA-17: a failed middle press changes what the next press means.
-- QA-18: the failure message shows even when a cut-off save did land.
+Every nit was fixed except two.
+
+- QA-10: the process-doc changes are in this PR, in their own commits. The user chose to keep them here.
+- QA-19: accepted. Clicking straight into a stale window, the focus catch-up can change a button's meaning about 80 ms before the click lands. A code comment explains it.
 
 Closes #40
 
@@ -219,3 +220,16 @@ Closes #40
 - 2026-10-14: owasp-hacker round 4: PASS, no findings. themeFromCookieHeader fuzzed with about 200k headers: never threw and matched Next and the script every time. The status text is a constant; the script and action ID are unchanged.
 - 2026-10-14: qa-skeptic round 4: PASS. QA-16 and QA-17 fixed; all 14 failure paths end with the screen matching the cookie. New nit QA-18 (the message shows even when a cut-off save did land). Review done: no blocker, major or minor open. Nits for the summary: A11Y-3, A11Y-4, QA-10, QA-15, QA-17, QA-18.
 - 2026-10-14: Finalizing: review server stopped, pr-finalizer started.
+- 2026-10-14: The user pushed the branch (pr-finalizer's push was blocked by the permission system). PR opened: https://github.com/craig-o-curtis/dudesphere/pull/88. Tracker row set to Done (the user's new rule: Done once dev work is done and the PR is open).
+- 2026-10-14: The user asked to fix the nits on the PR. Decisions: QA-17, the client sends its intent (save light, save dark, or clear as `system`), and setTheme does exactly that, no longer deciding from the cookie. QA-10, the process docs stay in this PR in their own commit. A11Y-3, a focus ring on #main for keyboard focus only.
+- 2026-10-14: Fix round 5 started: setTheme intent (fullstack-hooker-upper); toggle intent, QA-15, QA-18, A11Y-4 and A11Y-3 (fe-tdd-dev); docs (fe-tdd-dev).
+- 2026-10-14: Round 5 docs done (frontend-architecture.md, issues/WEB-6.md).
+- 2026-10-14: setTheme now takes the intent (light or dark sets, system deletes, anything else writes nothing). Action spec 53 tests, 6 written to fail first.
+- 2026-10-14: Round 5 landed: web unit 208, e2e 30, all checks pass. The user ruled out new inline scripts: the A11Y-4 focus-tracker script goes, and A11Y-4 is fixed instead by making the placeholder toggle inert. The head theme script stays (Q1).
+- 2026-10-14: The user added a "No IIFE's" rule to context/coding-standards.md and asked for it to be applied: themeInitScript gets rewritten as a plain try block with let/const (fullstack-hooker-upper). coding-standards.md formatted, and it joins the PR.
+- 2026-10-14: Fix round 5 done. The theme script has no IIFE and no var (theme.spec 74 tests). A11Y-4 fixed with inert; the focus-tracker script is removed. Checks: lint, typecheck, format:check, unit (web 210, API 1124) with no warnings, web e2e 30 of 30.
+- 2026-10-14: Review round 5 started.
+- 2026-10-14: a11y-expert round 5: PASS, no findings. A11Y-3 fixed (keyboard ring in light, dark and forced colors; none on mouse). A11Y-4 fixed by code reading; the reviewer could not hold the stream back, but the e2e test does (route-held hole), and it passes.
+- 2026-10-14: qa-skeptic round 5: PASS. QA-15, QA-17, QA-18 fixed. All 14 failure paths and the two-tab cases end with the screen matching the cookie. The no-inline-script and no-IIFE rules hold. New nit QA-19: clicking straight into a stale window, the focus catch-up can change a button's meaning about 80 ms before the click lands.
+- 2026-10-14: owasp-hacker round 5: PASS. New nit SEC-3 (the docs say five other inline scripts; there are six, Turbopack's included). All three reviewers pass round 5. User decision: QA-19 accepted, with a code comment. SEC-3 docs fix and the QA-19 comment sent out.
+- 2026-10-14: QA-19 comment added; SEC-3 docs count fixed (six other inline scripts). Finalizing round 5: pr-finalizer adds commits on top of the pushed branch.
