@@ -33,10 +33,12 @@ export class CredentialsService {
     }
     // The hash is bcrypt, or the cost settings changed since it was stored:
     // upgrade it now, while we have the password. The password itself is the
-    // same, so no token is ended.
+    // same, so no token is ended. The write is skipped if the password was
+    // changed in the meantime. See UsersRepository.replacePasswordHash.
     if (needsRehash(this.passwordHasher, found.passwordHash)) {
-      await this.usersRepository.updatePasswordHash(
+      await this.usersRepository.replacePasswordHash(
         found.user.id,
+        found.passwordHash,
         await this.passwordHasher.hash(password),
       );
     }

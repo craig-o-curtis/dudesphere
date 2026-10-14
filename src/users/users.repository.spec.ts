@@ -153,23 +153,13 @@ describe("UsersRepository", () => {
     it("writes to live rows only", async () => {
       users.update.mockResolvedValue({ affected: 1 });
 
-      await repository.updatePasswordHash(4, "$scrypt$new");
+      await repository.updatePasswordHash(4, "$scrypt$new", "2026-10-14T09:00:00.000Z");
 
       expect(users.update).toHaveBeenCalledWith({ id: 4, deletedAt: IsNull() }, expect.anything());
     });
 
-    // A rehash at sign-in: the same password, stored with a newer hash. The
-    // member's access tokens must keep working, so the stamp is left alone.
-    it("stores only the hash when no time is given", async () => {
-      users.update.mockResolvedValue({ affected: 1 });
-
-      await repository.updatePasswordHash(4, "$scrypt$new");
-
-      expect(users.update).toHaveBeenCalledWith(expect.anything(), { password: "$scrypt$new" });
-    });
-
     // A new password: the stamp ends every access token signed before it.
-    it("stamps passwordChangedAt when a time is given", async () => {
+    it("stamps passwordChangedAt with the hash", async () => {
       users.update.mockResolvedValue({ affected: 1 });
 
       await repository.updatePasswordHash(4, "$scrypt$new", "2026-10-14T09:00:00.000Z");
@@ -183,14 +173,50 @@ describe("UsersRepository", () => {
     it("resolves true when it wrote the row", async () => {
       users.update.mockResolvedValue({ affected: 1 });
 
-      await expect(repository.updatePasswordHash(4, "$scrypt$new")).resolves.toBe(true);
+      await expect(
+        repository.updatePasswordHash(4, "$scrypt$new", "2026-10-14T09:00:00.000Z"),
+      ).resolves.toBe(true);
     });
 
     // The member is gone, or was closed while the hash was being made.
     it("resolves false when no live row matched", async () => {
       users.update.mockResolvedValue({ affected: 0 });
 
-      await expect(repository.updatePasswordHash(4, "$scrypt$new")).resolves.toBe(false);
+      await expect(
+        repository.updatePasswordHash(4, "$scrypt$new", "2026-10-14T09:00:00.000Z"),
+      ).resolves.toBe(false);
+    });
+  });
+
+  describe("replacePasswordHash", () => {
+    // Only while the old hash is still stored, so a password change that
+    // landed in the meantime is never overwritten with the old password.
+    it("writes only to a live row that still has the old hash", async () => {
+      users.update.mockResolvedValue({ affected: 1 });
+
+      await repository.replacePasswordHash(4, "$2b$04$old", "$scrypt$new");
+
+      expect(users.update).toHaveBeenCalledWith(
+        { id: 4, password: "$2b$04$old", deletedAt: IsNull() },
+        { password: "$scrypt$new" },
+      );
+    });
+
+    // The same password, so the stamp is left alone and no token ends.
+    it("leaves passwordChangedAt alone", async () => {
+      users.update.mockResolvedValue({ affected: 1 });
+
+      await repository.replacePasswordHash(4, "$2b$04$old", "$scrypt$new");
+
+      expect(users.update.mock.calls[0][1]).not.toHaveProperty("passwordChangedAt");
+    });
+
+    it("resolves false when the hash changed in the meantime", async () => {
+      users.update.mockResolvedValue({ affected: 0 });
+
+      await expect(repository.replacePasswordHash(4, "$2b$04$old", "$scrypt$new")).resolves.toBe(
+        false,
+      );
     });
   });
 });

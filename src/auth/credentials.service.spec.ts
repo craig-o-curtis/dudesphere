@@ -8,7 +8,7 @@ import { CredentialsService } from "./credentials.service.js";
 // real, at its lowest cost, so the old hashes are checked the way they are
 // in the app.
 describe("CredentialsService", () => {
-  const usersRepository = { findCredentials: vi.fn(), updatePasswordHash: vi.fn() };
+  const usersRepository = { findCredentials: vi.fn(), replacePasswordHash: vi.fn() };
   const passwordHasher = { verify: vi.fn(), hash: vi.fn(), needsRehash: vi.fn() };
 
   const service = new CredentialsService(
@@ -29,7 +29,7 @@ describe("CredentialsService", () => {
     vi.resetAllMocks();
     passwordHasher.needsRehash.mockReturnValue(false);
     passwordHasher.hash.mockResolvedValue("$scrypt$new");
-    usersRepository.updatePasswordHash.mockResolvedValue(true);
+    usersRepository.replacePasswordHash.mockResolvedValue(true);
   });
 
   describe("with a scrypt hash", () => {
@@ -51,7 +51,7 @@ describe("CredentialsService", () => {
 
       await expect(service.verify("walter", "secret2")).resolves.toBeNull();
 
-      expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+      expect(usersRepository.replacePasswordHash).not.toHaveBeenCalled();
     });
 
     it("leaves a hash with the current settings alone", async () => {
@@ -60,7 +60,7 @@ describe("CredentialsService", () => {
       await service.verify("walter", "secret1");
 
       expect(passwordHasher.needsRehash).toHaveBeenCalledWith(scryptHash);
-      expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+      expect(usersRepository.replacePasswordHash).not.toHaveBeenCalled();
     });
 
     // The cost settings went up since the hash was stored. The password is
@@ -72,7 +72,11 @@ describe("CredentialsService", () => {
       await expect(service.verify("walter", "secret1")).resolves.toBe(walter);
 
       expect(passwordHasher.hash).toHaveBeenCalledWith("secret1");
-      expect(usersRepository.updatePasswordHash).toHaveBeenCalledWith(25, "$scrypt$new");
+      expect(usersRepository.replacePasswordHash).toHaveBeenCalledWith(
+        25,
+        scryptHash,
+        "$scrypt$new",
+      );
     });
 
     // A wrong password must never be hashed and stored in place of the
@@ -84,7 +88,7 @@ describe("CredentialsService", () => {
       await expect(service.verify("walter", "secret2")).resolves.toBeNull();
 
       expect(passwordHasher.hash).not.toHaveBeenCalled();
-      expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+      expect(usersRepository.replacePasswordHash).not.toHaveBeenCalled();
     });
   });
 
@@ -99,7 +103,7 @@ describe("CredentialsService", () => {
 
       expect(passwordHasher.verify).toHaveBeenCalledTimes(1);
       expect(passwordHasher.verify).toHaveBeenCalledWith("secret1", undefined);
-      expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+      expect(usersRepository.replacePasswordHash).not.toHaveBeenCalled();
     });
   });
 
@@ -115,19 +119,24 @@ describe("CredentialsService", () => {
     });
 
     // The password itself did not change, so passwordChangedAt stays as it
-    // was and no access token is ended. Only two arguments are passed.
+    // was and no access token is ended. The old hash goes along, so the
+    // write is skipped if a password change landed in the meantime.
     it("replaces it with a scrypt hash, and leaves passwordChangedAt alone", async () => {
       await service.verify("walter", "secret1");
 
       expect(passwordHasher.hash).toHaveBeenCalledWith("secret1");
-      expect(usersRepository.updatePasswordHash).toHaveBeenCalledTimes(1);
-      expect(usersRepository.updatePasswordHash.mock.calls[0]).toEqual([25, "$scrypt$new"]);
+      expect(usersRepository.replacePasswordHash).toHaveBeenCalledTimes(1);
+      expect(usersRepository.replacePasswordHash.mock.calls[0]).toEqual([
+        25,
+        bcryptHash,
+        "$scrypt$new",
+      ]);
     });
 
     it("returns null, and keeps the hash, when the password is wrong", async () => {
       await expect(service.verify("walter", "secret2")).resolves.toBeNull();
 
-      expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+      expect(usersRepository.replacePasswordHash).not.toHaveBeenCalled();
     });
 
     // bcrypt reads only the first 72 bytes. Without the length check, any
