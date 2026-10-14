@@ -173,9 +173,10 @@ Public. What a visitor sees first.
   visitor to `/login`.
 - `server/api/session.delete.ts` logs out: it calls `POST /auth/token/revoke`
   with the refresh token, then clears both cookies. "Log out everywhere" calls
-  `POST /auth/sign-out-everywhere`. Clearing the `session` cookie matters:
-  the API ends the refresh token, but the access token works until it
-  expires.
+  `POST /auth/sign-out-everywhere`. The API ends the sign-in, access token
+  included. Clearing the cookies still matters: dead tokens left in them
+  would cost a 401 and a failed refresh on the next page, which sends the
+  visitor to `/login`.
 - Forms are plain `<form @submit.prevent>` with a `pending` ref. A 400 from
   Nest carries the field messages. Nitro passes the body through with
   `createError`, and the form shows each message under its input. No

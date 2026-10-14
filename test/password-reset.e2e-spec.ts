@@ -208,7 +208,9 @@ describe("Password reset (e2e)", () => {
 
       await reset(await requestToken(user.email)).expect(204);
 
-      // Refused through passwordChangedAt, which PasswordResetMailer stamps.
+      // Refused twice over: the token is older than the passwordChangedAt
+      // stamp, and the reset ended its sign-in, so JwtAuth finds its sid
+      // ended.
       const refused = await request(app.getHttpServer())
         .get("/users/me")
         .set(bearer(earlier))
@@ -222,14 +224,17 @@ describe("Password reset (e2e)", () => {
         .expect(200);
     });
 
-    // The package ends every sign-in of the member after a reset, so a
-    // refresh token from before it cannot be swapped for a new pair. The
-    // access token that came with it is the test above: one signed in the
-    // same second as the reset still passes, on purpose.
-    it("ends the refresh tokens from before the reset", async () => {
+    // A reset ends every sign-in of the member, in the same transaction as
+    // the new hash. So a refresh token from before it cannot be swapped for a
+    // new pair, and the access token that came with it stops too, even one
+    // signed in the same second as the reset.
+    it("ends the sign-ins from before the reset, access tokens included", async () => {
       const user = await signUp();
       const { body: session } = await login(user.email, oldPassword).expect(200);
-      const { refreshToken } = session as { refreshToken: string };
+      const { accessToken, refreshToken } = session as {
+        accessToken: string;
+        refreshToken: string;
+      };
 
       await reset(await requestToken(user.email)).expect(204);
 
@@ -238,6 +243,7 @@ describe("Password reset (e2e)", () => {
         .send({ refreshToken })
         .expect(401);
       expect(refused.body).toMatchObject({ statusCode: 401, message: "Refresh token invalid" });
+      await request(app.getHttpServer()).get("/users/me").set(bearer(accessToken)).expect(401);
     });
 
     it("stores the new password as a scrypt hash, as sign-up does", async () => {

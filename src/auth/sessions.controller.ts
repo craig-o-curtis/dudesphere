@@ -16,8 +16,9 @@ export class SessionsController {
   constructor(private readonly signInService: SignInService) {}
 
   // Ends every refresh token and every session of the signed-in member, on
-  // every device. Access tokens that were already issued stay valid until
-  // they expire, which is why they only last 15 minutes.
+  // every device. The access tokens already handed out stop too, on their
+  // next request: each names its sign-in, and JwtAuth finds it ended. The
+  // docs' version leaves them working until they expire.
   @Can.Anyone()
   @Post("sign-out-everywhere")
   @HttpCode(204)

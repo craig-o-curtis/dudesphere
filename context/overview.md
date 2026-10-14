@@ -64,7 +64,8 @@ one sign-in share a `family_id`.
 | `family_expires_at` | timestamptz           | Every token of the sign-in stops at this instant, 30 days after sign-in. Indexed                                      |
 | `used_at`           | timestamptz, nullable | When the token was swapped for its successor                                                                          |
 | `revoked`           | boolean               | True once the family was ended, such as by a sign-out, a password change or reset, or a reuse                         |
-| `claims`            | jsonb, nullable       | What goes into every access token of the family: `amr`                                                                |
+| `claims`            | jsonb, nullable       | What goes into every access token of the family: `amr` and `sid`                                                      |
+| `sid`               | text, nullable        | The sign-in's id, a UUID, copied out of `claims`. The same on every row of the family. Indexed. Not in the docs       |
 
 A family's rows are deleted once `family_expires_at` has passed, whenever
 anyone signs in or refreshes.
@@ -211,8 +212,8 @@ A member holds two tokens:
 
 - **The access token** is a JWT. It goes with every request as
   `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
-  that lifetime in seconds. It holds the member's id and how they signed in
-  (`amr`), and nothing that can change.
+  that lifetime in seconds. It holds the member's id, the sign-in's id
+  (`sid`) and how they signed in (`amr`), and nothing that can change.
 - **The refresh token** is 43 random characters, not a JWT. It goes to two
   routes only, `POST /auth/token/refresh` and `POST /auth/token/revoke`, and
   lasts 7 days. The database keeps a hash of it, never the token.
@@ -232,18 +233,29 @@ same read ends the access token at once, with a 401, when:
 - the password is changed or reset;
 - the account is closed, by the member or by an admin.
 
-**A sign-out does not end the access token.** Signing out this device, signing
-out everywhere and a refresh token used twice all end the refresh tokens at
-once. An access token already handed out works until it expires, up to 15
-minutes. The NestJS docs accept this, and keep access tokens short for that
-reason. A password change or reset and a closed account are different: they
-end the access tokens too, through `JwtAuth`.
+**Ending a sign-in ends its access tokens too.** Every access token carries
+its sign-in's id, `sid`. On every request `JwtAuth` also asks
+`SignInsRepository.isLive` (`src/typeorm/sign-ins.repository.ts`) whether
+that sign-in is still going, beside the member read. So signing out this
+device, signing out everywhere, a refresh token used twice, a password
+change or reset, and a closed account all stop the access tokens on the
+next request, with a 401. A restored account keeps them stopped: the member
+signs in again. This is not in the NestJS docs,
+where an access token works until it expires. It costs one indexed read on
+each signed-in request.
+
+**A password change and the end of its sign-ins are one transaction.**
+`UsersService.updateUser`, `deleteUser` and `restoreUser`, and
+`PasswordResetMailer.updatePassword`, call
+`SignInsRepository.endAllForUser` inside their own transaction. Either the
+change and the end of the sign-ins are both saved, or neither is. Not in the
+docs either.
 
 The refusals come from the packages:
 
 - No token: 401 with `errorCode` `missing_credentials`.
-- A bad, expired or closed-account token: 401 whose `message` says why, and a
-  `WWW-Authenticate` header.
+- A bad, expired, closed-account or signed-out token: 401 whose `message`
+  says why, and a `WWW-Authenticate` header.
 - A refresh token that will not swap: 401 "Refresh token invalid", "expired"
   or "reused". The client sends the member to sign in.
 - A route the member may not call: 403 "Forbidden". A member who is no longer
@@ -275,6 +287,13 @@ is what lets sign-in tell the two apart, and cannot hold whitespace.
 Every failed sign-in answers 401 `BAD_CREDENTIALS` with one message, so the
 response does not say which usernames and emails have an account.
 
+Once the sign-in has started, `TokensController.issue` checks once more,
+with `CredentialsService.stillValid`, that the account is open and
+`passwordChangedAt` has not moved since the password was checked. If it has,
+the new sign-in is ended and the answer is the same 401. This catches a
+password change that lands during the tenth of a second the check takes.
+Not in the docs.
+
 Passwords are hashed with scrypt by the package's `PasswordHasher`. Hashes
 stored before were bcrypt. Those still sign in, and `CredentialsService`
 replaces each with a scrypt hash at that sign-in.
@@ -301,8 +320,9 @@ goes out through `MailProvider` in `src/mail/`, over SMTP with Nodemailer. In
 development the `MAIL_*` defaults send to the Mailpit container, which shows
 every email at http://localhost:8025 and delivers none.
 
-A reset ends every refresh token of the member, and stamps
-`passwordChangedAt`, which ends their access tokens too.
+A reset stores the hash, stamps `passwordChangedAt` and ends every sign-in
+of the member, in one transaction in `PasswordResetMailer.updatePassword`.
+So every refresh token and every access token they held stops.
 
 ### Rate limits
 
