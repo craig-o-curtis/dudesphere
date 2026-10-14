@@ -58,6 +58,12 @@ export function themeFromCookieHeader(header: string): Theme | null {
  * decodes wins. The script does the same, with the decode in its own
  * `try/catch` so a malformed value is skipped and never throws.
  *
+ * It has no function wrapper (the coding standards rule out IIFEs). It is one
+ * `try` block that declares everything with `let` and `const`, which are
+ * scoped to the block even in a classic script, so nothing leaks to `window`.
+ * It must never use `var`, which would leak a global. `theme.spec.ts` checks
+ * both.
+ *
  * It is a fixed string with nothing interpolated. It compares the decoded
  * value with the literals `light` and `dark`, and only ever writes one of
  * those. Any other value, markup and quotes included, is ignored and never
@@ -66,4 +72,4 @@ export function themeFromCookieHeader(header: string): Theme | null {
  * through this script, `themeFromCookieHeader` and Next's parser.
  */
 export const themeInitScript =
-  '(function(){try{var t=null,p=document.cookie.split(/; */);for(var i=0;i<p.length;i++){var s=p[i];if(!s)continue;var j=s.indexOf("=");if(j===-1){if(s==="theme")t="true";continue}if(s.slice(0,j)!=="theme")continue;try{t=decodeURIComponent(s.slice(j+1))}catch(e){}}if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()';
+  'try{let t=null;for(const s of document.cookie.split(/; */)){if(!s)continue;const j=s.indexOf("=");if(j===-1){if(s==="theme")t="true";continue}if(s.slice(0,j)!=="theme")continue;try{t=decodeURIComponent(s.slice(j+1))}catch(e){}}if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}';

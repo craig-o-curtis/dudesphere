@@ -2,11 +2,21 @@ import { RequestCookies } from "next/dist/server/web/spec-extension/cookies";
 
 import { isTheme, THEME_COOKIE, themeFromCookieHeader, themeInitScript } from "./theme";
 
-// Runs the script the way the browser runs the inline <head> script: as plain
-// source text in the page's global scope, not as an imported function.
+// Runs the exact source text the layout inlines, not an imported function.
+// It runs inside a function body, so it can't show a leaked global; the
+// next helper covers that.
 function runInitScript() {
   // oxlint-disable-next-line typescript/no-implied-eval -- the point is to run the exact string the layout inlines
-  new Function(themeInitScript)();
+  const initScript = new Function(themeInitScript);
+  initScript();
+}
+
+// Runs the script in the global scope, as a classic <script> runs. A function
+// body hides a stray `var`; this does not, so a leak shows up on `window`.
+function runInitScriptInGlobalScope() {
+  // oxlint-disable-next-line no-eval -- an indirect eval is the only way to run the string in the global scope, as the browser does
+  const globalEval = eval;
+  globalEval(themeInitScript);
 }
 
 function setCookie(value: string) {
@@ -71,6 +81,25 @@ describe("themeInitScript", () => {
     expect(typeof themeInitScript).toBe("string");
     expect(themeInitScript).not.toContain("${");
     expect(themeInitScript).not.toMatch(/<\/script/i);
+  });
+
+  it("has no function wrapper or function of any kind", () => {
+    expect(themeInitScript).not.toMatch(/\bfunction\b/);
+    expect(themeInitScript).not.toContain("=>");
+  });
+
+  it("declares no var, so nothing can leak to window", () => {
+    expect(themeInitScript).not.toMatch(/\bvar\b/);
+  });
+
+  it("leaves no new property on window when run in the global scope", () => {
+    setCookie("theme=dark; path=/");
+    const before = new Set(Object.keys(window));
+
+    runInitScriptInGlobalScope();
+
+    expect(Object.keys(window).filter((key) => !before.has(key))).toEqual([]);
+    expect(html.getAttribute("data-theme")).toBe("dark");
   });
 
   it("reads the cookie named by THEME_COOKIE", () => {
