@@ -36,7 +36,7 @@ Part of the Lebowski epic. See [index.md](../index.md). Realm: Repo. Phase 0. Bl
 
 ## Done when
 
-- [ ] `packages/config/package.json` and `tsconfig.base.json` committed
-- [ ] `apps/api/tsconfig.json` extends the base and drops the shared options
-- [ ] `pnpm typecheck`, `pnpm lint` and the API build pass
-- [ ] `context/fullstack-architecture.md` names the base file
+- [x] `packages/config/package.json` and `tsconfig.base.json` committed
+- [x] `apps/api/tsconfig.json` extends the base and drops the shared options
+- [x] `pnpm typecheck`, `pnpm lint` and the API build pass
+- [x] `context/fullstack-architecture.md` names the base file

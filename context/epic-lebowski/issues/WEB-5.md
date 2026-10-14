@@ -10,41 +10,47 @@ The frontend plan chose Nuxt and was never built. Craig reversed that on 2026-10
 
 ## Scope
 
-**Scaffold** from the repo root:
+**Built on 2026-10-14** in commit `5acc663`, on branch `chore/fullstack-setup`. This
+section records what landed, and where it differs from the first plan.
+
+**Scaffold**, run from `apps/` with create-next-app 16.4.0:
 
 ```sh
-pnpm dlx create-next-app@latest apps/web --typescript --app --src-dir --no-tailwind --no-linter \
-  --cache-components --react-compiler --use-pnpm --no-agent-feedback --import-alias "@/*" \
-  --skip-install --disable-git
+pnpm dlx create-next-app@16.4.0 web --typescript --app --src-dir --no-tailwind --no-eslint \
+  --no-biome --react-compiler --cache-components --import-alias "@/*" --use-pnpm \
+  --skip-install --disable-git --no-agent-feedback --yes
 ```
 
-**Reconcile** the generated files:
+**Reconciled**:
 
 - `apps/web/package.json`:
-  - name `@dudesphere/web`, `private: true`, `type: module`
-  - scripts: `dev: next dev -p 3001`, `build: next build`, `start: next start -p 3001`, `typecheck: next typegen && tsc --noEmit`, no `lint`
-  - dependencies: `next@16.4.x` (the patched release from the 2026-10-14 security advisory), `react@19.3`, `react-dom@19.3`, `@northguild/gmt`, `server-only`, `@dudesphere/api-types: workspace:*`
-  - devDependencies: `babel-plugin-react-compiler`, `@types/node@^26`, `@types/react`, `@types/react-dom`, `typescript@^6`
+  - name `@dudesphere/web`, `private: true`, `engines.node` `^26`. No `type`: Next reads its config either way.
+  - scripts: `dev: next dev -p 3001`, `build: next build`, `start: next start -p 3001`, `typecheck: next typegen && tsc --noEmit`, `test: vitest run`. No `lint`: the root runs it.
+  - dependencies: `next` 16.4.0, `react` and `react-dom` 19.3.0, `@northguild/gmt`, `server-only`, `@tanstack/react-query`, `motion`, `@dudesphere/lane-engine: workspace:*`.
+  - devDependencies: `@dudesphere/api-types: workspace:*` (types only), `babel-plugin-react-compiler`, `@types/node@^26`, `@types/react`, `@types/react-dom`, `typescript@^6`, and the test stack: `vitest`, `jsdom`, `@vitejs/plugin-react`, `vite-tsconfig-paths`, `@testing-library/react`, `@testing-library/dom`, `@testing-library/jest-dom`.
+- The scaffold's own `pnpm-workspace.yaml` and its `packageManager: pnpm@10` pin are removed: the root owns both.
 - `apps/web/tsconfig.json` extends `../../packages/config/tsconfig.base.json` and keeps Next's own options (`jsx`, `moduleResolution: bundler`, the `next` plugin, `paths` for `@/*`).
 - `apps/web/next.config.ts`:
 
   ```ts
   const nextConfig: NextConfig = {
     cacheComponents: true,
+    partialPrefetching: true,
     reactCompiler: true,
-    agentRules: false,
-    experimental: { agentUpgrade: false },
-    transpilePackages: ["@dudesphere/api-types", "@dudesphere/lane-engine"],
+    experimental: { agentFeedback: false },
   };
   ```
 
+  **No `transpilePackages`.** `lane-engine` is built to plain JavaScript in `dist/`, and `api-types` is types only, so Next needs no help with either. Add it only if a package's `exports` ever points at `.ts` source.
+
+- **`apps/web/AGENTS.md` stays.** `next dev` writes its block back whenever the file is missing or changed, so deleting it only leaves a change that keeps coming back. The file now opens with a pointer to the root `AGENTS.md`, then Next's block, which sends agents to the docs that ship in `node_modules/next/dist/docs`. `agentRules` stays on for that reason.
+- Deleted: `apps/web/README.md`, the Next and Vercel logos in `public/`, and the scaffold's boilerplate page. The scaffold wrote no ESLint files, because of `--no-eslint`.
 - `apps/web/.oxlintrc.json`: extends `../../.oxlintrc.json`; `plugins: ["import", "react", "jsx-a11y", "nextjs"]`; `env: { browser: true, node: true }`; `ignorePatterns: [".next/**", "next-env.d.ts"]`.
-- Delete the generated ESLint files, `apps/web/AGENTS.md` (the root one is the only one) and `apps/web/README.md`.
-- `apps/web/.env.example`: `API_URL=http://localhost:3000`.
-- `apps/api/.env.example`: the `FRONTEND_URL` note says `http://localhost:3001`.
-- `.vscode/settings.json`: add `typescriptreact` and `css` to the oxc formatter's languages.
-- `apps/web/src/app/layout.tsx` and `page.tsx`: a placeholder page that renders with no API call. WEB-6 replaces the layout; FEED-12 replaces the page.
-- `pnpm format` once, then one `next build` before committing, because Next edits `tsconfig.json` on its first run.
+- `apps/web/.env.example`: `API_URL=http://localhost:3000`. `apps/web/.gitignore` keeps `.env.example` in git.
+- `apps/api`: the `FRONTEND_URL` default moves to `http://localhost:3001`, in `env.validate.ts`, its spec and `.env.example`.
+- `.vscode/settings.json`: `typescriptreact` and `css` use the oxc formatter.
+- `apps/web/src/app/page.tsx`: a placeholder that imports `FRAMES_PER_GAME` from `lane-engine`, which proves Next builds a workspace package. `page.spec.tsx` tests it. WEB-6 replaces the layout; FEED-12 replaces the page.
+- `apps/web/vitest.config.ts` and `vitest.setup.ts`: jsdom, Testing Library matchers, `root: import.meta.dirname`.
 
 ## Design notes
 
@@ -66,15 +72,21 @@ The placeholder page is fully static: no request-time API, no data. `next build`
 - `pnpm --filter @dudesphere/web typecheck` passes.
 - `pnpm lint` from the root lints `apps/web`. A scratch `new Date()` in `apps/web/src/app/page.tsx` fails it. Revert.
 - `pnpm format:check` passes.
-- `apps/web/AGENTS.md`, `README.md` and any `eslint.config.*` are absent.
-- The installed `next` version is the patched 16.4.x.
+- `apps/web/README.md` and any `eslint.config.*` are absent. `apps/web/AGENTS.md` opens with the pointer to the root file.
+- `pnpm --filter @dudesphere/web test` passes.
 
 ## Done when
 
-- [ ] `apps/web` scaffolded and reconciled as above
-- [ ] `next.config.ts` with Cache Components, React Compiler and `transpilePackages`
-- [ ] `apps/web/.oxlintrc.json`; gmt rules fire in `apps/web`
-- [ ] `pnpm dev` starts both apps
-- [ ] CI `web` job green (REPO-4)
-- [ ] `DEVELOPMENT.md`, `AGENTS.md` and `fullstack-architecture.md` describe `apps/web`
-- [ ] Baseline row in `rendering-strategies.md`
+- [x] `apps/web` scaffolded and reconciled as above
+- [x] `next.config.ts` with Cache Components and React Compiler
+- [x] `apps/web/.oxlintrc.json`; gmt rules fire in `apps/web`
+- [x] `pnpm dev` starts both apps
+- [x] CI `web` job green (REPO-4)
+- [x] `DEVELOPMENT.md`, `AGENTS.md` and `fullstack-architecture.md` describe `apps/web`
+- [x] Baseline row in `rendering-strategies.md`
+
+## Follow-up
+
+Next.js announced an out-of-band security release on 2026-10-14. On that day
+16.4.0 was the newest version on npm. Move `next` to the patched 16.4.x as soon as
+it ships, and run this story's verification again.

@@ -560,6 +560,25 @@ these rules leaves rows behind on every run.
 - **CI runs the same suites** against empty databases that it throws away. See
   "Continuous Integration" in the [README](README.md).
 
+## Continuous Integration
+
+GitHub Actions runs `.github/workflows/ci.yml` on every pull request into `main`
+and every push to `main`. Its four jobs run in parallel:
+
+| Job                                                    | What it runs                                                                                                                                          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Format, lint, and the API's typecheck, test, build** | `pnpm format:check` and `pnpm lint` over the whole repo. Then, for the API and the packages it uses: build the packages, `typecheck`, `test`, `build` |
+| **Web app typecheck, test, build**                     | Restores Next's build cache, builds the packages the web app uses, then the web app's `typecheck`, `test` and `build`. No database and no API         |
+| **Migrations apply, match entities, and roll back**    | A throwaway Postgres 18, then the API's `migration:run`, `migration:check`, `migration:revert`, `migration:run` and `migration:check`                 |
+| **End-to-end against live databases**                  | A throwaway Postgres 18 and MongoDB 8, then the API's `migration:run`, `seed:run` and `test:e2e`                                                      |
+
+Each job installs with `pnpm install --frozen-lockfile`, so a lockfile that does
+not match the `package.json` files fails every job. Commit `pnpm-lock.yaml`
+after every `pnpm add` or `pnpm install`.
+
+`main` has no branch protection today, so no job is a required check. When
+protection is turned on, require all four.
+
 ## Troubleshooting
 
 ### "role does not exist" error

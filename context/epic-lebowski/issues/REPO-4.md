@@ -40,8 +40,8 @@ REPO-1 pointed the three existing jobs at `apps/api`. The web app (WEB-5) has no
 
 ## Done when
 
-- [ ] `checks`, `migrations` and `e2e` use workspace filters
-- [ ] `web` job with cache, typecheck and build
-- [ ] All four jobs green on the `chore/fullstack-setup` PR
-- [ ] `web` added to the required checks after merge
-- [ ] `DEVELOPMENT.md` lists what each job runs
+- [x] `checks`, `migrations` and `e2e` use workspace filters
+- [x] `web` job with cache, typecheck and build
+- [x] All four jobs green on the `chore/fullstack-setup` PR
+- [x] `main` has no branch protection, so there are no required checks. `DEVELOPMENT.md` says to require all four jobs when protection is turned on
+- [x] `DEVELOPMENT.md` lists what each job runs

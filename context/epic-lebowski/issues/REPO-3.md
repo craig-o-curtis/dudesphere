@@ -46,9 +46,19 @@ The web app will read users, profiles, abidings, hashtags, token pairs and error
 - Add a value to `ErrorCode` without adding it to `ApiErrorCode`. The typecheck fails. Revert.
 - `apps/api/dist/` holds no file from `packages/api-types`.
 
+## What the verification found
+
+The first version of the check only tested assignability both ways. Renaming
+`displayName` to `name` in `AbidingResponseDto` passed it, because the field is
+optional on both sides and each shape still accepts the other. The check now uses
+`Matches<A, B>`, which also needs the same field names. All three drift tests fail
+the build as they should: that rename, an extra `ErrorCode` value, and renaming the
+optional `imageUrl` in the shared type.
+
 ## Done when
 
-- [ ] `packages/api-types` with `package.json` and `index.d.ts`
-- [ ] `apps/api/src/shared/api-types.contract.ts` covers every exported type
-- [ ] Both drift checks above fail as expected, then pass after the revert
-- [ ] `context/fullstack-architecture.md` says how to add a type
+- [x] `packages/api-types` with `package.json` and `index.d.ts`
+- [x] `apps/api/src/shared/api-types.contract.ts` covers every exported type
+- [x] Both drift checks above fail as expected, then pass after the revert
+- [x] `context/fullstack-architecture.md` says how to add a type
+- [x] The check also compares field names, so a renamed optional field fails it

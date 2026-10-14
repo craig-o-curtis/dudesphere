@@ -139,11 +139,25 @@ The file is `.d.ts` rather than `.ts` because a `.ts` source outside
 `apps/api` would break the API's `rootDir: "."`.
 
 **The drift check.** `apps/api/src/shared/api-types.contract.ts` compares each
-DTO with its shared type at the type level, through a `Same<A, B>` helper that
-needs `A extends B` and `B extends A`. `UserResponseDto` is compared without
-`password` and `deletedAt`. Enums are compared through `` `${Enum}` ``. The file
-has no runtime code. A change to a DTO that the shared type does not match fails
-`pnpm typecheck` and `nest build`.
+DTO with its shared type at the type level, through a `Matches<A, B>` helper. It
+needs `A extends B`, `B extends A`, and the same field names on both sides. The
+names matter: a renamed optional field passes the first two tests on its own.
+`UserResponseDto` is compared without `password` and `deletedAt`. Enums are
+compared through `` `${Enum}` ``. The file has no runtime code. A change to a DTO
+that the shared type does not match fails `pnpm typecheck` and `nest build`.
+
+**How to add a shared type.** When the API gains a response the web app reads:
+
+1. Write the response DTO in `apps/api` as usual.
+2. Add the matching type to `packages/api-types/index.d.ts`, with a one-line
+   comment naming the route that answers with it. Use plain types: string
+   unions, not enums, and ISO strings for every timestamp.
+3. Add one line to `apps/api/src/shared/api-types.contract.ts`:
+   `export type XMatches = Expect<Matches<XResponseDto, XResponse>>;`. For an
+   enum or a union of strings, use `Same` with `` `${Enum}` `` instead.
+4. Run `pnpm typecheck`. Then rename one field on either side, check that the
+   typecheck fails, and put it back.
+5. Add a row to the table above.
 
 Generating the types from the classes stays deferred. The drift check makes the
 hand-written copy safe enough.

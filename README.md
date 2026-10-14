@@ -192,18 +192,19 @@ Don't use `docker compose down -v` for this: `-v` deletes every volume, Mongo's 
 
 ## Continuous Integration
 
-GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has three jobs, which run in parallel:
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every pull request into `main` and every push to `main`. A newer push to the same branch cancels the run that's still in progress. It has four jobs, which run in parallel. [DEVELOPMENT.md](DEVELOPMENT.md) says what each one runs.
 
-| Job                                                 | Steps                                                                                                                               |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Format, lint, typecheck, test, build**            | `format:check` → `lint` → `typecheck` → `test` → `build`                                                                            |
-| **Migrations apply, match entities, and roll back** | Starts a throwaway Postgres 18, then `migration:run` → `migration:check` → `migration:revert` → `migration:run` → `migration:check` |
-| **End-to-end against live databases**               | Starts a throwaway Postgres 18 and MongoDB 8, then `migration:run` → `seed:run` → `test:e2e`                                        |
+| Job                                                    | Covers                                         |
+| ------------------------------------------------------ | ---------------------------------------------- |
+| **Format, lint, and the API's typecheck, test, build** | The whole repo's format and lint, then the API |
+| **Web app typecheck, test, build**                     | The Next.js app, with no database              |
+| **Migrations apply, match entities, and roll back**    | The API's migrations on an empty Postgres      |
+| **End-to-end against live databases**                  | The API's e2e suite on Postgres and MongoDB    |
 
 To catch failures before pushing, run the same commands locally:
 
 ```bash
-pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
+pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
 - **Versions** are pinned in two places: `.node-version` sets the Node version, and `packageManager` in the root `package.json` sets the pnpm version. Both CI and fnm read `.node-version`, so one file covers local and CI. To upgrade either, change it there.
