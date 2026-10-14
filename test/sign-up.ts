@@ -43,7 +43,7 @@ export function signUpBody(overrides: Partial<SignUpBody> = {}): SignUpBody {
   return {
     username: `e2e-${tag}`,
     email: `e2e-${tag}@example.com`,
-    password: "secret123",
+    password: "a-long-secret-123",
     ...overrides,
     profile: { displayName: `e2e ${tag}`, ...overrides.profile },
   };

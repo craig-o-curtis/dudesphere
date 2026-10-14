@@ -30,7 +30,7 @@ function buildDto(overrides: Partial<CreateUserDto>): CreateUserDto {
   return Object.assign(new CreateUserDto(), {
     username: "dude",
     email: "dude@example.com",
-    password: "secret1",
+    password: "a-long-secret-1",
     // An instance, not a plain object: Object.assign runs no @Type, and
     // @ValidateNested refuses a nested value that is not a class instance.
     profile: Object.assign(new CreateProfileDto(), { displayName: "The Dude" }),
@@ -129,7 +129,7 @@ describe("CreateUserDto", () => {
   // through plainToInstance, as a request body does, so @Type builds the
   // nested class.
   describe("profile", () => {
-    const account = { username: "dude", email: "dude@example.com", password: "secret1" };
+    const account = { username: "dude", email: "dude@example.com", password: "a-long-secret-1" };
 
     function invalidFields(body: object): string[] {
       return validateSync(plainToInstance(CreateUserDto, body)).map((error) => error.property);
@@ -167,8 +167,10 @@ describe("CreateUserDto", () => {
       expect(passwordErrors("é".repeat(128))).toEqual([]);
     });
 
-    it("still rejects fewer than 6 characters", () => {
-      expect(passwordErrors("abcde")).not.toEqual([]);
+    // 12 at least, as in the NestJS docs.
+    it("accepts 12 characters and rejects 11", () => {
+      expect(passwordErrors("a".repeat(12))).toEqual([]);
+      expect(passwordErrors("a".repeat(11))).not.toEqual([]);
     });
   });
 });

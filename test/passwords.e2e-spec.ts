@@ -4,6 +4,7 @@ import {
   AUTHENTICATION_MODULE_OPTIONS,
   type AuthenticationModuleOptions,
   JwtSigner,
+  PasswordHasher,
 } from "@nestjs/authentication";
 import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
@@ -84,17 +85,17 @@ describe("Passwords (e2e)", () => {
   describe("sign-up", () => {
     // PasswordHasher's format: scrypt, with the cost it was made at.
     it("stores a scrypt hash, not the password", async () => {
-      const { userId } = await register("secret123");
+      const { userId } = await register("a-long-secret-123");
 
       const stored = await storedPassword(userId);
 
-      expect(stored).not.toContain("secret123");
+      expect(stored).not.toContain("a-long-secret-123");
       expect(stored).toMatch(/^\$scrypt\$ln=17,r=8,p=1\$/);
     });
 
     it("gives two users with the same password different hashes", async () => {
-      const first = await register("secret123");
-      const second = await register("secret123");
+      const first = await register("a-long-secret-123");
+      const second = await register("a-long-secret-123");
 
       expect(await storedPassword(first.userId)).not.toBe(await storedPassword(second.userId));
     });
@@ -113,27 +114,27 @@ describe("Passwords (e2e)", () => {
 
   describe("login", () => {
     it("accepts the right password and rejects a wrong one", async () => {
-      const { email } = await register("secret123");
+      const { email } = await register("a-long-secret-123");
 
-      const ok = await login(email, "secret123").expect(200);
+      const ok = await login(email, "a-long-secret-123").expect(200);
       expect(ok.body).toHaveProperty("accessToken");
 
-      await login(email, "secret124").expect(401);
+      await login(email, "a-long-secret-124").expect(401);
     });
 
     // Sending the stored hash as the password must not work. If it did, a
     // leaked table would be as good as a list of passwords.
     it("rejects the stored hash used as a password", async () => {
-      const { email, userId } = await register("secret123");
+      const { email, userId } = await register("a-long-secret-123");
 
       await login(email, await storedPassword(userId)).expect(401);
     });
 
     it("gives the same answer for an unknown email as for a wrong password", async () => {
-      const { email } = await register("secret123");
+      const { email } = await register("a-long-secret-123");
 
-      const wrongPassword = await login(email, "secret124").expect(401);
-      const unknownEmail = await login("e2e-nobody@example.com", "secret123").expect(401);
+      const wrongPassword = await login(email, "a-long-secret-124").expect(401);
+      const unknownEmail = await login("e2e-nobody@example.com", "a-long-secret-123").expect(401);
 
       expect(unknownEmail.body).toEqual(wrongPassword.body);
     });
@@ -142,23 +143,42 @@ describe("Passwords (e2e)", () => {
     // the first sign-in replaces the hash with a scrypt one, since only then
     // is the password at hand.
     it("signs in with an old bcrypt hash, and replaces it with scrypt", async () => {
-      const { email, userId } = await register("secret123");
-      const oldHash = await bcrypt.hash("secret123", 4);
+      const { email, userId } = await register("a-long-secret-123");
+      const oldHash = await bcrypt.hash("a-long-secret-123", 4);
       await dataSource.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
         oldHash,
         userId,
       ]);
 
-      await login(email, "secret124").expect(401);
+      await login(email, "a-long-secret-124").expect(401);
       expect(await storedPassword(userId)).toBe(oldHash);
 
-      await login(email, "secret123").expect(200);
+      await login(email, "a-long-secret-123").expect(200);
       expect(await storedPassword(userId)).toMatch(/^\$scrypt\$/);
-      await login(email, "secret123").expect(200);
+      await login(email, "a-long-secret-123").expect(200);
     });
   });
 
   describe("sign-up password length", () => {
+    // 12 at least, as in the NestJS docs.
+    it("accepts 12 characters and rejects 11 with a 400", async () => {
+      expect((await register("a".repeat(12))).status).toBe(201);
+      expect((await register("a".repeat(11))).status).toBe(400);
+    });
+
+    // Sign-in sets no minimum. A member whose password was set when 6 was
+    // enough still signs in with it.
+    it("still signs in a member whose password is shorter than 12", async () => {
+      const { email, userId } = await register("a-long-secret-123");
+      const shortHash = await app.get(PasswordHasher).hash("short1");
+      await dataSource.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
+        shortHash,
+        userId,
+      ]);
+
+      await login(email, "short1").expect(200);
+    });
+
     it("accepts 128 characters, and that password then signs in", async () => {
       const password = "a".repeat(128);
       const { email, status } = await register(password);
@@ -186,8 +206,8 @@ describe("Passwords (e2e)", () => {
 
   describe("changing your own password", () => {
     async function signUp() {
-      const { email } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(200);
+      const { email } = await register("a-long-secret-123");
+      const { body } = await login(email, "a-long-secret-123").expect(200);
       return { email, token: (body as { accessToken: string }).accessToken };
     }
 
@@ -198,34 +218,35 @@ describe("Passwords (e2e)", () => {
     it("is refused with a 400 when the current password is not sent", async () => {
       const { email, token } = await signUp();
 
-      await changePassword(token, { password: "secret456" }).expect(400);
+      await changePassword(token, { password: "a-long-secret-456" }).expect(400);
 
-      await login(email, "secret123").expect(200);
+      await login(email, "a-long-secret-123").expect(200);
     });
 
     it("is refused with a 403 when the current password is wrong", async () => {
       const { email, token } = await signUp();
 
-      await changePassword(token, { password: "secret456", currentPassword: "secret999" }).expect(
-        403,
-      );
+      await changePassword(token, {
+        password: "a-long-secret-456",
+        currentPassword: "a-long-secret-999",
+      }).expect(403);
 
-      await login(email, "secret123").expect(200);
-      await login(email, "secret456").expect(401);
+      await login(email, "a-long-secret-123").expect(200);
+      await login(email, "a-long-secret-456").expect(401);
     });
 
     it("works with the right current password, and the old one stops working", async () => {
       const { email, token } = await signUp();
 
       const response = await changePassword(token, {
-        password: "secret456",
-        currentPassword: "secret123",
+        password: "a-long-secret-456",
+        currentPassword: "a-long-secret-123",
       }).expect(200);
 
       expect(response.body).not.toHaveProperty("password");
       expect(response.body).not.toHaveProperty("currentPassword");
-      await login(email, "secret456").expect(200);
-      await login(email, "secret123").expect(401);
+      await login(email, "a-long-secret-456").expect(200);
+      await login(email, "a-long-secret-123").expect(401);
     });
 
     // Whoever holds a token from before the change logged in with the old
@@ -236,9 +257,10 @@ describe("Passwords (e2e)", () => {
       const earlier = signedAMinuteEarlier(app, token);
       await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
 
-      await changePassword(token, { password: "secret456", currentPassword: "secret123" }).expect(
-        200,
-      );
+      await changePassword(token, {
+        password: "a-long-secret-456",
+        currentPassword: "a-long-secret-123",
+      }).expect(200);
 
       const refused = await request(app.getHttpServer())
         .get("/users/me")
@@ -248,7 +270,7 @@ describe("Passwords (e2e)", () => {
       expect(refused.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
 
       // The member logs in again with the new password, and that token works.
-      const { body } = await login(email, "secret456").expect(200);
+      const { body } = await login(email, "a-long-secret-456").expect(200);
       await request(app.getHttpServer())
         .get("/users/me")
         .set(bearer((body as { accessToken: string }).accessToken))
@@ -277,8 +299,8 @@ describe("Passwords (e2e)", () => {
 
   describe("the access token", () => {
     it("carries an audience, an issuer and an expiry", async () => {
-      const { email } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(200);
+      const { email } = await register("a-long-secret-123");
+      const { body } = await login(email, "a-long-secret-123").expect(200);
 
       const claims: Record<string, unknown> = claimsOf(
         (body as { accessToken: string }).accessToken,
@@ -293,8 +315,8 @@ describe("Passwords (e2e)", () => {
 
     // Signed with this app's own secret, so only the audience is wrong.
     it("is rejected when it was issued for another audience", async () => {
-      const { email, userId } = await register("secret123");
-      const { body } = await login(email, "secret123").expect(200);
+      const { email, userId } = await register("a-long-secret-123");
+      const { body } = await login(email, "a-long-secret-123").expect(200);
       const forged = new JwtSigner({ ...accessTokenOptions, audience: "some-other-app" }).sign({
         sub: String(userId),
       });

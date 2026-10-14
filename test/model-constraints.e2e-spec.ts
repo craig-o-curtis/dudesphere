@@ -95,7 +95,7 @@ describe("Model constraints (e2e)", () => {
     it("PATCH /users/me rejects null for password", async () => {
       const { body } = await patch("/users/me", {
         password: null,
-        currentPassword: "secret123",
+        currentPassword: "a-long-secret-123",
       }).expect(400);
 
       expectRejectedField(body, "password");
@@ -103,7 +103,7 @@ describe("Model constraints (e2e)", () => {
 
     it("PATCH /users/me rejects null for currentPassword", async () => {
       const { body } = await patch("/users/me", {
-        password: "secret456",
+        password: "a-long-secret-456",
         currentPassword: null,
       }).expect(400);
 

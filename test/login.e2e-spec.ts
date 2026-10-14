@@ -25,7 +25,7 @@ describe("Login (e2e)", () => {
   const tag = randomUUID().slice(0, 8);
   const username = `e2e-${tag}`;
   const email = `e2e-${tag}@example.com`;
-  const password = "secret123";
+  const password = "a-long-secret-123";
   let userId: number;
 
   function login(identifier: unknown, withPassword: string = password) {

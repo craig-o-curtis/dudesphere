@@ -38,7 +38,10 @@ export class CreateUserDto {
 
   @IsString()
   @IsNotEmpty()
-  @MinLength(6)
+  // 12 characters at least, as in the NestJS docs. Length is what makes a
+  // password hard to guess. Sign-in sets no minimum, so a member whose
+  // password was set under the old rule of 6 still signs in.
+  @MinLength(12)
   // 128 characters at most, as in the NestJS docs. scrypt reads the whole
   // password, so there is no hidden cut-off as bcrypt's 72 bytes was. The
   // limit only keeps a request from making the server hash a huge string.
