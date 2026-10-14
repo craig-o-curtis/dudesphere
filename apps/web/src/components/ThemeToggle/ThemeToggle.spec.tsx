@@ -94,8 +94,19 @@ describe("ThemeToggle", () => {
     fireEvent.click(dark());
     expect(document.documentElement).not.toHaveAttribute("data-theme");
     expect(dark()).toHaveAttribute("aria-pressed", "false");
-    expect(vi.mocked(setTheme)).toHaveBeenCalledWith("dark");
+    expect(vi.mocked(setTheme)).toHaveBeenCalledWith("system");
     await act(async () => pending.resolve(null));
+  });
+
+  it("sends the unpressed button's own theme and system for the pressed one", async () => {
+    vi.mocked(setTheme).mockResolvedValueOnce("light");
+    render(<ThemeToggle current="dark" />);
+    fireEvent.click(light());
+    expect(vi.mocked(setTheme)).toHaveBeenLastCalledWith("light");
+    await act(async () => {});
+    fireEvent.click(light());
+    expect(vi.mocked(setTheme)).toHaveBeenLastCalledWith("system");
+    await act(async () => {});
   });
 
   it("adopts a null result: nothing pressed and no data-theme", async () => {
@@ -150,7 +161,7 @@ describe("ThemeToggle", () => {
       expect(document.documentElement).toHaveAttribute("data-theme", "light");
     });
 
-    it("adopts a cookie that changed even though the call failed (cut response)", async () => {
+    it("adopts a cookie that changed even though the call failed (cut response), with no message", async () => {
       vi.mocked(setTheme).mockRejectedValue(new Error("cut"));
       vi.mocked(themeFromCookieHeader).mockReturnValue("dark");
       render(<ThemeToggle current={null} />);
@@ -158,6 +169,17 @@ describe("ThemeToggle", () => {
       await act(async () => {});
       expect(dark()).toHaveAttribute("aria-pressed", "true");
       expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    });
+
+    it("shows no message when a cut-off clear landed (cookie matches the press)", async () => {
+      vi.mocked(setTheme).mockRejectedValue(new Error("cut"));
+      vi.mocked(themeFromCookieHeader).mockReturnValue(null);
+      render(<ThemeToggle current="dark" />);
+      fireEvent.click(dark());
+      await act(async () => {});
+      expect(dark()).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
     });
 
     it("shows no data-theme when the cookie holds no theme", async () => {
@@ -210,6 +232,70 @@ describe("ThemeToggle", () => {
       fireEvent.click(dark());
       await act(async () => {});
       expect(dark()).toHaveAccessibleName("Dark");
+    });
+  });
+
+  describe("a tab that did not press last", () => {
+    it("catches up with the cookie when the tab becomes visible", () => {
+      vi.mocked(themeFromCookieHeader).mockReturnValue("dark");
+      render(<ThemeToggle current={null} />);
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(dark()).toHaveAttribute("aria-pressed", "true");
+      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    });
+
+    it("catches up with the cookie when the window gets focus", () => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      vi.mocked(themeFromCookieHeader).mockReturnValue(null);
+      render(<ThemeToggle current="dark" />);
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(dark()).toHaveAttribute("aria-pressed", "false");
+      expect(document.documentElement).not.toHaveAttribute("data-theme");
+    });
+
+    it("leaves the screen alone while a press is in flight", async () => {
+      const pending = deferred();
+      vi.mocked(setTheme).mockReturnValue(pending.promise);
+      render(<ThemeToggle current={null} />);
+      fireEvent.click(light());
+      vi.mocked(themeFromCookieHeader).mockReturnValue("dark");
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(light()).toHaveAttribute("aria-pressed", "true");
+      await act(async () => pending.resolve("light"));
+    });
+
+    it("removes its listeners on unmount", () => {
+      const { unmount } = render(<ThemeToggle current={null} />);
+      unmount();
+      vi.mocked(themeFromCookieHeader).mockClear();
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+      expect(vi.mocked(themeFromCookieHeader)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("the fallback placeholder", () => {
+    // jsdom does not block focus on inert content, so the e2e suite checks
+    // that Tab skips the placeholder. Here we check the attribute.
+    it("is inert", () => {
+      const { container } = render(<ThemeToggle current={null} pending />);
+      expect(container.firstElementChild).toHaveAttribute("inert");
+    });
+
+    it("is not inert when it is the real toggle", () => {
+      const { container } = render(<ThemeToggle current={null} />);
+      expect(container.firstElementChild).not.toHaveAttribute("inert");
+    });
+
+    it("adds no script", () => {
+      const { container } = render(<ThemeToggle current={null} pending />);
+      expect(container.querySelector("script")).toBeNull();
     });
   });
 

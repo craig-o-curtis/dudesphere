@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setTheme } from "@/lib/actions/theme";
 import { themeFromCookieHeader, type Theme } from "@/lib/theme";
@@ -51,11 +51,19 @@ function applyToPage(theme: Theme | null) {
  * page has hydrated does nothing. After that, a press updates the screen at
  * once, calls the Server Action, and then adopts the theme the server says is
  * saved (`null` when the cookie is gone). The server decides what a press
- * means, so the screen ends up matching the cookie. If the call fails, the
- * screen shows the theme in the cookie (the call can fail after the server
- * set the cookie, so the cookie is the truth) and a status line says the save
- * failed. The line shows only when the newest press's call rejects, and the
- * next press clears it.
+ * means, so the screen ends up matching the cookie. A press sends what the
+ * screen showed at press time: the button's own theme if it was not pressed,
+ * `system` if it was. If the call fails, the screen shows the theme in the
+ * cookie (the call can fail after the server set the cookie, so the cookie is
+ * the truth). A status line says the save failed only when that cookie does
+ * not match what the press asked for. The next press clears it.
+ *
+ * A tab that did not press last catches up with the cookie when it becomes
+ * visible or the window gets focus, unless a press is in flight.
+ *
+ * The fallback root is `inert`: focus can never land on a placeholder button,
+ * so nothing is lost when the real toggle replaces it. `aria-disabled` stays
+ * on the buttons too, as a second guard (the handler also ignores presses).
  *
  * Until the page has hydrated the buttons are `aria-disabled` and do nothing,
  * so the served HTML does not look live.
@@ -74,6 +82,7 @@ export function ThemeToggle({ current, pending = false }: ThemeToggleProps) {
     setShown(current);
   }
   const newestPress = useRef(0);
+  const inFlight = useRef(0);
   const [failed, setFailed] = useState(false);
   const hydrated = useHydrated();
   const disabled = pending || !hydrated;
@@ -88,6 +97,33 @@ export function ThemeToggle({ current, pending = false }: ThemeToggleProps) {
     }
   }, [shown]);
 
+  // Catch up with the cookie when this tab comes back to the front.
+  // The catch-up runs on window focus, so a click straight into a stale window
+  // may act on the caught-up state rather than the one the member saw. This is
+  // accepted: the screen shows the saved theme before the click lands, and the
+  // result always matches the cookie.
+  useEffect(() => {
+    if (disabled) {
+      return;
+    }
+    function refresh() {
+      if (document.visibilityState === "hidden" || inFlight.current > 0) {
+        return;
+      }
+      const fromCookie = themeFromCookieHeader(document.cookie);
+      if (fromCookie !== shown) {
+        applyToPage(fromCookie);
+        setShown(fromCookie);
+      }
+    }
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [disabled, shown]);
+
   async function choose(theme: Theme) {
     if (disabled) {
       return;
@@ -99,21 +135,23 @@ export function ThemeToggle({ current, pending = false }: ThemeToggleProps) {
     setShown(guess);
 
     let saved: Theme | null;
+    inFlight.current += 1;
     try {
-      saved = await setTheme(theme);
+      saved = await setTheme(shown === theme ? "system" : theme);
     } catch {
       // The call failed, but the server may still have changed the cookie
       // (the connection can break after the headers). Show what the cookie
-      // holds, unless a newer press has taken over. A failed middle press can
-      // change what the next press means, because the server decides from
-      // the cookie.
+      // holds, unless a newer press has taken over. Say so only when the
+      // cookie is not what this press asked for.
       if (press === newestPress.current) {
         const fromCookie = themeFromCookieHeader(document.cookie);
         applyToPage(fromCookie);
         setShown(fromCookie);
-        setFailed(true);
+        setFailed(fromCookie !== guess);
       }
       return;
+    } finally {
+      inFlight.current -= 1;
     }
     if (press !== newestPress.current) {
       return;
@@ -123,7 +161,7 @@ export function ThemeToggle({ current, pending = false }: ThemeToggleProps) {
   }
 
   return (
-    <div className={styles.toggle} data-theme-toggle>
+    <div className={styles.toggle} data-theme-toggle inert={pending}>
       <fieldset className={styles.group}>
         <legend className={styles.legend}>Theme</legend>
         {CHOICES.map(({ theme, label }) => {
