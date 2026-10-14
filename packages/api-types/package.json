@@ -1,0 +1,24 @@
+{
+  "name": "@dudesphere/api-types",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The JSON shapes the API answers with, as TypeScript types. Types only: no runtime code, no decorators.",
+  "license": "UNLICENSED",
+  "files": [
+    "index.d.ts"
+  ],
+  "type": "module",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

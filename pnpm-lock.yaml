@@ -251,6 +251,9 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(mongodb@7.6.0)(pg@8.23.0)(supports-color@8.1.1)(ts-node@10.9.2(@swc/core@1.16.2)(@types/node@26.6.3)(typescript@6.0.3))
     devDependencies:
+      '@dudesphere/api-types':
+        specifier: workspace:*
+        version: link:../../packages/api-types
       '@nestjs/cli':
         specifier: ^12.0.0
         version: 12.0.3(@swc/core@1.16.2)(@types/node@26.6.3)(prettier@3.9.8)(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.28))
@@ -302,6 +305,14 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.11(@types/node@26.6.3)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@26.6.3)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15))
+
+  packages/api-types:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  packages/config: {}
 
 packages:
 
