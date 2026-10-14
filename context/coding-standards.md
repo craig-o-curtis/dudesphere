@@ -7,3 +7,7 @@ Functions should use `function` keywords instead of `const` and arrow functions,
 ## No IIFE's
 
 Avoid Immediately Invoked Functions
+
+## Dates and Times
+
+For ALL dates and times, ONLY use the package `@northguild/gmt`.
