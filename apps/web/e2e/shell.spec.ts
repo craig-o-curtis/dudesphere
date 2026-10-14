@@ -261,7 +261,7 @@ test.describe("early and stale presses", () => {
     expect(await themeCookie(page)).toBeUndefined();
   });
 
-  test("two tabs: a stale Dark press ends with the screen matching the cookie", async ({
+  test("two tabs: a stale Dark press asks for the OS, and the screen and cookie agree", async ({
     context,
   }) => {
     await context.addCookies([{ name: "theme", value: "dark", url: "http://localhost" }]);
@@ -276,13 +276,71 @@ test.describe("early and stale presses", () => {
     await darkButton(first).click();
     await expect.poll(() => contextThemeCookie(context)).toBeUndefined();
 
-    // The second tab still shows Dark pressed. Its press saves dark again, and
-    // the screen must say so.
+    // The second tab still shows Dark pressed. It asks for the OS too, and
+    // that is what the screen and the cookie both end up showing.
     await darkButton(second).click();
+    await expect(darkButton(second)).toHaveAttribute("aria-pressed", "false");
+    await expect(html(second)).not.toHaveAttribute("data-theme", /.*/);
+    expect(await contextThemeCookie(context)).toBeUndefined();
+  });
+
+  test("a change in one tab shows in the other when it comes back to the front", async ({
+    context,
+  }) => {
+    const first = await context.newPage();
+    const second = await context.newPage();
+    await first.goto("/");
+    await second.goto("/");
+    await waitForHydration(first);
+    await waitForHydration(second);
+
+    await first.bringToFront();
+    await darkButton(first).click();
     await expect.poll(() => contextThemeCookie(context)).toBe("dark");
-    await expect(darkButton(second)).toHaveAttribute("aria-pressed", "true");
+    await expect(html(second)).not.toHaveAttribute("data-theme", /.*/);
+
+    // bringToFront does not always fire visibilitychange or focus in headless
+    // Chromium, so send both events as a returning tab would.
+    await second.bringToFront();
+    await second.evaluate(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
     await expect(html(second)).toHaveAttribute("data-theme", "dark");
-    expect(await bodyBackground(second)).toBe(DARK_BG);
+    await expect(darkButton(second)).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("three quick presses with the middle save failing end on what the last press asked for", async ({
+    context,
+    page,
+  }) => {
+    let posts = 0;
+    await page.route("http://localhost:*/", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      posts += 1;
+      if (posts === 2) {
+        // Fail late, so the third press is made while the second is in flight.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await route.abort("internetdisconnected");
+      } else {
+        await route.continue();
+      }
+    });
+    await page.goto("/");
+    await waitForHydration(page);
+
+    await darkButton(page).click();
+    await lightButton(page).click();
+    await lightButton(page).click(); // Light is pressed on screen now, so this asks for the OS.
+
+    await expect.poll(() => posts).toBe(3);
+    await expect.poll(() => contextThemeCookie(context)).toBeUndefined();
+    await expect(lightButton(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(darkButton(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(html(page)).not.toHaveAttribute("data-theme", /.*/);
   });
 
   test("the streaming fallback of a dark page cannot act, so the saved dark survives", async ({
@@ -318,6 +376,69 @@ test.describe("early and stale presses", () => {
     expect(posts).toBe(0);
     expect(await contextThemeCookie(context)).toBe("dark");
     await expect(html(page)).toHaveAttribute("data-theme", "dark");
+  });
+
+  test("Tab skips the placeholder toggle, then reaches the real one when it streams in", async ({
+    context,
+    page,
+  }) => {
+    await context.addCookies([{ name: "theme", value: "dark", url: "http://localhost" }]);
+    await delayAppScripts(page);
+    // Hold the streamed theme hole back, and keep it to release by hand.
+    let held = "";
+    let served = "";
+    await page.route("http://localhost:*/", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const body = await response.text();
+      served = body;
+      const cut = body.indexOf('<div hidden id="S:0">');
+      held = cut > 0 ? body.slice(cut) : "";
+      await route.fulfill({ response, body: cut > 0 ? body.slice(0, cut) : body });
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    expect(held).not.toBe("");
+    await expect(page.locator("[data-theme-toggle][inert]")).toHaveCount(1);
+
+    // Skip link, then #main has nothing focusable, so Tab must pass the placeholder.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement?.closest("[data-theme-toggle]"))).toBe(
+      null,
+    );
+    await expect(lightButton(page)).not.toBeFocused();
+    await expect(darkButton(page)).not.toBeFocused();
+
+    // Release the hole: run the held markup and its swap script.
+    await page.evaluate((markup) => {
+      const fragment = document.createRange().createContextualFragment(markup);
+      document.body.append(fragment);
+    }, held);
+    await expect(page.locator("[data-theme-toggle]:not([inert])")).toHaveCount(1);
+    await expect(page.locator("[data-theme-toggle][inert]")).toHaveCount(0);
+
+    // Focus may have left the page after the last Tab, so the first Tab here can
+    // land on the skip link again. Light is the first stop after it.
+    const skipLink = page.getByRole("link", { name: "Skip to content" });
+    await page.keyboard.press("Tab");
+    if (await skipLink.evaluate((el) => el === document.activeElement)) {
+      await page.keyboard.press("Tab");
+    }
+    await expect(lightButton(page)).toBeFocused();
+
+    // We add no inline script of our own beyond the theme init script. Next's
+    // own scripts are told apart by their content: they set self.__next_f, or
+    // are the $RC/$RB/$RV/$RS boundary helpers, or carry a $RC(...) call.
+    const inline = [...served.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+      .map((match) => match[1] ?? "")
+      .filter((code) => code.trim() !== "")
+      .filter((code) => !/self\.__next_f|\$R[CBVST]|TURBOPACK/.test(code));
+    expect(inline).toHaveLength(1);
+    expect(inline[0]).toContain('"data-theme"');
   });
 
   test("a percent-encoded dark cookie paints dark from the first frame", async ({ page }) => {
@@ -438,7 +559,8 @@ test.describe("when the save fails", () => {
         await expect(html(page)).not.toHaveAttribute("data-theme", /.*/);
       }
       await expect(darkButton(page)).toHaveAttribute("aria-pressed", expected ? "true" : "false");
-      await expect(page.getByRole("status")).toHaveText(SAVE_FAILED);
+      // The save landed, so there is nothing to apologise for.
+      await expect(page.getByRole("status")).toHaveText("");
     });
   }
 });
@@ -497,7 +619,13 @@ test.describe("skip link", () => {
     await expect(skipLink).toBeInViewport({ ratio: 1 });
 
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("main")).toBeFocused();
+    const main = page.getByRole("main");
+    await expect(main).toBeFocused();
+    const ring = await main.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { width: style.outlineWidth, style: style.outlineStyle };
+    });
+    expect(ring).toEqual({ width: "3px", style: "solid" });
   });
 });
 
