@@ -1,0 +1,10 @@
+# Keep the build context small, and keep secrets out of it.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+.git

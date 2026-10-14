@@ -10,20 +10,5 @@
   "env": {
     "node": true
   },
-  "overrides": [
-    {
-      "files": ["src/**/*.entity.ts", "src/**/*.schema.ts"],
-      "rules": {
-        "@northguild/gmt-oxlint/no-date-global": "off",
-        "@northguild/gmt-oxlint/no-new-date": "off"
-      }
-    },
-    {
-      "files": ["src/shared/**/*.ts"],
-      "rules": {
-        "@northguild/gmt-oxlint/no-date-global": "off",
-        "@northguild/gmt-oxlint/no-new-date": "off"
-      }
-    }
-  ]
+  "ignorePatterns": ["**/dist/**", "**/.next/**", "**/coverage/**"]
 }

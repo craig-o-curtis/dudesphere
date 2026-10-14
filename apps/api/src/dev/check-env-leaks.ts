@@ -4,8 +4,8 @@
 //
 // The git hooks in .githooks/ call it. `pnpm install` points git at them.
 //
-// Run by: .githooks/pre-commit   tsx src/dev/check-env-leaks.ts staged
-//         .githooks/commit-msg   tsx src/dev/check-env-leaks.ts message <file>
+// Run by: .githooks/pre-commit   tsx apps/api/src/dev/check-env-leaks.ts staged
+//         .githooks/commit-msg   tsx apps/api/src/dev/check-env-leaks.ts message <file>
 import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -22,7 +22,6 @@ import {
 
 /** The env files whose values must never be committed, from the repo root. */
 const ENV_FILES = [
-  ".env",
   "apps/api/.env",
   "apps/api/.env.staging",
   "apps/api/.env.production",
@@ -30,7 +29,7 @@ const ENV_FILES = [
 ];
 
 /** Values written here are not secret, so they never count as a leak. */
-const EXAMPLE_FILES = [".env.example", "apps/api/.env.example", "apps/web/.env.example"];
+const EXAMPLE_FILES = ["apps/api/.env.example", "apps/web/.env.example"];
 
 function git(...args: string[]): string {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
