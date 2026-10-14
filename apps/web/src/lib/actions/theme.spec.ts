@@ -80,11 +80,33 @@ describe("setTheme", () => {
   );
 
   it.each(["light", "dark"] as const)(
-    "deletes the theme cookie when %s is already saved, and returns null so the OS decides",
+    "sets the theme cookie to %s again when it is already saved, so the year starts over",
     async (theme) => {
       savedTheme(theme);
 
-      await expect(setTheme(theme)).resolves.toBeNull();
+      await expect(setTheme(theme)).resolves.toBe(theme);
+
+      expect(cookieStore.set).toHaveBeenCalledTimes(1);
+      expect(cookieStore.set).toHaveBeenCalledWith(
+        "theme",
+        theme,
+        expect.objectContaining({ maxAge: ONE_YEAR_IN_SECONDS }),
+      );
+      expect(cookieStore.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["light is saved", "light"],
+    ["dark is saved", "dark"],
+    ["nothing is saved", undefined],
+    ["a junk value is saved", "blue"],
+  ])(
+    "deletes the theme cookie for system when %s, and returns null so the OS decides",
+    async (_label, saved) => {
+      savedTheme(saved);
+
+      await expect(setTheme("system")).resolves.toBeNull();
 
       expect(cookieStore.delete).toHaveBeenCalledTimes(1);
       expect(cookieStore.delete).toHaveBeenCalledWith({ name: "theme", path: "/" });
@@ -97,7 +119,7 @@ describe("setTheme", () => {
     ["markup", '"><script>alert(1)</script>'],
     ["an empty value", ""],
     ["the wrong case", "Dark"],
-  ])("treats %s as no saved theme, so dark is set and returned", async (_label, saved) => {
+  ])("sets dark and returns it when %s is saved", async (_label, saved) => {
     savedTheme(saved);
 
     await expect(setTheme("dark")).resolves.toBe("dark");
@@ -106,6 +128,17 @@ describe("setTheme", () => {
     expect(cookieStore.set).toHaveBeenCalledWith("theme", "dark", expect.any(Object));
     expect(cookieStore.delete).not.toHaveBeenCalled();
   });
+
+  it.each(["light", "dark", "system"])(
+    "does not read the saved cookie to decide what %s means",
+    async (intent) => {
+      savedTheme("dark");
+
+      await setTheme(intent);
+
+      expect(cookieStore.get).not.toHaveBeenCalled();
+    },
+  );
 
   it("marks the cookie Secure in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
@@ -123,8 +156,9 @@ describe("setTheme", () => {
   // bind a caller: a fetch-style call with a `Next-Action` header can send any
   // value React can decode. None of them may throw (SEC-2) or write a cookie.
   const badInputs: [string, unknown][] = [
-    ["system", "system"],
     ["an unknown word", "blue"],
+    ["the wrong case of system", "System"],
+    ["padded system", "system "],
     ["the wrong case", "Dark"],
     ["padding", " light"],
     ["an empty string", ""],
