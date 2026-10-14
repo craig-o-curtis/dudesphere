@@ -1,0 +1,1 @@
+../../.agents/3d-animator.md

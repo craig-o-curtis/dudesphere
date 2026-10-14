@@ -1,0 +1,8 @@
+{
+  "name": "@dudesphere/config",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared TypeScript settings. Each app's tsconfig.json extends tsconfig.base.json by relative path.",
+  "license": "UNLICENSED",
+  "type": "module"
+}

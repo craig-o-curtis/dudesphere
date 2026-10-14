@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   checks:
-    name: Format, lint, typecheck, test, build
+    name: Format, lint, and the API's typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,9 +29,40 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      # The workspace packages the API imports, built first so it can read them.
+      - name: Build the API's workspace packages
+        run: pnpm --filter "@dudesphere/api^..." run build
+      - run: pnpm --filter "@dudesphere/api..." run typecheck
+      - run: pnpm --filter "@dudesphere/api..." run test
+      - run: pnpm --filter "@dudesphere/api..." run build
+
+  web:
+    name: Web app typecheck, test, build
+    runs-on: ubuntu-latest
+    # The Next.js build reads no database and no API: every page that calls
+    # the API reads it at request time, inside a Suspense boundary.
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Next's own build cache, so an unchanged page is not compiled again.
+      - uses: actions/cache@v6
+        with:
+          path: apps/web/.next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: Build the web app's workspace packages
+        run: pnpm --filter "@dudesphere/web^..." run build
+      - run: pnpm --filter @dudesphere/web run typecheck
+      - run: pnpm --filter @dudesphere/web run test
+      - run: pnpm --filter @dudesphere/web run build
 
   migrations:
     name: Migrations apply, match entities, and roll back
@@ -50,7 +81,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    # Read by src/database/data-source.ts. A throwaway database, so no secrets needed.
+    # Read by apps/api/src/database/data-source.ts. A throwaway database, so no secrets needed.
     env:
       PG_HOST: localhost
       PG_PORT: 5432
@@ -65,16 +96,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build the API's workspace packages
+        run: pnpm --filter "@dudesphere/api^..." run build
       - name: Apply all migrations to an empty database
-        run: pnpm migration:run
+        run: pnpm --filter @dudesphere/api migration:run
       - name: Entities match the migrated schema
-        run: pnpm migration:check
+        run: pnpm --filter @dudesphere/api migration:check
       - name: Newest migration can be rolled back
-        run: pnpm migration:revert
+        run: pnpm --filter @dudesphere/api migration:revert
       - name: ...and re-applied
-        run: pnpm migration:run
+        run: pnpm --filter @dudesphere/api migration:run
       - name: Entities still match
-        run: pnpm migration:check
+        run: pnpm --filter @dudesphere/api migration:check
 
   e2e:
     name: End-to-end against live databases
@@ -105,7 +138,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     # Throwaway databases, so none of this is secret. The two Observe values
-    # are required by src/config/env.validate.ts, so the app will not start
+    # are required by apps/api/src/config/env.validate.ts, so the app will not start
     # without them.
     env:
       PG_HOST: localhost
@@ -129,10 +162,12 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build the API's workspace packages
+        run: pnpm --filter "@dudesphere/api^..." run build
       - name: Create the schema
-        run: pnpm migration:run
+        run: pnpm --filter @dudesphere/api migration:run
       # No e2e suite needs the admin: each makes its own users. This step is
-      # here to prove that `pnpm seed:run` still starts and runs.
+      # here to prove that the seed script still starts and runs.
       - name: Seed the admin user
-        run: pnpm seed:run
-      - run: pnpm test:e2e
+        run: pnpm --filter @dudesphere/api seed:run
+      - run: pnpm --filter @dudesphere/api test:e2e

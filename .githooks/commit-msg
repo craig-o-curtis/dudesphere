@@ -1,4 +1,4 @@
 #!/bin/sh
 # Stops a commit whose message holds a value from .env.
-# The check is src/dev/check-env-leaks.ts. `pnpm install` turns these hooks on.
-exec pnpm --silent exec tsx src/dev/check-env-leaks.ts message "$1"
+# The check is apps/api/src/dev/check-env-leaks.ts. `pnpm install` turns these hooks on.
+exec pnpm --silent exec tsx apps/api/src/dev/check-env-leaks.ts message "$1"

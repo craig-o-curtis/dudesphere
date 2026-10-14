@@ -1,0 +1,1 @@
+../../.agents/pr-finalizer.md

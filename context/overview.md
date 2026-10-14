@@ -6,6 +6,8 @@ A social network where Dudeist priests and members share **abidings** — short 
 
 > "The Dude abides."
 
+The API lives in `apps/api`, and every file path in this document is relative to it: `src/users/` means `apps/api/src/users/`.
+
 ## Architecture
 
 - **Backend**: NestJS 12
@@ -164,7 +166,7 @@ Costs accepted with this design:
 - The registry is written after the abiding, not in a transaction with it. If
   the abiding is saved and the registry write fails, the abiding carries a tag
   the registry does not list. It heals the next time anyone uses the tag, and
-  `pnpm backfill:hashtags` repairs it in bulk. `HashtagsService.registerTags`
+  `pnpm --filter @dudesphere/api backfill:hashtags` repairs it in bulk. `HashtagsService.registerTags`
   logs and swallows its own failures for this reason: a registry problem must
   not cost a user their post.
 - A tag row is never removed, even when no abiding uses it. An admin can hide
@@ -183,7 +185,7 @@ names are the docs'.
 Every list route takes `?limit=` (1 to 100, default 10) and `?page=` (from 1,
 default 1). It answers with `data`, `meta` and `links`, where `links.next` is
 the next page or `null`.
-[src/shared/pagination/README.md](../src/shared/pagination/README.md) shows the
+[src/shared/pagination/README.md](../apps/api/src/shared/pagination/README.md) shows the
 full shape.
 
 ### Auth
@@ -419,6 +421,8 @@ so a member who changes it sees the new one on their old abidings at once.
 | `user`  | Everyone who signs up. Posts abidings, edits their own. |
 
 ## MVP Scope
+
+For what comes next, see Epic Lebowski in [epic-lebowski/index.md](epic-lebowski/index.md).
 
 - [x] PostgreSQL + MongoDB via Docker Compose
 - [x] User CRUD with roles (admin seeded)
