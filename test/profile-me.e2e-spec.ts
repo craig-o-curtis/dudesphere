@@ -50,7 +50,7 @@ describe("GET /profiles/me (e2e)", () => {
   // who does not exist must not fall back to someone else's profile. The
   // guard looks the user up, finds nobody, and refuses the token.
   it("returns 401 for a token whose user does not exist", async () => {
-    const token = await app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "nobody" });
+    const token = await app.get(JwtService).signAsync({ sub: 2_000_000_000 });
 
     await request(app.getHttpServer())
       .get("/profiles/me")

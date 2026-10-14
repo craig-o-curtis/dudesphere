@@ -25,7 +25,7 @@ Also here:
 
 - `auth-user.ts` holds `AuthUser`, the user `JwtAuthGuard` puts on the
   request, and `JwtPayload`, what logging in puts in the access token: the
-  member's id, their username and the session's id, and no role.
+  member's id and the session's id. No role and no username.
 - `current-user.decorator.ts` holds `@CurrentUser()`, which hands that user to
   a route handler.
 - `route-access.spec.ts` fails when a route carries no label, or two.

@@ -9,7 +9,8 @@ import { SessionsRepository } from "./sessions.repository.js";
 // These cases cover what each method asks the database and what it makes of
 // the answer. test/tokens.e2e-spec.ts runs the statements against the real
 // database: the one-winner UPDATE, the session check, the join that finds a
-// token's member, and the deleting of sessions that ended 180 days ago.
+// token's session and member, and the deleting of sessions that ended 180 days
+// ago.
 describe("SessionsRepository", () => {
   let repository: SessionsRepository;
 
@@ -80,7 +81,7 @@ describe("SessionsRepository", () => {
   describe("findToken", () => {
     const session = { id: sessionId, userId: 25, expiresAt: "2026-11-10T12:00:00.000Z" };
 
-    it("looks the token up by its hash, with its session and the session's member", async () => {
+    it("looks the token up by its hash, joined to its session and the session's user", async () => {
       refreshTokens.find.mockResolvedValue([]);
 
       await repository.findToken(hash);
@@ -91,7 +92,7 @@ describe("SessionsRepository", () => {
       });
     });
 
-    it("returns the token, its session, and the member's id and username", async () => {
+    it("returns the token and its session, and says the account is open", async () => {
       const user = { id: 25, username: "walter", email: "walter@example.com" };
       const token = { id: hash, sessionId, session: { ...session, user } };
       refreshTokens.find.mockResolvedValue([token]);
@@ -99,17 +100,17 @@ describe("SessionsRepository", () => {
       await expect(repository.findToken(hash)).resolves.toEqual({
         token,
         session: token.session,
-        member: { id: 25, username: "walter" },
+        accountOpen: true,
       });
     });
 
     // TypeORM leaves a soft-deleted user out of a join, so the session comes
     // back with no user.
-    it("returns no member when the account is closed", async () => {
+    it("says the account is not open when the join finds no user", async () => {
       const token = { id: hash, sessionId, session: { ...session, user: null } };
       refreshTokens.find.mockResolvedValue([token]);
 
-      await expect(repository.findToken(hash)).resolves.toMatchObject({ member: null });
+      await expect(repository.findToken(hash)).resolves.toMatchObject({ accountOpen: false });
     });
 
     it("answers null for a hash no row has", async () => {

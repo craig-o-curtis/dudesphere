@@ -35,7 +35,7 @@ also run by hand with curl. The password reset flow is in
 |                          | Access token                             | Refresh token                             |
 | ------------------------ | ---------------------------------------- | ----------------------------------------- |
 | What it is               | A JWT: three parts with dots between     | 32 random bytes, written as 43 characters |
-| What it carries          | The member's id, username and session id | Nothing. It is only a key to a row        |
+| What it carries          | The member's id and the session's id     | Nothing. It is only a key to a row        |
 | How long it lasts        | 15 minutes                               | 7 days, and each use starts a new 7 days  |
 | How often it is sent     | With every request                       | Only when the access token has run out    |
 | Where it is sent         | Every route that needs a logged-in user  | `/auth/refresh` and `/auth/logout`        |
@@ -92,7 +92,6 @@ The payload of an access token from this app:
 ```json
 {
   "sub": 25,
-  "username": "walter",
   "sid": "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10",
   "iat": 1791700000,
   "exp": 1791700900,
@@ -101,20 +100,20 @@ The payload of an access token from this app:
 }
 ```
 
-| Claim      | Meaning                                                        | Who writes it                          |
-| ---------- | -------------------------------------------------------------- | -------------------------------------- |
-| `sub`      | "Subject": the member's user id                                | `jwtPayloadFor`                        |
-| `username` | The member's username at login. The server never reads it back | `jwtPayloadFor`                        |
-| `sid`      | The session this token belongs to: the `id` of its session row | `jwtPayloadFor`, for `SessionsService` |
-| `iat`      | "Issued at", in seconds since 1970                             | The JWT library                        |
-| `exp`      | "Expires", in seconds since 1970. Here `iat` plus 900          | The JWT library                        |
-| `aud`      | "Audience": who the token is for                               | `JwtModule` options                    |
-| `iss`      | "Issuer": who signed it                                        | `JwtModule` options                    |
+| Claim | Meaning                                                        | Who writes it                          |
+| ----- | -------------------------------------------------------------- | -------------------------------------- |
+| `sub` | "Subject": the member's user id                                | `jwtPayloadFor`                        |
+| `sid` | The session this token belongs to: the `id` of its session row | `jwtPayloadFor`, for `SessionsService` |
+| `iat` | "Issued at", in seconds since 1970                             | The JWT library                        |
+| `exp` | "Expires", in seconds since 1970. Here `iat` plus 900          | The JWT library                        |
+| `aud` | "Audience": who the token is for                               | `JwtModule` options                    |
+| `iss` | "Issuer": who signed it                                        | `JwtModule` options                    |
 
-**There is no role in it, on purpose.** A token cannot change once it is
-signed. A role in it would be a copy that goes stale the moment an admin is
-demoted. The server reads the role from the database on every request, and a
-client that wants it asks `GET /users/me`.
+**There is no role and no username in it, on purpose.** A token cannot
+change once it is signed. A role in it would be a copy that goes stale the
+moment an admin is demoted, and a username the moment a member is renamed.
+The server reads both from the database on every request, and a client that
+wants them asks `GET /users/me`.
 
 ## The two tables: `session` and `refresh_token`
 

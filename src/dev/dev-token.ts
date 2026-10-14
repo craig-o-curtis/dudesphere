@@ -63,7 +63,7 @@ export async function createDevToken(
     throw new Error(`No user has the username or email "${wanted}".${hint}`);
   }
 
-  const token = await jwtService.signAsync(jwtPayloadFor(user), {
+  const token = await jwtService.signAsync(jwtPayloadFor(user.id), {
     expiresIn: DEV_TOKEN_DAYS * SECONDS_IN_A_DAY,
   });
   return { token, user };

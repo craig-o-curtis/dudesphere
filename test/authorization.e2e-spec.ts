@@ -310,7 +310,7 @@ describe("Authorization (e2e)", () => {
     // Signed by this app, so the signature is good, but no user has this id.
     // The guard looks the user up and finds nobody.
     it("401 when the token's user does not exist", async () => {
-      const token = await jwt.signAsync({ sub: 2_000_000_000, username: "e2e-nobody" });
+      const token = await jwt.signAsync({ sub: 2_000_000_000 });
 
       const response = await request(app.getHttpServer())
         .post("/abidings")
@@ -382,10 +382,7 @@ describe("Authorization (e2e)", () => {
     // Signed with the app's real key, so only the pinned algorithm in
     // AuthModule refuses it.
     it("401 for a token signed with an algorithm other than HS256", async () => {
-      const token = await jwt.signAsync(
-        { sub: owner.userId, username: "e2e" },
-        { algorithm: "HS512" },
-      );
+      const token = await jwt.signAsync({ sub: owner.userId }, { algorithm: "HS512" });
 
       await expectRefused(token);
     });
@@ -399,7 +396,6 @@ describe("Authorization (e2e)", () => {
     it("403 on an admin route for a signed token that claims admin for a plain user", async () => {
       const token = await jwt.signAsync({
         sub: owner.userId,
-        username: "e2e",
         role: UserRole.ADMIN,
       });
 

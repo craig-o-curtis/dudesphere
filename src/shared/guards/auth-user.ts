@@ -17,19 +17,18 @@ export interface RequestWithUser {
 }
 
 /**
- * What login signs into the token. `sub` is the user's id.
+ * What login signs into the token: two ids, and nothing that can change.
  *
- * No role. A token cannot change once it is signed, so a role in it would be
- * a copy that goes stale the moment an admin is demoted. JwtAuthGuard reads
- * the role from the database on every request, and a client that wants to
- * know it asks GET /users/me.
+ * No role and no username. A token cannot change once it is signed, so
+ * either would be a copy that goes stale the moment an admin is demoted or a
+ * member is renamed. JwtAuthGuard reads both from the database on every
+ * request, and a client that wants to know them asks GET /users/me.
  */
 export interface JwtPayload {
   sub: number; // sub is for "subject", the user id
-  username: string;
-  // "Session id": which sign-in this token belongs to. It is the sessionId of
-  // the session's refresh tokens. A token from `pnpm dev:token` has none,
-  // because it belongs to no session.
+  // "Session id": which login this token belongs to. It is the id of the
+  // session's row. A token from `pnpm dev:token` has none, because it
+  // belongs to no session.
   sid?: string;
 }
 
@@ -45,13 +44,9 @@ export interface VerifiedJwtPayload extends JwtPayload {
  * two then differ in one thing only: a sign-in token names its session, and
  * a dev token has none.
  */
-export function jwtPayloadFor(
-  user: { id: number; username: string },
-  sessionId?: string,
-): JwtPayload {
+export function jwtPayloadFor(userId: number, sessionId?: string): JwtPayload {
   return {
-    sub: user.id,
-    username: user.username,
+    sub: userId,
     // Left out, not set to undefined, when there is no session.
     ...(sessionId ? { sid: sessionId } : {}),
   };

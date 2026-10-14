@@ -38,18 +38,18 @@ export class AuthService {
       throw this.badCredentials();
     }
 
-    const pair = await this.sessionsService.start(checked.user);
+    const tokenPair = await this.sessionsService.start(checked.user.id);
 
     const stillHold = await this.usersService.credentialsStillHold(
       checked.user.id,
       checked.passwordHash,
     );
     if (!stillHold) {
-      await this.sessionsService.end(pair.refreshToken);
+      await this.sessionsService.end(tokenPair.refreshToken);
       throw this.badCredentials();
     }
 
-    return pair;
+    return tokenPair;
   }
 
   // One message for every case, so the response doesn't reveal which
