@@ -1,0 +1,13 @@
+{
+  // Only the options every package agrees on. Module system, target, JSX,
+  // decorators, rootDir, outDir and types stay in each package, because the
+  // API, the web app and the libraries need different ones.
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolvePackageJsonExports": true
+  }
+}
