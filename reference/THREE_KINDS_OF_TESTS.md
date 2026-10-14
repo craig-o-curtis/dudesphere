@@ -8,15 +8,15 @@ prove.
 
 ## The three, side by side
 
-|                                     | Unit spec                       | HTTP spec                                   | E2E spec                 |
-| ----------------------------------- | ------------------------------- | ------------------------------------------- | ------------------------ |
-| File name                           | `src/**/*.spec.ts`              | `src/**/*.http.spec.ts`                     | `test/*.e2e-spec.ts`     |
-| Run with                            | `pnpm test`                     | `pnpm test`                                 | `pnpm test:e2e`          |
-| Starts                              | One class                       | A small app: one controller, over real HTTP | The whole `AppModule`    |
-| Fakes                               | Everything the class depends on | The services                                | Nothing                  |
-| Needs the databases                 | No                              | No                                          | Yes, migrated and seeded |
-| Pipes, interceptors and filters run | No                              | Yes                                         | Yes                      |
-| Guards run                          | No                              | No                                          | Yes                      |
+|                                     | Unit spec                       | HTTP spec                                                                             | E2E spec                 |
+| ----------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------- | ------------------------ |
+| File name                           | `src/**/*.spec.ts`              | `src/**/*.http.spec.ts`                                                               | `test/*.e2e-spec.ts`     |
+| Run with                            | `pnpm test`                     | `pnpm test`                                                                           | `pnpm test:e2e`          |
+| Starts                              | One class                       | A small app: one controller, over real HTTP                                           | The whole `AppModule`    |
+| Fakes                               | Everything the class depends on | The services, and the caller where one is needed                                      | Nothing                  |
+| Needs the databases                 | No                              | No                                                                                    | Yes, migrated and seeded |
+| Pipes, interceptors and filters run | No                              | Yes                                                                                   | Yes                      |
+| Guards run                          | No                              | Only the authentication guard, and only where the spec imports `AuthenticationModule` | Yes                      |
 
 `pnpm test` runs the first two together, because `*.http.spec.ts` also
 matches the `**/*.spec.ts` pattern in
@@ -59,19 +59,29 @@ const module = await Test.createTestingModule({
   providers: [
     UsersService,
     { provide: getRepositoryToken(User), useValue: usersRepository },
-    { provide: HashingProvider, useValue: hashingProvider },
+    { provide: PasswordHasher, useValue: passwordHasher },
   ],
 }).compile();
 ```
 
+`PasswordHasher` comes from `@nestjs/authentication`, and the class itself is
+the token. The fake's `hash()` returns `hashed(...)`, so no test in
+[src/users/users.service.spec.ts](../src/users/users.service.spec.ts) waits
+for scrypt.
+
 **EXISTING FILE:** an HTTP spec. It starts an app with one real controller
-and a fake service.
+and a fake service. Comments left out.
 
 ```ts
 // src/shared/dto/pg-id-param.http.spec.ts
-const moduleFixture = await Test.createTestingModule({
+const moduleFixture: TestingModule = await Test.createTestingModule({
+  imports: [AuthenticationModule.forRoot({})],
   controllers: [UsersController],
-  providers: [{ provide: UsersService, useValue: usersService }],
+  providers: [
+    SignedInAsCaller,
+    { provide: UsersService, useValue: usersService },
+    PaginationProvider,
+  ],
 }).compile();
 
 app = moduleFixture.createNestApplication();
@@ -98,9 +108,15 @@ adds. `listenOnLoopback` starts the app on a free port on `127.0.0.1`.
 
 ## Things to know before you write one
 
-- **An HTTP spec has no guards.** It does not load `AppModule`, so the global
-  guards are not registered. Where a handler needs the caller, a stand-in
-  middleware sets `request.user`.
+- **An HTTP spec has no throttler and no authorization guard.** It does not
+  load `AppModule`, so the guards registered there are missing. Where a
+  handler needs the caller, the spec imports `AuthenticationModule` and
+  registers `SignedInAsCaller` in place of `JwtAuth`. That stand-in signs
+  every request in as one made-up user, with no token, so `@CurrentUser()`
+  works as it does in the app. `AuthorizationModule` is left out, so no route
+  is refused. [src/shared/dto/pg-id-param.http.spec.ts](../src/shared/dto/pg-id-param.http.spec.ts)
+  and [src/abidings/abidings.controller.http.spec.ts](../src/abidings/abidings.controller.http.spec.ts)
+  do this.
 - **An e2e spec writes to your dev databases.** There is no separate test
   database. A cleanup job deletes what the suites wrote, and it finds those
   rows by their `e2e-` names. The rules are in "End-to-End Tests" in

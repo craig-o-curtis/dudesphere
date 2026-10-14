@@ -127,10 +127,10 @@ Public. What a visitor sees first.
 ### Sign up `/signup` and log in `/login`
 
 - Sign up posts to `server/api/signup.post.ts`, which calls
-  `POST /auth/signup`, then `POST /auth/login` with the same credentials, then
-  sets the cookies.
+  `POST /auth/sign-up`, then `POST /auth/token` with the same credentials,
+  then sets the cookies.
 - Log in posts to `server/api/session.post.ts`, which calls
-  `POST /auth/login`.
+  `POST /auth/token`.
 - The login form has one input, labelled "Username or email", and a password.
   It posts `{ identifier, password }`. The API decides which of the two the
   identifier is and ignores its letter case, so the form does neither.
@@ -141,17 +141,18 @@ Public. What a visitor sees first.
   `profile: { displayName }`. The API answers 409 `DISPLAY_NAME_TAKEN` for a
   name in use, in any letter case, and the form shows that under the input.
 - "Forgot password?" on the login page opens `/forgot-password`: one email
-  input. It posts to a Nitro route that calls `POST /auth/forgot-password`. The
+  input. It posts to a Nitro route that calls `POST /auth/password/forgot`. The
   API answers 202 whether or not the address has an account, so the page
   always says "If that address has an account, we sent it a link."
 - The emailed link opens `/reset-password?token=...`. The page reads `token`
-  from the URL and asks for the new password twice. Its Nitro route calls
-  `POST /auth/reset-password` with `{ token, password, confirmPassword }`. On
+  from the URL and asks for the new password twice, and checks the two match
+  itself. Its Nitro route calls `POST /auth/password/reset` with
+  `{ token, password }`; the API takes no `confirmPassword`. On
   204 it sends the visitor to `/login`. On 400 `RESET_TOKEN_INVALID` it says
   the link no longer works and offers `/forgot-password` again.
 - A 429 from login or forgot password carries `Retry-After`, in seconds. The
   form shows how long to wait.
-- `POST /auth/login` answers `{ accessToken, refreshToken, expiresIn }`. Each
+- `POST /auth/token` answers `{ accessToken, refreshToken, expiresIn }`. Each
   token goes into its own cookie through Nitro's `setCookie`, both `httpOnly`,
   `secure` and `sameSite: 'lax'`:
   - `session` holds the access token, with `path: '/'` and a lifetime of
@@ -159,18 +160,22 @@ Public. What a visitor sees first.
   - `refresh` holds the refresh token, with a lifetime of 7 days and a `path`
     limited to the Nitro routes that refresh and log out, so it is not sent
     with every page.
-- **Refreshing.** When the `session` cookie is missing or the API answers
-  401 `TOKEN_INVALID`, Nitro calls `POST /auth/refresh` with the refresh
-  token, sets both cookies from the answer, and repeats the request once.
+- **Refreshing.** When the `session` cookie is missing or the API answers 401
+  to a request that sent a token, Nitro calls `POST /auth/token/refresh` with
+  the refresh token, sets both cookies from the answer, and repeats the
+  request once.
 - **One refresh at a time for a session.** A refresh token works once, and the
-  API ends the whole session if one is used twice. Two page requests that
+  API ends the whole sign-in if one is used twice. Two page requests that
   arrive together must not both refresh. The Nitro refresh step keeps one
   pending promise for each refresh token and has later callers wait for it.
-- On 401 `REFRESH_TOKEN_INVALID`, Nitro clears both cookies and sends the
+- On a 401 from the refresh ("Refresh token invalid", "expired" or "reused"),
+  Nitro clears both cookies and sends the
   visitor to `/login`.
-- `server/api/session.delete.ts` logs out: it calls `POST /auth/logout`
+- `server/api/session.delete.ts` logs out: it calls `POST /auth/token/revoke`
   with the refresh token, then clears both cookies. "Log out everywhere" calls
-  `POST /auth/logout-all`.
+  `POST /auth/sign-out-everywhere`. Clearing the `session` cookie matters:
+  the API ends the refresh token, but the access token works until it
+  expires.
 - Forms are plain `<form @submit.prevent>` with a `pending` ref. A 400 from
   Nest carries the field messages. Nitro passes the body through with
   `createError`, and the form shows each message under its input. No

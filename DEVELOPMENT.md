@@ -45,37 +45,36 @@ Copy `.env.example` to `.env` and fill in your values.
 
 The app checks every variable when it starts, in `src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
 
-| Variable                    | Required | Description                                                               | Example or default                                |
-| --------------------------- | -------- | ------------------------------------------------------------------------- | ------------------------------------------------- |
-| `NODE_ENV`                  | no       | `development`, `staging`, `production` or `test`                          | default `development`                             |
-| `PORT`                      | no       | Port the app listens on                                                   | default `3000`                                    |
-| `PG_HOST`                   | yes      | PostgreSQL host                                                           | `localhost`                                       |
-| `PG_PORT`                   | yes      | PostgreSQL port                                                           | `5432`                                            |
-| `PG_ADMIN_USER`             | yes      | PostgreSQL role name                                                      | `admin`                                           |
-| `PG_ADMIN_PW`               | yes      | PostgreSQL password                                                       | (your password)                                   |
-| `PG_DATABASE`               | yes      | Database name                                                             | `dude`                                            |
-| `MONGO_URI`                 | no       | MongoDB connection string                                                 | default `mongodb://localhost:27017/dude-abidings` |
-| `JWT_SECRET`                | yes      | Key that signs access tokens. At least 32 characters                      | (make one with `openssl rand -base64 48`)         |
-| `JWT_EXPIRES_IN`            | no       | How long an access token lasts, in seconds                                | default `900`                                     |
-| `REFRESH_TOKEN_EXPIRES_IN`  | no       | How long one refresh token lasts, in seconds. At least 60                 | default `604800`                                  |
-| `SESSION_EXPIRES_IN`        | no       | How long a session lasts at most, in seconds. Not less than the above     | default `2592000`                                 |
-| `SESSION_RETENTION`         | no       | How long a session's rows are kept after it ends, in seconds              | default `15552000`                                |
-| `JWT_AUDIENCE`              | no       | Who a token is for. Written into each token and checked on each request   | default `dudesphere-api`                          |
-| `JWT_ISSUER`                | no       | Who issued a token. Written and checked the same way                      | default `dudesphere`                              |
-| `THROTTLE_ENABLED`          | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself   | default `true`                                    |
-| `MAIL_HOST`                 | no       | SMTP server for outgoing email                                            | default `localhost` (Mailpit)                     |
-| `MAIL_PORT`                 | no       | SMTP port. `465` means TLS from the start                                 | default `1025` (Mailpit)                          |
-| `MAIL_USER`                 | no       | SMTP login. Mailpit needs none. With one set, the server must use TLS     | (empty)                                           |
-| `MAIL_PASSWORD`             | no       | SMTP password                                                             | (empty)                                           |
-| `MAIL_FROM`                 | no       | Who every email is from                                                   | default `Dudesphere <no-reply@dudesphere.local>`  |
-| `FRONTEND_URL`              | no       | Where the web app is served. The reset email links to it                  | default `http://localhost:3000`                   |
-| `PASSWORD_RESET_EXPIRES_IN` | no       | How long a reset link works, in seconds. At least 60                      | default `1800`                                    |
-| `DUDE_OBSERVE_APP_KEY`      | yes      | Observe project key                                                       | (from the Observe dashboard)                      |
-| `DUDE_OBSERVE_APP_SECRET`   | yes      | Observe project secret                                                    | (from the Observe dashboard)                      |
-| `EMAIL`                     | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and `pnpm dev:token` | `admin@example.com`                               |
-| `PASSWORD`                  | seed     | Password of the seeded admin                                              | (your password)                                   |
-| `MG_ADMIN_USER`             | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app          | `dude`                                            |
-| `MG_ADMIN_PW`               | compose  | MongoDB admin password. Read by `docker-compose.yml`                      | (your password)                                   |
+| Variable                            | Required | Description                                                                             | Example or default                                |
+| ----------------------------------- | -------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `NODE_ENV`                          | no       | `development`, `staging`, `production` or `test`                                        | default `development`                             |
+| `PORT`                              | no       | Port the app listens on                                                                 | default `3000`                                    |
+| `PG_HOST`                           | yes      | PostgreSQL host                                                                         | `localhost`                                       |
+| `PG_PORT`                           | yes      | PostgreSQL port                                                                         | `5432`                                            |
+| `PG_ADMIN_USER`                     | yes      | PostgreSQL role name                                                                    | `admin`                                           |
+| `PG_ADMIN_PW`                       | yes      | PostgreSQL password                                                                     | (your password)                                   |
+| `PG_DATABASE`                       | yes      | Database name                                                                           | `dude`                                            |
+| `MONGO_URI`                         | no       | MongoDB connection string                                                               | default `mongodb://localhost:27017/dude-abidings` |
+| `JWT_SECRET`                        | yes      | Key that signs access tokens. At least 32 characters                                    | (make one with `openssl rand -base64 48`)         |
+| `JWT_EXPIRES_IN`                    | no       | How long an access token lasts, in seconds                                              | default `900`                                     |
+| `REFRESH_TOKEN_EXPIRES_IN`          | no       | How long one refresh token lasts, in seconds. At least 60                               | default `604800`                                  |
+| `REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN` | no       | How long one sign-in's refresh tokens last at most, in seconds. Not less than the above | default `2592000`                                 |
+| `JWT_AUDIENCE`                      | no       | Who a token is for. Written into each token and checked on each request                 | default `dudesphere-api`                          |
+| `JWT_ISSUER`                        | no       | Who issued a token. Written and checked the same way                                    | default `dudesphere`                              |
+| `THROTTLE_ENABLED`                  | no       | Rate limiting, `true` or `false`. The e2e suite sets `false` for itself                 | default `true`                                    |
+| `MAIL_HOST`                         | no       | SMTP server for outgoing email                                                          | default `localhost` (Mailpit)                     |
+| `MAIL_PORT`                         | no       | SMTP port. `465` means TLS from the start                                               | default `1025` (Mailpit)                          |
+| `MAIL_USER`                         | no       | SMTP login. Mailpit needs none. With one set, the server must use TLS                   | (empty)                                           |
+| `MAIL_PASSWORD`                     | no       | SMTP password                                                                           | (empty)                                           |
+| `MAIL_FROM`                         | no       | Who every email is from                                                                 | default `Dudesphere <no-reply@dudesphere.local>`  |
+| `FRONTEND_URL`                      | no       | Where the web app is served. The reset email links to it                                | default `http://localhost:3000`                   |
+| `PASSWORD_RESET_EXPIRES_IN`         | no       | How long a reset link works, in seconds. At least 60                                    | default `1800`                                    |
+| `DUDE_OBSERVE_APP_KEY`              | yes      | Observe project key                                                                     | (from the Observe dashboard)                      |
+| `DUDE_OBSERVE_APP_SECRET`           | yes      | Observe project secret                                                                  | (from the Observe dashboard)                      |
+| `EMAIL`                             | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and `pnpm dev:token`               | `admin@example.com`                               |
+| `PASSWORD`                          | seed     | Password of the seeded admin                                                            | (your password)                                   |
+| `MG_ADMIN_USER`                     | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app                        | `dude`                                            |
+| `MG_ADMIN_PW`                       | compose  | MongoDB admin password. Read by `docker-compose.yml`                                    | (your password)                                   |
 
 ## pgAdmin Setup
 
@@ -228,7 +227,7 @@ pnpm seed:run
 ```
 
 Creates the admin user and profile from `EMAIL` and `PASSWORD` in `.env`, and
-some sample abidings. The password is stored as a bcrypt hash. Running the seed
+some sample abidings. The password is stored as a scrypt hash. Running the seed
 again resets the admin's password to the value in `.env`. The abidings seed only runs when `NODE_ENV` is
 `development`, and skips itself if the collection already has documents.
 
@@ -275,7 +274,8 @@ it to take a while.
 ## Try the API by hand
 
 Almost every route needs an access token. A request with none answers
-401 `TOKEN_MISSING`. This section is the short way to send one.
+401 with `errorCode` `missing_credentials`. This section is the short way to
+send one.
 
 ### 1. Start everything
 
@@ -354,7 +354,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/users/me
 Both go in the **Body** tab as JSON. Thunder Client then sets
 `Content-Type: application/json` for you.
 
-Sign up, `POST /auth/signup`:
+Sign up, `POST /auth/sign-up`:
 
 ```json
 {
@@ -365,7 +365,7 @@ Sign up, `POST /auth/signup`:
 }
 ```
 
-Log in, `POST /auth/login`. `identifier` is a username or an email:
+Sign in, `POST /auth/token`. `identifier` is a username or an email:
 
 ```json
 { "identifier": "walter", "password": "secret123" }
@@ -373,21 +373,23 @@ Log in, `POST /auth/login`. `identifier` is a username or an email:
 
 The answer holds `accessToken`, `refreshToken` and `expiresIn`. Send
 `accessToken` as the bearer token. It lasts 15 minutes. For a new pair, post
-`{ "refreshToken": "..." }` to `POST /auth/refresh`, and keep the new
+`{ "refreshToken": "..." }` to `POST /auth/token/refresh`, and keep the new
 refresh token from the answer: each one works once.
 
 For trying routes by hand, `pnpm dev:token` is easier. Its token lasts 30 days
-and belongs to no session, so there is nothing to refresh.
+and comes with no refresh token, so there is nothing to refresh.
 
 ### When a request is refused
 
-| Answer              | What it means                                           | What to do                                       |
-| ------------------- | ------------------------------------------------------- | ------------------------------------------------ |
-| 401 `TOKEN_MISSING` | No `Authorization` header, or not a `Bearer` one        | Set the Auth tab to Bearer and paste a token     |
-| 401 `TOKEN_INVALID` | Expired, logged out, or its account or password changed | Run `pnpm dev:token` again                       |
-| 403 `ROLE_REQUIRED` | The route is for admins and the token is a member's     | Use `pnpm dev:token` with no name, for the admin |
-| 403 `NOT_OWNER`     | The thing exists and belongs to someone else            | Use that member's token, or the admin's          |
-| 429 `RATE_LIMITED`  | Over 100 requests a minute, or 5 logins in 15 minutes   | Wait for the time in the `Retry-After` header    |
+| Answer                                       | What it means                                                      | What to do                                       |
+| -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                   | Set the Auth tab to Bearer and paste a token     |
+| 401 with a `message` such as "token expired" | Expired, forged, or its account was closed or its password changed | Run `pnpm dev:token` again                       |
+| 403 "Forbidden"                              | The route is for admins and the token is a member's                | Use `pnpm dev:token` with no name, for the admin |
+| 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                       | Use that member's token, or the admin's          |
+| 429 `RATE_LIMITED`                           | Over 100 requests a minute, or 5 sign-ins in 15 minutes            | Wait for the time in the `Retry-After` header    |
+
+A 401 for a bad token also has a `WWW-Authenticate` header that says why.
 
 ### Why Thunder Client needs a paste for each request
 
@@ -507,11 +509,11 @@ these rules leaves rows behind on every run.
 - **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
   links its abidings to the e2e run, and no later run removes them. If that
   happens, delete the stranded abidings in Mongo Express.
-- **Guards can only be tested here.** `JwtAuthGuard` and `RolesGuard` are
-  registered in `AppModule`, and a unit controller spec never loads them. A
-  401 or 403 test belongs in an e2e suite. `test/route-access.e2e-spec.ts`
-  already checks both on every route, so a new route needs no case of its own
-  for "no token" or "wrong role".
+- **Guards can only be tested here.** The guards of `AuthenticationModule`
+  and `AuthorizationModule` are registered in `AppModule`, and a unit
+  controller spec never loads them. A 401 or 403 test belongs in an e2e
+  suite. `test/route-access.e2e-spec.ts` already checks both on every route,
+  so a new route needs no case of its own for "no token" or "not allowed".
 - **CI runs the same suites** against empty databases that it throws away. See
   "Continuous Integration" in the [README](README.md).
 
