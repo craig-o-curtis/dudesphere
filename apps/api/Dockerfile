@@ -11,6 +11,8 @@ WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY packages/api-types/package.json packages/api-types/
+COPY packages/config/package.json packages/config/
+COPY packages/lane-engine/package.json packages/lane-engine/
 
 # Node 26 no longer ships corepack, so install pnpm directly.
 # The version comes from "packageManager" in package.json, so it lives in one place.

@@ -1,0 +1,27 @@
+{
+  "name": "@dudesphere/lane-engine",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Bowling rules for Lane Night: rolls, frames, scores and fouls. Pure TypeScript, shared by the API (authoritative) and the web app (preview).",
+  "license": "UNLICENSED",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}
