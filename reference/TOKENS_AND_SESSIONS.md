@@ -635,6 +635,22 @@ those two here, because they write through the package's store and cannot
 join a transaction. This is not in the NestJS docs, which end the sign-ins
 in writes of their own.
 
+Two copies of the same writes could drift apart, so there is only one.
+[src/typeorm/end-sign-ins.ts](../src/typeorm/end-sign-ins.ts) holds
+`revokeUserRefreshTokens` and `deleteUserSessions`, each taking an
+`EntityManager`:
+
+| Path                  | Who calls it                                                                                        | Which manager                    |
+| --------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------- |
+| The package's own     | `TokenService.revokeAll`, `SessionService.revokeAll`, through the store's methods of the same names | The store's, on its own          |
+| The app's transaction | `SignInsRepository.endAllForUser`                                                                   | The caller's, in its transaction |
+
+What could still drift is the package: a new version could make `revokeAll`
+reach a third store method. The "matches the package's revokeAll" cases in
+[src/typeorm/sign-ins.repository.spec.ts](../src/typeorm/sign-ins.repository.spec.ts)
+build the package's real `TokenService` and `SessionService` on a store that
+records every call, and fail if either reaches anything but these two.
+
 The other three use the same method in the same way:
 
 - `PasswordResetMailer.updatePassword`
@@ -642,7 +658,8 @@ The other three use the same method in the same way:
   stores the hash, stamps `passwordChangedAt` and ends the sign-ins in one
   transaction. The package's `PasswordResetService.reset` also ends the
   sign-ins just before and just after it calls `updatePassword`. The call
-  after finds nothing left to end.
+  before does the real work. The call after usually finds nothing left; it
+  is there to catch a sign-in that started in between.
 - `UsersService.deleteUser` ends the sign-ins inside the transaction that
   closes the account and its profile.
 - `UsersService.restoreUser` ends them inside the transaction that brings the
@@ -671,12 +688,12 @@ The check came back with the column below.
 
 ### The four steps
 
-| #   | Step               | File and method                                                                                                              | What happens                                                                                                                                                   |
-| --- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Sign in            | [TokensController.issue](../src/auth/tokens.controller.ts)                                                                   | Makes the sign-in's id with `randomUUID()`, and passes `claims: { amr: ["pwd"], sid }` to `TokenService.issue`                                                 |
-| 2   | Claims             | `TokenService.issue` and `TokenService.refresh`, in the package                                                              | Stores the claims with the family's first row, and signs them into the access token. Each refresh copies them to the new row and into the new access token     |
-| 3   | The store's column | [TypeOrmAuthenticationStore.saveRefreshToken](../src/typeorm/typeorm-authentication.store.ts)                                | Copies `claims.sid` into the row's `sid` column, on every row the family gets. The column has the index `refresh_tokens_sid_idx`                               |
-| 4   | The check          | [JwtAuth.validate](../src/auth/jwt-auth.provider.ts), then [SignInsRepository.isLive](../src/typeorm/sign-ins.repository.ts) | On every signed-in request, asks whether the sign-in named by the token's `sid` is still going. Runs beside `UsersRepository.findById`, so it adds little wait |
+| #   | Step               | File and method                                                                                                              | What happens                                                                                                                                                                                     |
+| --- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Sign in            | [TokensController.issue](../src/auth/tokens.controller.ts)                                                                   | Makes the sign-in's id with `randomUUID()`, and passes `claims: { amr: ["pwd"], sid }` to `TokenService.issue`                                                                                   |
+| 2   | Claims             | `TokenService.issue` and `TokenService.refresh`, in the package                                                              | Stores the claims with the family's first row, and signs them into the access token. Each refresh copies them to the new row and into the new access token                                       |
+| 3   | The store's column | [TypeOrmAuthenticationStore.saveRefreshToken](../src/typeorm/typeorm-authentication.store.ts)                                | Copies `claims.sid` into the row's `sid` column, on every row the family gets. The column has two indexes: `refresh_tokens_sid_idx`, and `refresh_tokens_revoked_sid_idx` over revoked rows only |
+| 4   | The check          | [JwtAuth.validate](../src/auth/jwt-auth.provider.ts), then [SignInsRepository.isLive](../src/typeorm/sign-ins.repository.ts) | On every signed-in request, asks whether the sign-in named by the token's `sid` is still going. Runs beside `UsersRepository.findById`, so it adds little wait                                   |
 
 The column is in
 [src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts).
@@ -686,37 +703,61 @@ use an index.
 `isLive` is one SQL query:
 
 ```sql
-SELECT coalesce(bool_and(NOT revoked) AND max(family_expires_at) > $2, false) AS live
-FROM refresh_tokens
-WHERE sid = $1
+SELECT EXISTS (
+         SELECT 1 FROM refresh_tokens
+         WHERE sid = $1 AND user_id = $2 AND family_expires_at > $3
+       )
+   AND NOT EXISTS (
+         SELECT 1 FROM refresh_tokens WHERE sid = $1 AND revoked
+       ) AS live
 ```
 
-`$1` is the token's `sid`, and `$2` is the time now, from the app's clock.
-The answer is true only when all three hold:
+`$1` is the token's `sid`, `$2` its `sub`, and `$3` the time now, from the
+app's clock. The answer is true only when all three hold:
 
-- the sign-in has rows. A made-up `sid` never had any, and a family's rows
-  are deleted at the first cleanup after its end;
+- the sign-in has a row of this member's. A made-up `sid` never had any,
+  another member's `sid` has none of theirs, and a family's rows are deleted
+  at the first cleanup after its end;
+- its family's end is still ahead;
 - none of its rows is revoked. The store marks every row of a family, and a
-  successor saved a moment after a sign-out is caught by the older rows;
-- its family's end is still ahead.
+  successor saved a moment after a sign-out is caught by the older rows.
+
+**Why two checks and not one.** A sign-in gains a row on every refresh: up
+to about 2,900 in 30 days with 15-minute access tokens. A query that read
+every row of the sign-in, on every request, would get slower the longer a
+member stayed signed in. Each half of this one stops at the first row it
+finds:
+
+| Check                                           | Index it uses                                                   | Rows it reads, for a sign-in still going                 |
+| ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------- |
+| `EXISTS` a row of this member's, before its end | `refresh_tokens_sid_idx`                                        | One: every row of a family shares its member and its end |
+| `NOT EXISTS` a revoked row                      | `refresh_tokens_revoked_sid_idx`, which holds only revoked rows | None                                                     |
 
 ### Which tokens pass
 
-| The access token                             | What `JwtAuth.validate` does                           |
-| -------------------------------------------- | ------------------------------------------------------ |
-| Has the `sid` of a sign-in still going       | Passes this check. The member checks still run         |
-| Has the `sid` of a sign-in that ended        | Refuses it: 401 `"unknown subject"`                    |
-| Has a `sid` that names no sign-in            | Refuses it                                             |
-| Has a `sid` that is not a UUID               | Refuses it, without reading `refresh_tokens`           |
-| Has no `sid`, and `amr` is exactly `["dev"]` | Passes this check. This is what `pnpm dev:token` signs |
-| Has no `sid`, and any other `amr`, or none   | Refuses it                                             |
+| The access token                             | What `JwtAuth.validate` does                                                 |
+| -------------------------------------------- | ---------------------------------------------------------------------------- |
+| Has the `sid` of a sign-in still going       | Passes this check. The member checks still run                               |
+| Has the `sid` of a sign-in that ended        | Refuses it: 401 `"unknown subject"`                                          |
+| Has a `sid` that names no sign-in            | Refuses it                                                                   |
+| Has the `sid` of another member's sign-in    | Refuses it                                                                   |
+| Has a `sid` that is not a UUID               | Refuses it, without reading `refresh_tokens`                                 |
+| Has no `sid`, and `amr` is exactly `["dev"]` | Passes this check, except in production. This is what `pnpm dev:token` signs |
+| Has no `sid`, and any other `amr`, or none   | Refuses it                                                                   |
 
 Only the app's key can sign a token, so nobody outside can make a dev token.
+In production a dev token is refused anyway: `pnpm dev:token` will not sign
+one there, and if one were signed with the production key, nothing but its
+own 30 days would end it.
 
-`test/tokens.e2e-spec.ts` proves each case over real HTTP: "stops the
-device's access token on the next request", "stops the family's access
-tokens on the next request", the sign-out-everywhere, password-change and
-restore cases, and "a token that belongs to no sign-in".
+`test/tokens.e2e-spec.ts` proves each row over real HTTP, except the
+production one: "stops the device's access token on the next request",
+"stops the family's access tokens on the next request", the
+sign-out-everywhere, password-change and restore cases, "a token that
+belongs to no sign-in" and "an access token's sign-in". The production row
+is proved in
+[src/auth/jwt-auth.provider.spec.ts](../src/auth/jwt-auth.provider.spec.ts),
+since the e2e tests never run as production.
 
 ### Members who signed in before the column
 
@@ -1191,7 +1232,7 @@ LIMIT 10;
 [src/dev/dev-token.ts](../src/dev/dev-token.ts) signs a token with the
 package's `JwtSigner` and the app's own `accessToken` options. It carries
 `amr: ["dev"]` and no `sid`, and `JwtAuth.validate` lets a token without a
-`sid` through only with that mark. It lasts 30 days, has no refresh token
+`sid` through only with that mark, and never in production. It lasts 30 days, has no refresh token
 and belongs to no family. Only the app's key can sign one.
 
 ## What it does not do

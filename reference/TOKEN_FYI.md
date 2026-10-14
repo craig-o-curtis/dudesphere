@@ -235,12 +235,13 @@ Three global guards run first, in this order:
      queries side by side. `UsersRepository.findById` reads the member by
      `sub`. `SignInsRepository.isLive`
      ([sign-ins.repository.ts](../src/typeorm/sign-ins.repository.ts))
-     checks that the sign-in named by `sid` is still going: it has rows, none
-     revoked, and its 30-day end is ahead.
+     checks that the sign-in named by `sid` is still going: it has a row of
+     this member's, none of its rows is revoked, and its 30-day end is ahead.
    - It refuses a closed account, a token signed before the member's last
      password change, and a token whose sign-in ended. It refuses a token
      with no `sid` too, unless its `amr` is exactly `["dev"]`, which is what
-     `pnpm dev:token` signs. The 401 says `"unknown subject"`.
+     `pnpm dev:token` signs, and never in production. The 401 says
+     `"unknown subject"`.
    - If all pass, the member becomes `request.user`.
 3. **The authorization guard** (from `AuthorizationModule`): may this caller
    use this route?
@@ -486,9 +487,9 @@ had. They sign in again with the new password.
 **17. What is `pnpm dev:token`?**
 A 30-day access token for trying routes by hand. It is signed with the
 app's own key and options. It carries `amr: ["dev"]` and no `sid`, and
-`JwtAuth` lets a token without a `sid` through only with that mark. It has
-no refresh token and no family, so a sign-out cannot end it. A password
-change or a closed account still does.
+`JwtAuth` lets a token without a `sid` through only with that mark, and
+never in production. It has no refresh token and no family, so a sign-out
+cannot end it. A password change or a closed account still does.
 
 **18. What is the sign-in recheck?**
 A second look, once the new sign-in has started, at whether the password
