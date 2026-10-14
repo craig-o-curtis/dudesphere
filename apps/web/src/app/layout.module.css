@@ -1,0 +1,10 @@
+/* body is a flex column (globals.css), so a growing main pushes the footer down. */
+.main {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.main:focus {
+  outline: none;
+}
