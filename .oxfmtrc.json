@@ -3,8 +3,10 @@
   "ignorePatterns": [
     ".agents/skills/animate/**",
     ".agents/skills/better-accessibility/**",
+    ".agents/skills/domain-modeling/**",
     ".agents/skills/grill-me/**",
     ".agents/skills/grill-with-docs/**",
+    ".agents/skills/grilling/**",
     ".agents/skills/nestjs-best-practices/**",
     ".agents/skills/next-cache-components-optimizer/**",
     ".agents/skills/next-dev-loop/**",

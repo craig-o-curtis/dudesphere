@@ -31,6 +31,8 @@ Epic Lebowski is the work in progress. Start at `./context/epic-lebowski/index.m
 - nestjs-best-practices: `.agents/skills/nestjs-best-practices`
 - plain-english: `.agents/skills/plain-english`
 - code-reviewer-nestjs: `.agents/skills/code-reviewer-nestjs`
+- grilling: `.agents/skills/grilling`. The interview that `grill-me` and the planner use
+- domain-modeling: `.agents/skills/domain-modeling`. ADRs and the glossary, for `grill-with-docs`
 
 For `apps/web` (see `./context/suggested-frontend-skills.md`):
 
