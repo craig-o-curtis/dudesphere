@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [
-    ".agents/skills/agent-owasp-compliance/**",
     ".agents/skills/animate/**",
     ".agents/skills/better-accessibility/**",
     ".agents/skills/grill-me/**",
