@@ -85,7 +85,7 @@ A missing line is a failure. Return it to the driver.
   4. BFF Route Handlers and Server Actions;
   5. UI components and their specs;
   6. motion;
-  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, and the tracker row set to `👀 In review`, emoji included. Never set `✅ Done` here: a story is Done only once its PR is merged, and the planner marks it then.
+  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
 - Stage files by name: `git add <path> <path>`. When one file belongs in two commits, write the hunks for the first commit to a patch in the scratch space, then run `git apply --cached <patch>`. `git add -p` is interactive and won't work here.
 - Write messages in the repo's style. The subject is in the imperative and in sentence case, with no type prefix, such as "Add the replies list and reply count to GET /abidings". The body, when one is needed, is plain English: what changed and why.
 - Never add a `Co-Authored-By` trailer, a "Generated with" line, or any other attribution. Check each message before you commit it.

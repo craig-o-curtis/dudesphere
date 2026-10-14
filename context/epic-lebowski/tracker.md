@@ -4,9 +4,9 @@ Stories are listed in build order. The first story whose status is not `Done` is
 next one to build. Story ids never change and do not match GitHub issue numbers. This
 file is the source of truth, and the GitHub issues mirror it.
 
-A story is `⬜ Todo`, `⏳ In progress`, `👀 In review` (built on a branch, with its PR
-open) or `✅ Done` (merged to main). Always write the emoji with its word, so the status
-reads at a glance and a search for the word still finds it.
+A story is `⬜ Todo`, `⏳ In progress` or `✅ Done` (all dev work done and its PR open).
+Always write the emoji with its word, so the status reads at a glance and a search for
+the word still finds it.
 
 Each entry reads: id and title; then status, issue and what blocks it; then what it
 delivers. A story drops out of every "Blocked by" once it is `Done`, so REPO-1 appears
@@ -39,11 +39,11 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `apps/web` scaffold: Cache Components, React Compiler, CSS Modules, port 3001
 
 6. **WEB-6** · [Design tokens, fonts, root layout and motion rules](issues/WEB-6.md)\
-   👀 In review · [#40][40] · Blocked by: none\
+   ✅ Done · [#40][40] · Blocked by: none\
    `tokens.css`, light and dark, root layout, reduced-motion rules, disclaimer
 
 7. **AUTH-7** · [BFF sign-up, sign-in and sign-out with httpOnly cookies](issues/AUTH-7.md)\
-   ⬜ Todo · [#41][41] · Blocked by: WEB-6\
+   ⬜ Todo · [#41][41] · Blocked by: none\
    `/signup`, `/login`, Route Handlers that set the `session` and `refresh` cookies
 
 8. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
@@ -59,7 +59,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
 11. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
-    ⬜ Todo · [#45][45] · Blocked by: WEB-6\
+    ⬜ Todo · [#45][45] · Blocked by: none\
     `rendering-strategies.md` and a `/lab` index of every strategy
 
 ## Phase 1: The Feed
@@ -71,7 +71,7 @@ Passwordless sign-in, then the Twitter part of the app.
     Email links, email verification, passkeys, Google and GitHub, one "Roll in" form
 
 13. **FEED-12** · [Splash page](issues/FEED-12.md)\
-    ⬜ Todo · [#47][47] · Blocked by: WEB-6, AUTH-8\
+    ⬜ Todo · [#47][47] · Blocked by: AUTH-8\
     Static shell, cached abidings ticker and hashtags, "who is signed in" in Suspense
 
 14. **FEED-13** · [Feed with infinite scroll and hashtag chips](issues/FEED-13.md)\
@@ -167,7 +167,7 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     Seeded rug pattern generator; config saved through Nest
 
 35. **RUG-34** · [Laws of the Lane quiz](issues/RUG-34.md)\
-    ⬜ Todo · [#69][69] · Blocked by: WEB-6, API-29\
+    ⬜ Todo · [#69][69] · Blocked by: API-29\
     Original tenets, fully static quiz, alignment saved by a Server Action
 
 36. **RUG-35** · [Lane Certificate](issues/RUG-35.md)\
@@ -175,7 +175,7 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     `ImageResponse` certificate and share card; never implies ordination
 
 37. **RUG-36** · [Ask the Stranger](issues/RUG-36.md)\
-    ⬜ Todo · [#71][71] · Blocked by: WEB-6\
+    ⬜ Todo · [#71][71] · Blocked by: none\
     Curated original aphorisms, daily pick with `cacheLife('days')`
 
 ## Phase 4: Achievers

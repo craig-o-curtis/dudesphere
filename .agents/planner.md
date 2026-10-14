@@ -85,7 +85,7 @@ Follow the grilling skill. Ask in numbered rounds. Give your recommended answer 
 
 1. Write the plan in plan mode and ask for approval. The plan lists the gaps, the decisions, the tasks and every file you will edit.
 2. Once approved, write `context/epic-lebowski/handoffs/<ID>.md` from the template. Set its Status to `Planned`.
-3. Ask before you edit `issues/<ID>.md` or `tracker.md`, even after the plan is approved. On a yes, make the spec edits, set the tracker row to `⏳ In progress`, and add any new story rows. Also mark `✅ Done` any `👀 In review` row whose PR is now merged (`gh pr list --state merged --search <ID>`), and remove that story from every `Blocked by` cell. A new story gets the next unused id. Ids never change.
+3. Ask before you edit `issues/<ID>.md` or `tracker.md`, even after the plan is approved. On a yes, make the spec edits, set the tracker row to `⏳ In progress`, and add any new story rows. A new story gets the next unused id. Ids never change.
 4. Tell the user the next step. If you are the main session: run `claude --agent driver` in this worktree. If you are a subagent: the main session can drive the build itself by following `.agents/driver.md`, or the user can run `claude --agent driver` instead.
 
 ## Hard rules
