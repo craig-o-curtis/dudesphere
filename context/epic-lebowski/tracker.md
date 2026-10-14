@@ -39,7 +39,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `apps/web` scaffold: Cache Components, React Compiler, CSS Modules, port 3001
 
 6. **WEB-6** · [Design tokens, fonts, root layout and motion rules](issues/WEB-6.md)\
-   ⏳ In progress · [#40][40] · Blocked by: none\
+   👀 In review · [#40][40] · Blocked by: none\
    `tokens.css`, light and dark, root layout, reduced-motion rules, disclaimer
 
 7. **AUTH-7** · [BFF sign-up, sign-in and sign-out with httpOnly cookies](issues/AUTH-7.md)\
