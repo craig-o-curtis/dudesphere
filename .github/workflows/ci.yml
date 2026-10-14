@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   checks:
-    name: Format, lint, typecheck, test, build
+    name: Format, lint, and the API's typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -35,6 +35,34 @@ jobs:
       - run: pnpm --filter "@dudesphere/api..." run typecheck
       - run: pnpm --filter "@dudesphere/api..." run test
       - run: pnpm --filter "@dudesphere/api..." run build
+
+  web:
+    name: Web app typecheck, test, build
+    runs-on: ubuntu-latest
+    # The Next.js build reads no database and no API: every page that calls
+    # the API reads it at request time, inside a Suspense boundary.
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Next's own build cache, so an unchanged page is not compiled again.
+      - uses: actions/cache@v6
+        with:
+          path: apps/web/.next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: Build the web app's workspace packages
+        run: pnpm --filter "@dudesphere/web^..." run build
+      - run: pnpm --filter @dudesphere/web run typecheck
+      - run: pnpm --filter @dudesphere/web run test
+      - run: pnpm --filter @dudesphere/web run build
 
   migrations:
     name: Migrations apply, match entities, and roll back

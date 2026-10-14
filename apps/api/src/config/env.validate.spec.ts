@@ -46,7 +46,7 @@ describe("validateEnv", () => {
     expect(env.MAIL_USER).toBeUndefined();
     expect(env.MAIL_PASSWORD).toBeUndefined();
     expect(env.MAIL_FROM).toBe("Dudesphere <no-reply@dudesphere.local>");
-    expect(env.FRONTEND_URL).toBe("http://localhost:3000");
+    expect(env.FRONTEND_URL).toBe("http://localhost:3001");
     expect(env.PASSWORD_RESET_EXPIRES_IN).toBe(1800);
   });
 

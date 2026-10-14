@@ -142,7 +142,7 @@ export class EnvironmentVariables {
   // Where the web app is served. The password reset email links to
   // /reset-password on it. require_tld is off so localhost passes.
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
-  FRONTEND_URL: string = "http://localhost:3000";
+  FRONTEND_URL: string = "http://localhost:3001";
 
   // How long a password reset link works, in seconds. At least a minute, so
   // a typo cannot make every link dead on arrival.
