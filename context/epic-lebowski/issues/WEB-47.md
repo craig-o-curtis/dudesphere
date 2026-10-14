@@ -22,7 +22,7 @@ Each story checked its own page. Nobody has checked the whole app at once: bundl
   - Screen reader: one manual pass with VoiceOver over sign-in, feed, compose, thread, a Lane Night frame and the Score Sheet.
   - Zoom to 200 percent and a 320 px wide viewport: no horizontal scroll, no clipped controls.
 - **Reduced motion:** every page checked under the WEB-46 reduced-motion project; no element translates or scales.
-- **Fixes** land in this story. Large findings become new tracker rows.
+- **Fixes** land in this story. Large findings become new tracker stories.
 - `apps/web/README` content goes into `DEVELOPMENT.md`: how to run the budget script and Lighthouse locally.
 
 ## Design notes

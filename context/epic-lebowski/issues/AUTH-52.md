@@ -4,7 +4,7 @@ Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 1. Bl
 
 **Scope:** A fullstack story: members sign up and sign in with an emailed link, a passkey, or Google or GitHub, from one "Roll in" screen, while existing members keep their password as a fallback.
 
-Added on 2026-10-14 at Craig's request: sign-in must be super easy. It is the first row of Phase 1. Size L.
+Added on 2026-10-14 at Craig's request: sign-in must be super easy. It is the first story of Phase 1. Size L.
 
 ## Gap
 
@@ -135,7 +135,7 @@ Craig decides inside the story, before the migration is written.
 
 ### Possible split
 
-The story may split into three sub-issues in gmt's style, each with its own spec file and tracker row directly under this one:
+The story may split into three sub-issues in gmt's style, each with its own spec file and tracker entry directly under this one:
 
 - **AUTH-52a**: email links and email verification, the "Roll in" form and `/auth/link`.
 - **AUTH-52b**: passkeys.

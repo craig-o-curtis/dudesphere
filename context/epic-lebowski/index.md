@@ -49,7 +49,7 @@ included, and never a JavaScript `Date`. The root oxlint config enforces it.
 
 ## How to pick up a story
 
-1. Open [tracker.md](tracker.md). Take the first row whose Status is not Done.
+1. Open [tracker.md](tracker.md). Take the first story whose status is not Done.
    Check its `Blocked by` cell; an unfinished blocker comes first.
 2. Read `issues/<ID>.md`, such as `issues/FEED-12.md`. Read the sections of
    `overview.md` and `research.md` that it links.
@@ -61,6 +61,12 @@ included, and never a JavaScript `Date`. The root oxlint config enforces it.
 6. Meet the Definition of Done in `tracker.md`. Then set the row to Done.
 7. Put `Closes #<issue>` in the PR description, so merging the PR closes the
    GitHub issue. Check the issue closed after the merge.
+
+The agents in `.agents/` run these steps for you. `worktree branch --github
+<issue>` makes the branch. The `planner` agent covers steps 2 and 4, and writes
+a handoff to [handoffs/](handoffs/). The `driver` agent covers steps 5 and 6.
+`pr-finalizer` covers step 7. The worktree tool names branches its own way, so
+the branch may not match step 3. See the Agents section of `AGENTS.md`.
 
 ## How issues are named
 
