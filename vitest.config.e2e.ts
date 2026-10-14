@@ -18,7 +18,9 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     globals: true,
-    root: "./",
+    // The folder this file sits in, not the shell's working directory, so a
+    // run started from the repo root still sees only this app's tests.
+    root: import.meta.dirname,
     include: ["**/*.e2e-spec.ts"],
     // Decorators like @Type() need this loaded first, same as vitest.config.ts.
     // It worked before only because something in the dependency tree happened

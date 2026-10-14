@@ -20,6 +20,18 @@ import {
   type EnvLeak,
 } from "./env-leaks.js";
 
+/** The env files whose values must never be committed, from the repo root. */
+const ENV_FILES = [
+  ".env",
+  "apps/api/.env",
+  "apps/api/.env.staging",
+  "apps/api/.env.production",
+  "apps/web/.env.local",
+];
+
+/** Values written here are not secret, so they never count as a leak. */
+const EXAMPLE_FILES = [".env.example", "apps/api/.env.example", "apps/web/.env.example"];
+
 function git(...args: string[]): string {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
@@ -36,15 +48,24 @@ function checkEnvLeaks(): number {
   }
 
   const root = git("rev-parse", "--show-toplevel").trim();
-  const envText = readIfPresent(path.join(root, ".env"));
+  const envTexts = ENV_FILES.map((file) => readIfPresent(path.join(root, file))).filter(
+    (text): text is string => text !== undefined,
+  );
   // CI and a fresh clone have no .env, so there is nothing to leak.
-  if (envText === undefined) {
+  if (envTexts.length === 0) {
     return 0;
   }
-  const secrets = secretsFrom(
-    dotenv.parse(envText),
-    readIfPresent(path.join(root, ".env.example")) ?? "",
+  const examples = EXAMPLE_FILES.map((file) => readIfPresent(path.join(root, file)) ?? "").join(
+    "\n",
   );
+  // One map per file, then merged: the same name can hold a different value in
+  // each file, and every one of those values must stay out of the commit.
+  const secrets = new Map<string, string[]>();
+  for (const text of envTexts) {
+    for (const [value, names] of secretsFrom(dotenv.parse(text), examples)) {
+      secrets.set(value, [...new Set([...(secrets.get(value) ?? []), ...names])]);
+    }
+  }
 
   let envFiles: string[] = [];
   let leaks: EnvLeak[];

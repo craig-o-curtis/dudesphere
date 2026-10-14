@@ -1,7 +1,10 @@
 # compiled output
-/dist
-/node_modules
-/build
+dist/
+node_modules/
+build/
+.next/
+out/
+next-env.d.ts
 
 # TypeScript build cache
 *.tsbuildinfo
@@ -19,8 +22,8 @@ lerna-debug.log*
 .DS_Store
 
 # Tests
-/coverage
-/.nyc_output
+coverage/
+.nyc_output/
 
 # IDEs and editors
 /.idea
