@@ -1,6 +1,14 @@
 # Agent instructions
 
-This is a vanilla NestJS project with two databases: PostgreSQL through TypeORM and MongoDB through Mongoose. Keep it to those two. Do not add another ORM or data layer.
+This is a pnpm workspace with two apps and some shared packages:
+
+- `apps/api` is the NestJS API, `@dudesphere/api`. It has two databases: PostgreSQL through TypeORM and MongoDB through Mongoose. Keep it to those two. Do not add another ORM or data layer.
+- `apps/web` is the web app, on Next.js 16.4 and React 19.3. It never touches a database. It calls the API. Style it with CSS Modules and CSS variables. Do not add Tailwind.
+- `packages/*` holds code the apps share: `packages/config` (the shared tsconfig base), `packages/api-types` (the API's response types) and `packages/lane-engine` (bowling scoring).
+
+Run an API script from the repo root with `pnpm --filter @dudesphere/api <script>`, for example `pnpm --filter @dudesphere/api migration:run`. The root `package.json` lists the scripts that run from the root, such as `pnpm dev`, `pnpm lint` and `pnpm db:up`.
+
+`@northguild/gmt` and the zero-Date rule apply to `apps/web` as well as `apps/api`. Use gmt for every date, and never a JavaScript `Date`.
 
 ## Language
 
@@ -10,12 +18,33 @@ Ensure you use the plain-english skill for all prose, commit messages, PR titles
 
 - overview: `./context/overview.md`
 - coding-standards: `./context/coding-standards.md`
+- frontend-architecture: `./context/frontend-architecture.md`
+- fullstack-architecture: `./context/fullstack-architecture.md`
+- suggested-frontend-skills: `./context/suggested-frontend-skills.md`
+
+## Current epic
+
+Epic Lebowski is the work in progress. Start at `./context/epic-lebowski/index.md`. `./context/epic-lebowski/tracker.md` tracks what is done and what is left.
 
 ## Skills
 
 - nestjs-best-practices: `.agents/skills/nestjs-best-practices`
 - plain-english: `.agents/skills/plain-english`
 - code-reviewer-nestjs: `.agents/skills/code-reviewer-nestjs`
+
+For `apps/web` (see `./context/suggested-frontend-skills.md`):
+
+- nextjs-app-architecture: `.agents/skills/nextjs-app-architecture`
+- next-cache-components-optimizer: `.agents/skills/next-cache-components-optimizer`
+- next-dev-loop: `.agents/skills/next-dev-loop`
+- vercel-react-best-practices: `.agents/skills/vercel-react-best-practices`. Ignore its SWR rule (the app uses TanStack Query) and its memo rules (React Compiler is on)
+- vercel-react-view-transitions: `.agents/skills/vercel-react-view-transitions`
+- animate: `.agents/skills/animate`
+- better-accessibility: `.agents/skills/better-accessibility`
+- r3f-fundamentals: `.agents/skills/r3f-fundamentals`
+- playwright-best-practices: `.agents/skills/playwright-best-practices`
+- vitest: `.agents/skills/vitest`
+- tanstack-query-best-practices: `.agents/skills/tanstack-query-best-practices`. Skip its SSR hydration rules: TanStack Query is for client lists only
 
 ## Git
 
@@ -24,6 +53,7 @@ NEVER run `git push` without asking me first and getting a yes. This holds even 
 ## Constraints
 
 - Use NestJS
+- Use Next.js for apps/web
 - Use PostgreSQL
 - Use TypeScript
 - Use plain-english for all prose
