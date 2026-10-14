@@ -46,13 +46,10 @@ more file to keep in step with the code.
 | ------------------------------ | ------------------------------ | ------ | -------------------------------------------------------------------- |
 | `ValueTakenException`          | `ConflictException`            | 409    | `EMAIL_TAKEN`, `USERNAME_TAKEN`, `DISPLAY_NAME_TAKEN`, `VALUE_TAKEN` |
 | `NotOwnerException`            | `ForbiddenException`           | 403    | `NOT_OWNER`                                                          |
-| `TokenMissingException`        | `UnauthorizedException`        | 401    | `TOKEN_MISSING`                                                      |
 | `DatabaseUnavailableException` | `ServiceUnavailableException`  | 503    | `DATABASE_UNAVAILABLE`                                               |
 | `InvalidValueException`        | `BadRequestException`          | 400    | none                                                                 |
 | `TimeLimitExceededException`   | `RequestTimeoutException`      | 408    | none                                                                 |
 | `DatabaseFaultException`       | `InternalServerErrorException` | 500    | none                                                                 |
-| `ResetTokenInvalidException`   | `BadRequestException`          | 400    | `RESET_TOKEN_INVALID`                                                |
-| `RefreshTokenInvalidException` | `UnauthorizedException`        | 401    | `REFRESH_TOKEN_INVALID`                                              |
 | `ClockUnavailableException`    | `ServiceUnavailableException`  | 503    | `CLOCK_UNAVAILABLE`                                                  |
 
 Who throws each one:
@@ -64,12 +61,9 @@ Who throws each one:
   you do not, and the answer is the general `VALUE_TAKEN`.
 - `NotOwnerException`: `AbidingsService`, `ProfilesService` and `UsersService`,
   when the thing exists and is someone else's. Each passes its own message.
-- `TokenMissingException`: `JwtAuthGuard` and `RolesGuard`.
 - `DatabaseUnavailableException`: all three exception filters.
 - `InvalidValueException`, `DatabaseFaultException`: both database filters.
 - `TimeLimitExceededException`: both database filters and `TimeoutInterceptor`.
-- `ResetTokenInvalidException`: `PasswordResetService`, when a password reset link is wrong, already used, or expired.
-- `RefreshTokenInvalidException`: `TokenService.refresh`, when a refresh token is unknown, expired, already used, or its session or member is gone.
 - `ClockUnavailableException`: the two helpers in `src/shared/utils/utc-clock.ts`, when gmt cannot read the clock or work out a time. Temporary, with its error code.
 
 The four the filters throw take the driver's error as their one argument and

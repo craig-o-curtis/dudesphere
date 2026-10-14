@@ -72,13 +72,24 @@ async function cleanup(label: string): Promise<void> {
       `DELETE FROM profile WHERE "userId" = ANY($1::int[])`,
       [ids],
     )) as [unknown, number];
+    // The sign-in state of @nestjs/authentication. Its tables hold the user
+    // id as text with no foreign key, so nothing would remove these rows with
+    // the user, and they would pile up run after run.
+    const userIds = ids.map(String);
+    const [, refreshTokens] = (await dataSource.query(
+      `DELETE FROM refresh_tokens WHERE user_id = ANY($1::text[])`,
+      [userIds],
+    )) as [unknown, number];
+    await dataSource.query(`DELETE FROM email_tokens WHERE user_id = ANY($1::text[])`, [userIds]);
+    await dataSource.query(`DELETE FROM sessions WHERE user_id = ANY($1::text[])`, [userIds]);
     const [, users] = (await dataSource.query(`DELETE FROM "user" WHERE id = ANY($1::int[])`, [
       ids,
     ])) as [unknown, number];
 
     console.log(
       `[e2e ${label}] removed ${users} users, ${profiles} profiles, ` +
-        `${abidings.deletedCount} abidings, ${hashtags.deletedCount} hashtags`,
+        `${refreshTokens} refresh tokens, ${abidings.deletedCount} abidings, ` +
+        `${hashtags.deletedCount} hashtags`,
     );
   } finally {
     await Promise.all([dataSource.destroy(), client.close()]);

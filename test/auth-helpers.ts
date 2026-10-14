@@ -1,5 +1,9 @@
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import type { INestApplication } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -10,8 +14,8 @@ import { signUp } from "./sign-up.js";
 // The token helpers the e2e suites share, so each suite does not carry its
 // own copy.
 //
-// Every token here belongs to a real user. JwtAuthGuard looks the user up on
-// each request and takes the role from the database, so a token signed for a
+// Every token here belongs to a real user. JwtAuth looks the user up on each
+// request and takes the role from the database, so a token signed for a
 // made-up id, or one that only claims a role, is refused.
 
 /** The Authorization header for a token, in the shape supertest's set() takes. */
@@ -58,7 +62,7 @@ export async function accessTokenFor(
  * the access token. test/global-setup.ts deletes the member when the run ends.
  *
  * No route can make an admin, on purpose, so an admin is made the way the
- * seed makes one: the role is written to the row. The login comes after
+ * seed makes one: the role is written to the row. The sign-in comes after
  * that, though it would not matter: the role is read on each request.
  */
 export async function signedInAs(
@@ -84,25 +88,34 @@ export async function setRole(
 }
 
 /**
- * The same member's token, as if they had logged in a minute earlier. It is
- * signed by the app's own JwtService, so it is as real as the one passed in.
- *
- * It carries the member's id and username and no session id. That is on
- * purpose: the guard then skips its session check, and what refuses this
- * token is the password check alone, which is what the suites that use it
- * are testing. A password change also ends every session, so with a session
- * id the token would be refused twice over and the test would prove nothing
- * about the first.
+ * The same member's token, as if they had signed in a minute earlier. It is
+ * signed with the app's own `accessToken` options, so it is as real as the
+ * one passed in.
  *
  * For a test that needs a token that is plainly older than something it is
  * about to do, such as a password change. A token records only the second it
- * was signed in, so a token from a login moments before would be a coin toss.
- * Moving it back a minute settles that with no waiting and no clock.
+ * was signed in, so a token from a sign-in moments before would be a coin
+ * toss. Moving it back a minute settles that with no waiting.
  */
-export function signedAMinuteEarlier(app: INestApplication<App>, token: string): Promise<string> {
-  const jwt = app.get(JwtService);
-  const { sub, username, iat } = jwt.decode<{ sub: number; username: string; iat: number }>(token);
-  return jwt.signAsync({ sub, username, iat: iat - 60 });
+export function signedAMinuteEarlier(app: INestApplication<App>, token: string): string {
+  const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+  if (!accessToken) {
+    throw new Error("AuthenticationModule has no accessToken options");
+  }
+  const { sub, iat } = claimsOf(token);
+  // The signer's clock, in milliseconds, set to a minute before the original.
+  const signer = new JwtSigner({ ...accessToken, now: () => (iat - 60) * 1000 });
+  return signer.sign({ sub });
+}
+
+/** The claims of a JWT, read without checking it. Only for tokens a test just got. */
+export function claimsOf(token: string): { sub: string; iat: number; exp: number } {
+  const [, payload] = token.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+    sub: string;
+    iat: number;
+    exp: number;
+  };
 }
 
 // One member for each role, for each app. A suite calls tokenFor many times,

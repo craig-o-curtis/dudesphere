@@ -4,11 +4,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { RequestMethod } from "@nestjs/common";
 import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants.js";
-import { Reflector } from "@nestjs/core";
-
-import { ROLES_KEY } from "./../src/shared/guards/auth.decorator.js";
-import { IS_PUBLIC_KEY } from "./../src/shared/guards/public.decorator.js";
-import type { UserRole } from "./../src/users/user.entity.js";
 
 // Reads the app's routes from the controllers themselves, not from a list
 // kept in a test. A new route or a new controller is then covered without
@@ -36,18 +31,31 @@ export interface Route {
 
 /** Who may call a route, as its decorators say. */
 export interface RouteAccess {
-  /** True when the route carries @Public(). */
+  /** @Public() from @nestjs/authentication: no sign-in needed. */
   isPublic: boolean;
-  /**
-   * The list @Auth() stored: empty for any signed-in caller, or the roles
-   * that may call. Undefined when the route carries no @Auth().
-   */
-  roles: UserRole[] | undefined;
+  /** @Can.Anyone(): any signed-in member. */
+  anyone: boolean;
+  /** The @Can() checks, as "PolicyName.ability", class-level first. Empty when none. */
+  checks: string[];
+}
+
+// The keys the two packages write their route metadata under. Neither
+// package exports them, so they are copied here from their dist files:
+// @nestjs/authorization's authorization.constants.js and
+// @nestjs/authentication's authentication.constants.js. The public key is a
+// registry symbol, so Symbol.for() here gives the very same symbol.
+const CAN_METADATA = "authorization:can";
+const CAN_ANYONE_METADATA = "authorization:can-anyone";
+const AUTHENTICATION_PUBLIC = Symbol.for("@nestjs/authentication:public");
+
+/** One @Can() requirement, as @Can() stores it. */
+interface CanRequirement {
+  policy: { name: string };
+  ability: string;
 }
 
 // This file is test/routes.ts, so "../src/" is src.
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
-const reflector = new Reflector();
 
 const VERBS: Partial<Record<RequestMethod, Verb>> = {
   [RequestMethod.GET]: "get",
@@ -115,14 +123,33 @@ export async function findRoutes(): Promise<Route[]> {
   return routes;
 }
 
+/** The @Can() requirements stored on a handler or a controller. */
+function canChecks(target: object): string[] {
+  const stored = (Reflect.getMetadata(CAN_METADATA, target) ?? []) as CanRequirement[];
+  return stored.map(({ policy, ability }) => `${policy.name}.${ability}`);
+}
+
 /**
- * What the access decorators on a route say. Read the way the guards read
- * them: the handler first, then its controller.
+ * What the access decorators on a route say. Read the way the packages'
+ * guards read them, the handler first, then its controller. This mirrors
+ * routeChecks() in @nestjs/authorization's utils/route-checks.util.js:
+ *
+ * - @Public() on the method wins over the class, either way. @Authenticate()
+ *   writes false, so a method can opt back in under a @Public() class.
+ * - @Can.Anyone() counts on the method or the class.
+ * - A @Public() or @Can.Anyone() on the method lifts the class's @Can().
+ *   A @Can() on the method itself still applies.
  */
 export function accessOf({ controller, handler }: Route): RouteAccess {
-  const targets = [handler, controller];
+  const methodPublic = Reflect.getMetadata(AUTHENTICATION_PUBLIC, handler) as boolean | undefined;
+  const classPublic = Reflect.getMetadata(AUTHENTICATION_PUBLIC, controller) as boolean | undefined;
+  const methodAnyone = Reflect.getMetadata(CAN_ANYONE_METADATA, handler) === true;
+  const classAnyone = Reflect.getMetadata(CAN_ANYONE_METADATA, controller) === true;
+  const methodOpen = methodPublic === true || methodAnyone;
+
   return {
-    isPublic: reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, targets) === true,
-    roles: reflector.getAllAndOverride<UserRole[] | undefined>(ROLES_KEY, targets),
+    isPublic: (methodPublic ?? classPublic) === true,
+    anyone: methodAnyone || classAnyone,
+    checks: [...(methodOpen ? [] : canChecks(controller)), ...canChecks(handler)],
   };
 }

@@ -24,7 +24,7 @@ describe("Rate limiting (e2e)", () => {
   let app: INestApplication<App>;
 
   const tag = randomUUID().slice(0, 8);
-  const password = "secret123";
+  const password = "a-long-secret-123";
 
   function login(identifier: string, withPassword = "not-the-password") {
     return request(app.getHttpServer())
@@ -117,7 +117,7 @@ describe("Rate limiting (e2e)", () => {
   // request, not the email.
   describe("forgot-password allows 3 requests in 15 minutes for one email", () => {
     function forgot(email: string) {
-      return request(app.getHttpServer()).post("/auth/forgot-password").send({ email });
+      return request(app.getHttpServer()).post("/auth/password/forgot").send({ email });
     }
 
     it("answers 429 to the fourth", async () => {
@@ -145,9 +145,17 @@ describe("Rate limiting (e2e)", () => {
       await forgot(`e2e-floodother-${tag}@example.com`).expect(202);
     });
 
-    // The count by IP address runs beside the count by email. Without it, a
-    // caller who named a new email each time would never be refused. The
-    // tests above already used some of this minute's 100, so the refusal
+    // The IP count sends its own set of headers, with "-ip" on the end.
+    it("counts the address alone as well, in headers of its own", async () => {
+      const response = await forgot(`e2e-ipcount-${tag}@example.com`).expect(202);
+
+      expect(response.headers["x-ratelimit-limit-ip"]).toBe("100");
+      expect(Number(response.headers["x-ratelimit-remaining-ip"])).toBeLessThan(100);
+    });
+
+    // The count by IP address alone runs beside the count by email. Without
+    // it, a caller who named a new email each time would never be refused.
+    // The tests above already used some of this minute's 100, so the refusal
     // comes at the 101st request here or sooner.
     it("holds one address to 100 a minute, however many emails it names", async () => {
       let sent = 1;
@@ -177,6 +185,14 @@ describe("Rate limiting (e2e)", () => {
 
       expect(response.headers["x-ratelimit-limit"]).toBe("100");
       expect(Number(response.headers["x-ratelimit-remaining"])).toBeLessThan(100);
+    });
+
+    // A body that names no account is counted once, by the default count,
+    // which already goes by IP address. The IP count skips it.
+    it("is not counted a second time by the IP count", async () => {
+      const response = await request(app.getHttpServer()).get("/hashtags").expect(200);
+
+      expect(response.headers).not.toHaveProperty("x-ratelimit-remaining-ip");
     });
   });
 });

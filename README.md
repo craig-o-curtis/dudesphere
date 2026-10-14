@@ -208,25 +208,28 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint               | Description                         |
-| ------ | ---------------------- | ----------------------------------- |
-| POST   | /auth/signup           | Sign up                             |
-| POST   | /auth/token            | Sign in with username or email      |
-| POST   | /auth/token/refresh    | Swap a refresh token for a new pair |
-| POST   | /auth/token/revoke     | Sign out this device                |
-| POST   | /auth/token/revoke-all | Sign out every device               |
-| POST   | /auth/forgot-password  | Email a password reset link         |
-| POST   | /auth/reset-password   | Set a new password with the link    |
+| Method | Endpoint                  | Description                         |
+| ------ | ------------------------- | ----------------------------------- |
+| POST   | /auth/sign-up             | Sign up                             |
+| POST   | /auth/token               | Sign in with username or email      |
+| POST   | /auth/token/refresh       | Swap a refresh token for a new pair |
+| POST   | /auth/token/revoke        | Sign out this device                |
+| POST   | /auth/sign-out-everywhere | Sign out every device               |
+| POST   | /auth/password/forgot     | Email a password reset link         |
+| POST   | /auth/password/reset      | Set a new password with the link    |
+
+The routes and their names follow the NestJS docs, which build auth on
+`@nestjs/authentication` and `@nestjs/authorization`. [reference/TOKENS_AND_SESSIONS.md](reference/TOKENS_AND_SESSIONS.md) explains them.
 
 Sign up with `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`. The username is for logging in and only you and admins see it. The display name is what other members see, on your profile and on your abidings. It must be unique, and letter case does not count.
 
 To try a route by hand, in Thunder Client or with curl, see [Try the API by hand](DEVELOPMENT.md#try-the-api-by-hand). `pnpm dev:token` prints a token for local use.
 
-Sign in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces. The answer is `{ accessToken, refreshToken, expiresIn }`: the access token lasts 15 minutes, and the refresh token is swapped, once, for a new pair. [context/overview.md](context/overview.md) has the full rules.
+Sign in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces. The answer is `{ accessToken, refreshToken, expiresIn }`: the access token lasts 15 minutes, and the refresh token is swapped, once, for a new pair. Signing out ends the refresh token at once. The access token works until it expires. [context/overview.md](context/overview.md) has the full rules.
 
-Forgot your password? Post `{ "email": "..." }` to `/auth/forgot-password`. In development the email lands in Mailpit at http://localhost:8025. Post the token from its link, with `password` and `confirmPassword`, to `/auth/reset-password`.
+Forgot your password? Post `{ "email": "..." }` to `/auth/password/forgot`. In development the email lands in Mailpit at http://localhost:8025. Post `{ "token": "...", "password": "..." }`, with the token from its link, to `/auth/password/reset`.
 
-Login allows 5 tries in 15 minutes for one account from one IP address. After that it answers 429 with a `Retry-After` header. Every route, login included, also allows 100 requests a minute from one IP address.
+Sign-in allows 5 tries in 15 minutes for one account from one IP address. After that it answers 429 with a `Retry-After` header. Every route, login included, also allows 100 requests a minute from one IP address.
 
 ## Database Usage
 

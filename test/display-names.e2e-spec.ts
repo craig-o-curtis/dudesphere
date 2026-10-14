@@ -38,7 +38,7 @@ describe("Display names (e2e)", () => {
   }
 
   function postSignUp(body: object) {
-    return request(app.getHttpServer()).post("/auth/signup").send(body);
+    return request(app.getHttpServer()).post("/auth/sign-up").send(body);
   }
 
   function logIn(sent: SignUpBody): Promise<{ token: string; userId: number }> {

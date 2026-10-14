@@ -34,7 +34,7 @@ describe("validateEnv", () => {
     // 15 minutes, 7 days and 30 days.
     expect(env.JWT_EXPIRES_IN).toBe(900);
     expect(env.REFRESH_TOKEN_EXPIRES_IN).toBe(604800);
-    expect(env.SESSION_EXPIRES_IN).toBe(2592000);
+    expect(env.REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN).toBe(2592000);
     expect(env.JWT_AUDIENCE).toBe("dudesphere-api");
     expect(env.JWT_ISSUER).toBe("dudesphere");
     // Rate limiting is on unless someone turns it off.
@@ -159,47 +159,47 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...required, MONGO_URI: "localhost:27017" })).toThrow(/MONGO_URI/);
   });
 
-  describe("the refresh token and session lifetimes", () => {
+  describe("the refresh token lifetimes", () => {
     it("reads both as whole numbers of seconds", () => {
       const env = validateEnv({
         ...required,
         REFRESH_TOKEN_EXPIRES_IN: "86400",
-        SESSION_EXPIRES_IN: "604800",
+        REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN: "604800",
       });
 
       expect(env.REFRESH_TOKEN_EXPIRES_IN).toBe(86400);
-      expect(env.SESSION_EXPIRES_IN).toBe(604800);
+      expect(env.REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN).toBe(604800);
     });
 
     it.each([
       ["REFRESH_TOKEN_EXPIRES_IN", "59"],
       ["REFRESH_TOKEN_EXPIRES_IN", "abc"],
-      ["SESSION_EXPIRES_IN", "59"],
-      ["SESSION_EXPIRES_IN", "1.5"],
+      ["REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN", "59"],
+      ["REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN", "1.5"],
     ])("throws when %s is %s", (name, value) => {
       expect(() => validateEnv({ ...required, [name]: value })).toThrow(new RegExp(name));
     });
 
-    // A refresh token never outlives its session, so this pair would cut
+    // A refresh token never outlives its sign-in, so this pair would cut
     // every refresh token short without saying so.
-    it("throws when a session is shorter than one refresh token", () => {
+    it("throws when the absolute limit is shorter than one refresh token", () => {
       expect(() =>
         validateEnv({
           ...required,
           REFRESH_TOKEN_EXPIRES_IN: "604800",
-          SESSION_EXPIRES_IN: "86400",
+          REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN: "86400",
         }),
-      ).toThrow(/SESSION_EXPIRES_IN must not be less than REFRESH_TOKEN_EXPIRES_IN/);
+      ).toThrow(/REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN must not be less than REFRESH_TOKEN_EXPIRES_IN/);
     });
 
-    it("accepts a session exactly as long as one refresh token", () => {
+    it("accepts an absolute limit exactly as long as one refresh token", () => {
       const env = validateEnv({
         ...required,
         REFRESH_TOKEN_EXPIRES_IN: "86400",
-        SESSION_EXPIRES_IN: "86400",
+        REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN: "86400",
       });
 
-      expect(env.SESSION_EXPIRES_IN).toBe(86400);
+      expect(env.REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN).toBe(86400);
     });
   });
 

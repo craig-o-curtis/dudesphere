@@ -95,7 +95,7 @@ describe("Model constraints (e2e)", () => {
     it("PATCH /users/me rejects null for password", async () => {
       const { body } = await patch("/users/me", {
         password: null,
-        currentPassword: "secret123",
+        currentPassword: "a-long-secret-123",
       }).expect(400);
 
       expectRejectedField(body, "password");
@@ -103,7 +103,7 @@ describe("Model constraints (e2e)", () => {
 
     it("PATCH /users/me rejects null for currentPassword", async () => {
       const { body } = await patch("/users/me", {
-        password: "secret456",
+        password: "a-long-secret-456",
         currentPassword: null,
       }).expect(400);
 
@@ -145,7 +145,7 @@ describe("Model constraints (e2e)", () => {
 
     it("POST /users rejects one in username", async () => {
       const { body } = await request(app.getHttpServer())
-        .post("/auth/signup")
+        .post("/auth/sign-up")
         .send(signUpBody({ username: `e2e\u0000${tag()}` }))
         .expect(400);
 
@@ -155,9 +155,9 @@ describe("Model constraints (e2e)", () => {
 
   describe("a value longer than its column, counted the way Postgres counts", () => {
     // 13 letters to @MaxLength, 26 characters to the column's limit of 24.
-    it("POST /auth/signup rejects a username that is only short if selectors are left out", async () => {
+    it("POST /auth/sign-up rejects a username that is only short if selectors are left out", async () => {
       const { body } = await request(app.getHttpServer())
-        .post("/auth/signup")
+        .post("/auth/sign-up")
         .send(signUpBody({ username: LETTER_WITH_SELECTOR.repeat(13) }))
         .expect(400);
 
@@ -193,7 +193,7 @@ describe("Model constraints (e2e)", () => {
 
     it("rejects a bad date at sign-up too", async () => {
       const { body } = await request(app.getHttpServer())
-        .post("/auth/signup")
+        .post("/auth/sign-up")
         .send(signUpBody({ profile: { ordainedDate: "2026-02-30" } }))
         .expect(400);
 

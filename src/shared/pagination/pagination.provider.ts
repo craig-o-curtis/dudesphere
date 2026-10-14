@@ -8,7 +8,7 @@
 //
 // This class is not that. It belongs to no feature and has no controller of
 // its own. It is a tool every list route shares, so it takes the general
-// name, as HashingProvider does in src/hashing. The NestJS course this
+// name, as MailProvider does in src/mail. The NestJS course this
 // project follows names it PaginationProvider too.
 //
 // Calling it PaginationService would change nothing about how it works.

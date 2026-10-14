@@ -48,7 +48,9 @@ describe("UpdateMyUserDto", () => {
   }
 
   it("accepts a new password with the current one", async () => {
-    expect(await check({ password: "secret2", currentPassword: "secret1" })).toEqual([]);
+    expect(await check({ password: "a-new-long-secret-2", currentPassword: "secret1" })).toEqual(
+      [],
+    );
   });
 
   // Missing is fine here. UsersService decides whether it was needed.
@@ -57,7 +59,7 @@ describe("UpdateMyUserDto", () => {
   });
 
   it("rejects null for currentPassword", async () => {
-    expect(await check({ password: "secret2", currentPassword: null })).toEqual([
+    expect(await check({ password: "a-new-long-secret-2", currentPassword: null })).toEqual([
       "currentPassword",
     ]);
   });

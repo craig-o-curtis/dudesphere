@@ -7,10 +7,10 @@ export default registerAs("auth", () => {
   return {
     secret: env.JWT_SECRET,
     // All three lifetimes are in seconds: the access token, one refresh
-    // token, and a whole session.
+    // token, and every refresh token of one sign-in together.
     expiresIn: env.JWT_EXPIRES_IN,
     refreshExpiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
-    sessionExpiresIn: env.SESSION_EXPIRES_IN,
+    refreshAbsoluteExpiresIn: env.REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN,
     audience: env.JWT_AUDIENCE,
     issuer: env.JWT_ISSUER,
     // For the password reset email: where its link points, and how long the

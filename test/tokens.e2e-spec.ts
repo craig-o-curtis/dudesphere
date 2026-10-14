@@ -1,11 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { setTimeout as pause } from "node:timers/promises";
 
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
-import { addUtc, getUtcNow, subtractUtc } from "@northguild/gmt";
+import { getUtcNow, subtractUtc } from "@northguild/gmt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -13,26 +16,32 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
-import { hashOf, newOneTimeToken } from "./../src/auth/one-time-token.js";
-import { RefreshTokensService } from "./../src/auth/refresh-tokens.service.js";
 import { UserRole } from "./../src/users/user.entity.js";
-import { UsersService } from "./../src/users/users.service.js";
 import { bearer, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, type SignUpBody } from "./sign-up.js";
 
-// Signing in, staying signed in, and being signed out, over real HTTP and the
-// real database.
+// Signing in, staying signed in, and signing out, over real HTTP and the real
+// database: the routes of TokensController and SessionsController, on
+// @nestjs/authentication's TokenService. See "Issue tokens to the mobile app"
+// on https://docs.nestjs.com/security/authentication.
 //
 // A member holds two tokens. The access token is a JWT that goes with every
 // request and lasts minutes. The refresh token is random text that is swapped,
-// once, for a new pair. The unit specs fake the database, so only this file
-// shows the table doing its part: one use for each token, and one winner when
-// two requests arrive together.
+// once, for a new pair. The refresh tokens of one sign-in form a family.
+//
+// What a sign-out ends is the family. An access token carries no family, so
+// it works until it expires, at most JWT_EXPIRES_IN. The docs accept that,
+// and so do the tests below, which say so where it matters. A closed account
+// and a changed password do end access tokens, through JwtAuth.validate.
+//
+// The store's own rules, such as one winner when two requests spend one
+// token, are also proved by the package's contract suite in
+// test/typeorm-authentication.store.e2e-spec.ts.
 //
 // Needs the databases running and the migrations applied. Creates throwaway
-// e2e- users. test/global-setup.ts deletes them when the run ends, and the
-// foreign key's cascade takes their refresh tokens with them.
+// e2e- users. test/global-setup.ts deletes them and their tokens when the run
+// ends.
 describe("Tokens (e2e)", () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
@@ -44,19 +53,17 @@ describe("Tokens (e2e)", () => {
     expiresIn: number;
   }
 
+  // A refresh token's row, found by its hash.
   interface StoredToken {
-    id: string;
-    familyId: string;
-    usedAt: string | null;
+    family_id: string;
+    used_at: string | null;
     revoked: boolean;
   }
 
-  const refused = {
-    statusCode: 401,
-    message: "Invalid or expired refresh token",
-    error: "Unauthorized",
-    errorCode: "REFRESH_TOKEN_INVALID",
-  };
+  // The package's answers to a refresh token it will not swap.
+  function refused(reason: "invalid" | "expired" | "reused") {
+    return { statusCode: 401, message: `Refresh token ${reason}`, error: "Unauthorized" };
+  }
 
   function signInAs(sent: SignUpBody) {
     return request(app.getHttpServer())
@@ -76,21 +83,9 @@ describe("Tokens (e2e)", () => {
     return request(app.getHttpServer()).post("/auth/token/revoke").send({ refreshToken });
   }
 
-  function revokeAll(accessToken?: string) {
-    const post = request(app.getHttpServer()).post("/auth/token/revoke-all");
+  function signOutEverywhere(accessToken?: string) {
+    const post = request(app.getHttpServer()).post("/auth/sign-out-everywhere");
     return accessToken ? post.set(bearer(accessToken)) : post;
-  }
-
-  /** A session that has ended: neither of its tokens works any more. */
-  async function expectSignedOut(pair: Pair) {
-    const me = await whoAmI(pair.accessToken).expect(401);
-    expect(me.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
-    await refresh(pair.refreshToken).expect(401);
-  }
-
-  /** A session that is still going: its access token works. */
-  async function expectSignedIn(pair: Pair) {
-    await whoAmI(pair.accessToken).expect(200);
   }
 
   /** A new member, signed in: what they sent at sign up, their id, and their first pair. */
@@ -100,16 +95,21 @@ describe("Tokens (e2e)", () => {
     return { sent, userId: user.id, pair: body as Pair };
   }
 
-  /** A minute ago, by the app's clock, which is the clock the token code uses. */
+  /** A minute ago, by the app's clock. */
   function aMinuteAgo(): string {
     return subtractUtc(getUtcNow(), { minutes: 1 });
   }
 
-  /** The row for a refresh token, found the way the app finds it: by its hash. */
+  /** The id a refresh token is stored under: its SHA-256, in base64url. */
+  function idOf(refreshToken: string): string {
+    return createHash("sha256").update(refreshToken).digest("base64url");
+  }
+
+  /** The row for a refresh token. Undefined when there is none. */
   async function storedToken(refreshToken: string): Promise<StoredToken | undefined> {
     const rows: StoredToken[] = await dataSource.query(
-      `SELECT "id", "familyId", "usedAt", "revoked" FROM "refresh_token" WHERE "id" = $1`,
-      [createHash("sha256").update(refreshToken).digest("hex")],
+      `SELECT family_id, used_at, revoked FROM refresh_tokens WHERE id = $1`,
+      [idOf(refreshToken)],
     );
     return rows[0];
   }
@@ -150,26 +150,24 @@ describe("Tokens (e2e)", () => {
     it("stores a hash of the refresh token, and not the token", async () => {
       const { pair } = await newSession();
 
-      const rows: { id: string }[] = await dataSource.query(
-        `SELECT "id" FROM "refresh_token" WHERE "id" = $1`,
-        [pair.refreshToken],
-      );
+      const rows: unknown[] = await dataSource.query(`SELECT 1 FROM refresh_tokens WHERE id = $1`, [
+        pair.refreshToken,
+      ]);
 
       expect(rows).toEqual([]);
-      expect(await storedToken(pair.refreshToken)).toMatchObject({ usedAt: null, revoked: false });
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ used_at: null, revoked: false });
     });
 
-    it("starts a separate session for each sign-in", async () => {
+    it("starts a separate family for each sign-in", async () => {
       const { sent, pair: phone } = await newSession();
-      const { body } = await signInAs(sent).expect(200);
-      const laptop = body as Pair;
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
 
       const [first, second] = await Promise.all([
         storedToken(phone.refreshToken),
         storedToken(laptop.refreshToken),
       ]);
 
-      expect(first?.familyId).not.toBe(second?.familyId);
+      expect(first?.family_id).not.toBe(second?.family_id);
     });
   });
 
@@ -190,7 +188,7 @@ describe("Tokens (e2e)", () => {
       expect(me.body).toMatchObject({ id: userId });
     });
 
-    it("keeps the new token in the same session, and marks the old one used", async () => {
+    it("keeps the new token in the same family, and marks the old one used", async () => {
       const { pair } = await newSession();
       const { body } = await refresh(pair.refreshToken).expect(200);
 
@@ -199,8 +197,8 @@ describe("Tokens (e2e)", () => {
         storedToken((body as Pair).refreshToken),
       ]);
 
-      expect(old?.usedAt).not.toBeNull();
-      expect(successor).toMatchObject({ familyId: old?.familyId, usedAt: null, revoked: false });
+      expect(old?.used_at).not.toBeNull();
+      expect(successor).toMatchObject({ family_id: old?.family_id, used_at: null, revoked: false });
     });
 
     // A member who keeps coming back stays signed in: each new token can be
@@ -224,7 +222,7 @@ describe("Tokens (e2e)", () => {
     ])("401 for %s", async (_what, value) => {
       const { body } = await refresh(value).expect(401);
 
-      expect(body).toEqual(refused);
+      expect(body).toEqual(refused("invalid"));
     });
 
     it("401 for an access token sent in its place", async () => {
@@ -232,7 +230,7 @@ describe("Tokens (e2e)", () => {
 
       const { body } = await refresh(pair.accessToken).expect(401);
 
-      expect(body).toEqual(refused);
+      expect(body).toEqual(refused("invalid"));
     });
 
     it.each([
@@ -244,18 +242,33 @@ describe("Tokens (e2e)", () => {
     });
 
     // The member was away longer than a refresh token lasts. Nothing was
-    // stolen, so the session is not ended: it has only run out for them.
-    it("401 for a token past its time, which does not end the session", async () => {
+    // stolen, so the token is not spent and the family is not ended: it has
+    // only run out for them.
+    it("401 for a token past its time, which spends nothing", async () => {
       const { pair } = await newSession();
-      await dataSource.query(`UPDATE "refresh_token" SET "expiresAt" = $1 WHERE "id" = $2`, [
+      await dataSource.query(`UPDATE refresh_tokens SET expires_at = $1 WHERE id = $2`, [
         aMinuteAgo(),
-        (await storedToken(pair.refreshToken))?.id,
+        idOf(pair.refreshToken),
       ]);
 
       const { body } = await refresh(pair.refreshToken).expect(401);
 
-      expect(body).toEqual(refused);
-      expect(await storedToken(pair.refreshToken)).toMatchObject({ usedAt: null, revoked: false });
+      expect(body).toEqual(refused("expired"));
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ used_at: null, revoked: false });
+    });
+
+    // A family lasts REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN at most, however often
+    // its tokens were swapped.
+    it("401 for a family past its absolute end", async () => {
+      const { pair } = await newSession();
+      await dataSource.query(
+        `UPDATE refresh_tokens SET family_expires_at = $1 WHERE family_id = $2`,
+        [aMinuteAgo(), (await storedToken(pair.refreshToken))?.family_id],
+      );
+
+      const { body } = await refresh(pair.refreshToken).expect(401);
+
+      expect(body).toEqual(refused("expired"));
     });
 
     it("401 once the member has closed their account", async () => {
@@ -267,43 +280,56 @@ describe("Tokens (e2e)", () => {
 
       const { body } = await refresh(pair.refreshToken).expect(401);
 
-      expect(body).toEqual(refused);
+      expect(body).toEqual(refused("invalid"));
+    });
+
+    // The backstop behind the case above. Closing an account ends its
+    // families, so a refresh is normally refused. Here the account is marked
+    // closed straight in the table, with its family left going, to stand for
+    // one that slipped through. TokenService does not read the user, so it
+    // swaps the token. The new access token is still worth nothing: JwtAuth
+    // finds no member for it.
+    it("hands a closed account whose family was left going tokens that do not work", async () => {
+      const { userId, pair } = await newSession();
+      await dataSource.query(`UPDATE "user" SET "deletedAt" = now() WHERE "id" = $1`, [userId]);
+
+      const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
+
+      await whoAmI(next.accessToken).expect(401);
     });
   });
 
   // A refresh token works once. If a used one comes back, two parties hold
   // it, the member and a thief, and nothing says which is which. So the whole
-  // session ends and both sign in again.
+  // family ends and both sign in again.
   describe("a refresh token used twice", () => {
-    it("ends the session: the second use is refused, and so is the newest token", async () => {
+    it("ends the family: the second use is refused, and so is the newest token", async () => {
       const { pair } = await newSession();
       const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
 
       const second = await refresh(pair.refreshToken).expect(401);
 
-      expect(second.body).toEqual(refused);
-      // The token nobody has used yet belongs to the same session, so it is
+      expect(second.body).toEqual(refused("reused"));
+      // The token nobody has used yet belongs to the same family, so it is
       // dead too. Whoever holds it, member or thief, must sign in again.
-      await refresh(next.refreshToken).expect(401);
+      const newest = await refresh(next.refreshToken).expect(401);
+      expect(newest.body).toEqual(refused("invalid"));
       expect(await storedToken(next.refreshToken)).toMatchObject({ revoked: true });
     });
 
-    // The access tokens have minutes left to run, and stop anyway: the guard
-    // checks the session on every request. Without that, a thief would keep
-    // what they stole until it expired.
-    it("stops the session's access tokens on the next request", async () => {
+    // The access tokens carry no family, so nothing stops them early. They
+    // run out within JWT_EXPIRES_IN, as the docs say. A thief keeps what
+    // they stole until then.
+    it("leaves the family's access tokens working until they expire", async () => {
       const { pair } = await newSession();
       const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
-      await whoAmI(next.accessToken).expect(200);
 
       await refresh(pair.refreshToken).expect(401);
 
-      const newest = await whoAmI(next.accessToken).expect(401);
-      expect(newest.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
-      await whoAmI(pair.accessToken).expect(401);
+      await whoAmI(next.accessToken).expect(200);
     });
 
-    it("leaves the member's other sessions alone", async () => {
+    it("leaves the member's other sign-ins alone", async () => {
       const { sent, pair: phone } = await newSession();
       const laptop = (await signInAs(sent).expect(200)).body as Pair;
       await refresh(phone.refreshToken).expect(200);
@@ -315,8 +341,8 @@ describe("Tokens (e2e)", () => {
     // Two requests with one token at the same moment, as two browser tabs or
     // a retried request can send. Only the database can settle who was
     // first, with one conditional UPDATE. Exactly one wins, and because the
-    // other is a second use, the session ends for both.
-    it("lets only one of two requests sent together succeed, and ends the session", async () => {
+    // other is a second use, the family ends for both.
+    it("lets only one of two requests sent together succeed, and ends the family", async () => {
       const { pair } = await newSession();
 
       const answers = await Promise.all([refresh(pair.refreshToken), refresh(pair.refreshToken)]);
@@ -328,14 +354,24 @@ describe("Tokens (e2e)", () => {
   });
 
   describe("signing out this device", () => {
-    it("answers 204 with no body, and ends that session at once", async () => {
+    it("answers 204 with no body, and ends that family at once", async () => {
       const { pair } = await newSession();
-      await expectSignedIn(pair);
 
       const response = await revoke(pair.refreshToken).expect(204);
 
       expect(response.text).toBe("");
-      await expectSignedOut(pair);
+      await refresh(pair.refreshToken).expect(401);
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
+    });
+
+    // As the docs say: a sign-out ends the refresh tokens, and an access
+    // token already handed out runs until it expires.
+    it("leaves the device's access token working until it expires", async () => {
+      const { pair } = await newSession();
+
+      await revoke(pair.refreshToken).expect(204);
+
+      await whoAmI(pair.accessToken).expect(200);
     });
 
     it("leaves the member's other devices signed in", async () => {
@@ -344,23 +380,22 @@ describe("Tokens (e2e)", () => {
 
       await revoke(phone.refreshToken).expect(204);
 
-      await expectSignedOut(phone);
-      await expectSignedIn(laptop);
+      await refresh(phone.refreshToken).expect(401);
       await refresh(laptop.refreshToken).expect(200);
     });
 
-    // A client that kept an old token of the session can still sign out.
+    // A client that kept an old token of the family can still sign out.
     it("works with a refresh token that was already spent", async () => {
       const { pair } = await newSession();
       const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
 
       await revoke(pair.refreshToken).expect(204);
 
-      await expectSignedOut(next);
+      await refresh(next.refreshToken).expect(401);
     });
 
     // The same answer whatever is sent, so the route cannot be used to find
-    // out whether a token is real.
+    // out whether a token is real. RFC 7009 asks for this.
     it.each([
       ["a token nobody was given", "x".repeat(43)],
       ["text that is not a token", "not-a-token"],
@@ -370,7 +405,7 @@ describe("Tokens (e2e)", () => {
       expect(response.text).toBe("");
     });
 
-    it("answers 204 again for a session that is already signed out", async () => {
+    it("answers 204 again for a family that is already signed out", async () => {
       const { pair } = await newSession();
       await revoke(pair.refreshToken).expect(204);
 
@@ -387,54 +422,54 @@ describe("Tokens (e2e)", () => {
 
       const again = (await signInAs(sent).expect(200)).body as Pair;
 
-      await expectSignedIn(again);
+      await refresh(again.refreshToken).expect(200);
     });
   });
 
   describe("signing out every device", () => {
     it("401 with no access token", async () => {
-      const { body } = await revokeAll().expect(401);
+      const { body } = await signOutEverywhere().expect(401);
 
-      expect(body).toMatchObject({ errorCode: "TOKEN_MISSING" });
+      expect(body).toMatchObject({ errorCode: "missing_credentials" });
     });
 
-    it("answers 204 and ends every session of the caller, this one included", async () => {
+    it("answers 204 and ends every family of the caller, this one included", async () => {
       const { sent, pair: phone } = await newSession();
       const laptop = (await signInAs(sent).expect(200)).body as Pair;
 
-      const response = await revokeAll(phone.accessToken).expect(204);
+      const response = await signOutEverywhere(phone.accessToken).expect(204);
 
       expect(response.text).toBe("");
-      await expectSignedOut(phone);
-      await expectSignedOut(laptop);
+      await refresh(phone.refreshToken).expect(401);
+      await refresh(laptop.refreshToken).expect(401);
     });
 
     it("leaves every other member signed in", async () => {
       const walter = await newSession();
       const donny = await newSession();
 
-      await revokeAll(walter.pair.accessToken).expect(204);
+      await signOutEverywhere(walter.pair.accessToken).expect(204);
 
-      await expectSignedIn(donny.pair);
       await refresh(donny.pair.refreshToken).expect(200);
     });
 
-    // Only the sessions that exist at that moment are ended.
+    // Only the families that exist at that moment are ended.
     it("lets the member sign in again straight away", async () => {
       const { sent, pair } = await newSession();
-      await revokeAll(pair.accessToken).expect(204);
+      await signOutEverywhere(pair.accessToken).expect(204);
 
       const again = (await signInAs(sent).expect(200)).body as Pair;
 
-      await expectSignedIn(again);
       await refresh(again.refreshToken).expect(200);
     });
   });
 
   // Whoever was signed in with the old password signs in again with the new
   // one: the member on another device, or someone who should not be there.
+  // test/passwords.e2e-spec.ts shows the access tokens from before the change
+  // stop too.
   describe("changing the password", () => {
-    it("ends every session of the member, on this device too", async () => {
+    it("ends every family of the member, on this device too", async () => {
       const { sent, pair: phone } = await newSession();
       const laptop = (await signInAs(sent).expect(200)).body as Pair;
 
@@ -444,13 +479,13 @@ describe("Tokens (e2e)", () => {
         .send({ password: "a-new-secret-1", currentPassword: sent.password })
         .expect(200);
 
-      await expectSignedOut(phone);
-      await expectSignedOut(laptop);
+      await refresh(phone.refreshToken).expect(401);
+      await refresh(laptop.refreshToken).expect(401);
       const again = await signInAs({ ...sent, password: "a-new-secret-1" }).expect(200);
-      await expectSignedIn(again.body as Pair);
+      await refresh((again.body as Pair).refreshToken).expect(200);
     });
 
-    it("ends no session when only the username changes", async () => {
+    it("ends no family when only the username changes", async () => {
       const { pair } = await newSession();
 
       await request(app.getHttpServer())
@@ -459,13 +494,13 @@ describe("Tokens (e2e)", () => {
         .send({ username: `e2e-${randomUUID().slice(0, 8)}` })
         .expect(200);
 
-      await expectSignedIn(pair);
+      await whoAmI(pair.accessToken).expect(200);
       await refresh(pair.refreshToken).expect(200);
     });
   });
 
   describe("closing the account", () => {
-    it("ends every session of the member", async () => {
+    it("ends every family of the member, and their access tokens", async () => {
       const { sent, pair: phone } = await newSession();
       const laptop = (await signInAs(sent).expect(200)).body as Pair;
 
@@ -474,31 +509,28 @@ describe("Tokens (e2e)", () => {
         .set(bearer(phone.accessToken))
         .expect(204);
 
-      // Read straight from the table, before anything else touches these
-      // tokens. A refresh would also revoke the session, on finding the
-      // account closed, and this must show that closing the account did it.
       expect(await storedToken(phone.refreshToken)).toMatchObject({ revoked: true });
       expect(await storedToken(laptop.refreshToken)).toMatchObject({ revoked: true });
-      await expectSignedOut(phone);
-      await expectSignedOut(laptop);
+      // JwtAuth finds no live member, so the access tokens stop at once.
+      await whoAmI(phone.accessToken).expect(401);
+      await whoAmI(laptop.accessToken).expect(401);
     });
 
     // An admin brings the account back. The member has to sign in to it:
     // the tokens they held when it was closed do not come back with it.
     //
-    // Closing the account already ended the session, so on its own that
-    // would prove nothing about the restore. The row is set back to "not
-    // revoked" by hand, to stand for a session that slipped in around the
-    // close. Restoring must end that one too.
-    it("ends every session when an admin restores the account", async () => {
+    // Closing the account already ended the family, so on its own that would
+    // prove nothing about the restore. The family is set back to "not ended"
+    // by hand, to stand for one that slipped in around the close. Restoring
+    // must end that one too.
+    it("ends every family when an admin restores the account", async () => {
       const { sent, userId, pair } = await newSession();
-      const familyId = (await storedToken(pair.refreshToken))?.familyId;
       await request(app.getHttpServer())
         .delete("/users/me")
         .set(bearer(pair.accessToken))
         .expect(204);
-      await dataSource.query(`UPDATE "refresh_token" SET "revoked" = false WHERE "familyId" = $1`, [
-        familyId,
+      await dataSource.query(`UPDATE refresh_tokens SET revoked = false WHERE user_id = $1`, [
+        String(userId),
       ]);
 
       await request(app.getHttpServer())
@@ -507,14 +539,14 @@ describe("Tokens (e2e)", () => {
         .expect(200);
 
       expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
-      await expectSignedOut(pair);
+      await refresh(pair.refreshToken).expect(401);
       const again = (await signInAs(sent).expect(200)).body as Pair;
-      await expectSignedIn(again);
+      await whoAmI(again.accessToken).expect(200);
     });
   });
 
   describe("an admin changing a member's password", () => {
-    it("ends every session of that member", async () => {
+    it("ends every family of that member", async () => {
       const { sent, userId, pair } = await newSession();
 
       await request(app.getHttpServer())
@@ -524,281 +556,40 @@ describe("Tokens (e2e)", () => {
         .expect(200);
 
       expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
-      await expectSignedOut(pair);
+      await refresh(pair.refreshToken).expect(401);
       const again = await signInAs({ ...sent, password: "set-by-an-admin-1" }).expect(200);
-      await expectSignedIn(again.body as Pair);
+      await whoAmI((again.body as Pair).accessToken).expect(200);
     });
   });
 
-  // A session lasts 30 days at most, however often it was renewed. The end
-  // is on every row of the session, and nothing moves it.
-  describe("a session that has reached its end", () => {
-    /** Moves a session's end, and its tokens' own, a minute into the past. */
-    async function endSessionOf(refreshToken: string) {
-      const past = aMinuteAgo();
-      await dataSource.query(
-        `UPDATE "refresh_token" SET "familyExpiresAt" = $1, "expiresAt" = $1 WHERE "familyId" = $2`,
-        [past, (await storedToken(refreshToken))?.familyId],
-      );
-    }
-
-    // The access token still has minutes to run by its own expiry. The guard
-    // checks the session's end on every request, so it stops with it.
-    //
-    // "Nothing was revoked" is checked by counting revoked rows, not by
-    // reading the row. Another suite's sign-in may clear the row out at any
-    // moment, now that it is past its end, and the count holds either way.
-    it("refuses both of its tokens, though nothing was revoked", async () => {
-      const { pair } = await newSession();
-      const familyId = (await storedToken(pair.refreshToken))?.familyId;
-      await expectSignedIn(pair);
-
-      await endSessionOf(pair.refreshToken);
-
-      const [{ revoked }] = (await dataSource.query(
-        `SELECT count(*)::int AS "revoked" FROM "refresh_token" WHERE "familyId" = $1 AND "revoked" = true`,
-        [familyId],
-      )) as [{ revoked: number }];
-      expect(revoked).toBe(0);
-      await expectSignedOut(pair);
-    });
-
-    // Half of the table's housekeeping: saving any new token clears out the
-    // rows of every session that has run out, whoever they belonged to.
-    it("has its rows cleared out the next time anybody signs in", async () => {
-      const { pair } = await newSession();
-      await endSessionOf(pair.refreshToken);
-
-      await newSession();
-
-      expect(await storedToken(pair.refreshToken)).toBeUndefined();
-    });
-
-    it("leaves the rows of a session that is still going", async () => {
-      const { pair } = await newSession();
-
-      await newSession();
-
-      expect(await storedToken(pair.refreshToken)).toBeDefined();
-    });
-  });
-
-  // The other half of the housekeeping. A session gains a row with every
-  // refresh, so one that stays busy would keep 30 days of spent tokens. Each
-  // refresh clears out the spent tokens of its own session whose time is up.
-  describe("spent tokens whose time is up", () => {
-    /** Moves one token's own end a minute into the past. Its session's end stays put. */
-    async function expireToken(refreshToken: string) {
-      await dataSource.query(`UPDATE "refresh_token" SET "expiresAt" = $1 WHERE "id" = $2`, [
-        aMinuteAgo(),
-        (await storedToken(refreshToken))?.id,
-      ]);
-    }
-
-    /** Saves one more token in a session, straight through the service. */
-    async function saveLateToken(familyId: string | undefined, userId: number) {
-      const now = getUtcNow();
-      await app.get(RefreshTokensService).save(
-        {
-          id: hashOf(newOneTimeToken()),
-          familyId: familyId ?? "",
-          userId,
-          expiresAt: addUtc(now, { days: 7 }),
-          familyExpiresAt: addUtc(now, { days: 30 }),
-        },
-        now,
-      );
-    }
-
-    it("are cleared out of their session at its next refresh", async () => {
-      const { pair: first } = await newSession();
-      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
-      await expireToken(first.refreshToken);
-
-      const third = (await refresh(second.refreshToken).expect(200)).body as Pair;
-
-      // Spent, and past its own time: gone.
-      expect(await storedToken(first.refreshToken)).toBeUndefined();
-      // Spent a moment ago and still inside its time: kept, so that using it
-      // again is still caught as a second use.
-      expect((await storedToken(second.refreshToken))?.usedAt).not.toBeNull();
-      // The newest one, not spent: untouched.
-      expect(await storedToken(third.refreshToken)).toMatchObject({ usedAt: null, revoked: false });
-    });
-
-    // The trim is for the session being renewed and no other. That is what
-    // lets it use the session's own index and not read the whole table.
-    it("are left alone by another member's sign-in and refresh", async () => {
-      const { pair: first } = await newSession();
-      await refresh(first.refreshToken).expect(200);
-      await expireToken(first.refreshToken);
-
-      const other = await newSession();
-      await refresh(other.pair.refreshToken).expect(200);
-
-      expect(await storedToken(first.refreshToken)).toBeDefined();
-    });
-
-    // What the trim gives up. A spent token is known as "used twice" only
-    // while its row exists. After that it is refused as unknown, and the
-    // session it once belonged to carries on.
-    it("are refused when they come back, and no longer end the session", async () => {
-      const { pair: first } = await newSession();
-      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
-      await expireToken(first.refreshToken);
-      const third = (await refresh(second.refreshToken).expect(200)).body as Pair;
-
-      const { body } = await refresh(first.refreshToken).expect(401);
-
-      expect(body).toEqual(refused);
-      await expectSignedIn(third);
-      await refresh(third.refreshToken).expect(200);
-    });
-
-    // A session counts as ended when any of its rows is revoked. If a
-    // refresh is in flight at the moment of a sign-out, it can save one more
-    // row a moment after the others were marked, and that row is not marked.
-    // The older, revoked rows are what keep it dead, so the trim must never
-    // delete one. Here the late row is saved by hand.
-    it("are kept when their session was signed out, so it stays signed out", async () => {
-      const { userId, pair: first } = await newSession();
-      const second = (await refresh(first.refreshToken).expect(200)).body as Pair;
-      const familyId = (await storedToken(first.refreshToken))?.familyId;
-      await revoke(second.refreshToken).expect(204);
-      await expireToken(first.refreshToken);
-
-      await saveLateToken(familyId, userId);
-
-      expect(await storedToken(first.refreshToken)).toMatchObject({ revoked: true });
-      await expectSignedOut(second);
-    });
-
-    // The member was away for more than a week. Their token ran out without
-    // being spent. It is not a spent token, so it stays until the session's
-    // end, and the answer to it is still "expired", not "unknown".
-    it("does not include a token that ran out without being spent", async () => {
-      const { userId, pair } = await newSession();
-      const familyId = (await storedToken(pair.refreshToken))?.familyId;
-      await expireToken(pair.refreshToken);
-
-      await saveLateToken(familyId, userId);
-
-      expect(await storedToken(pair.refreshToken)).toMatchObject({ usedAt: null });
-    });
-  });
-
-  // The statements that settle "who was first", run against the real
-  // database through the service, where nothing else can explain the result.
-  describe("the one-winner statements", () => {
-    // Two requests with one token both read it as unused. This UPDATE is what
-    // lets only one of them spend it. Whether the two overlap or run one
-    // after the other, exactly one must be told it won.
-    it("lets exactly one of two calls mark a token used", async () => {
-      const { pair } = await newSession();
-      const id = (await storedToken(pair.refreshToken))?.id ?? "";
-      const refreshTokens = app.get(RefreshTokensService);
-
-      const results = await Promise.all([
-        refreshTokens.markUsed(id, getUtcNow()),
-        refreshTokens.markUsed(id, getUtcNow()),
-      ]);
-
-      expect(results.filter(Boolean)).toHaveLength(1);
-      expect(await refreshTokens.markUsed(id, getUtcNow())).toBe(false);
-    });
-
-    // What sign-in asks once it has started a session: is the password that
-    // was checked still the member's? It reads the row with a share lock, so
-    // only the real database can show the statement is one Postgres accepts.
-    it("tells sign-in whether the password it checked is still the member's", async () => {
-      const { sent, userId, pair } = await newSession();
-      const users = app.get(UsersService);
-      const [{ password: hash }] = (await dataSource.query(
-        `SELECT "password" FROM "user" WHERE "id" = $1`,
-        [userId],
-      )) as [{ password: string }];
-
-      expect(await users.credentialsStillHold(userId, hash)).toBe(true);
-      expect(await users.credentialsStillHold(userId, "not-the-stored-hash")).toBe(false);
-
-      await request(app.getHttpServer())
-        .patch("/users/me")
-        .set(bearer(pair.accessToken))
-        .send({ password: "a-new-secret-2", currentPassword: sent.password })
-        .expect(200);
-
-      // The old hash no longer holds, so a sign-in that had been checking the
-      // old password would end the session it started.
-      expect(await users.credentialsStillHold(userId, hash)).toBe(false);
-    });
-
-    // The lock is what makes the recheck wait for a password change that has
-    // written the new hash and not yet committed. Without it the recheck
-    // would read the old hash, answer "still holds", and let the session
-    // through. Here the change is held open by hand, and the recheck must
-    // still be waiting a fifth of a second later.
-    it("makes the recheck wait for a password change that is in flight", async () => {
-      const { userId } = await newSession();
-      const [{ password: oldHash }] = (await dataSource.query(
-        `SELECT "password" FROM "user" WHERE "id" = $1`,
-        [userId],
-      )) as [{ password: string }];
-      const users = app.get(UsersService);
-      let settled = false;
-      let recheck: Promise<boolean> = Promise.resolve(true);
-
-      await dataSource.transaction(async (manager) => {
-        await manager.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
-          "a-hash-that-is-not-the-old-one",
-          userId,
-        ]);
-
-        recheck = users.credentialsStillHold(userId, oldHash).finally(() => {
-          settled = true;
-        });
-        await pause(200);
-
-        // Still waiting on the row lock this transaction holds.
-        expect(settled).toBe(false);
-      });
-
-      // The change has committed. The recheck now sees the new hash.
-      await expect(recheck).resolves.toBe(false);
-    });
-
-    it("says the credentials no longer hold once the account is closed", async () => {
-      const { userId, pair } = await newSession();
-      const [{ password: hash }] = (await dataSource.query(
-        `SELECT "password" FROM "user" WHERE "id" = $1`,
-        [userId],
-      )) as [{ password: string }];
-
-      await request(app.getHttpServer())
-        .delete("/users/me")
-        .set(bearer(pair.accessToken))
-        .expect(204);
-
-      expect(await app.get(UsersService).credentialsStillHold(userId, hash)).toBe(false);
-    });
-  });
-
-  // `pnpm dev:token` signs a token for a member with no sign-in behind it, so
-  // it names no session. Only the app can sign one, so the guard lets it
-  // through with the user check alone.
-  describe("a token that belongs to no session", () => {
+  // `pnpm dev:token` signs a token with the app's own options and starts no
+  // family. JwtAuth checks the member alone, so it works like any other.
+  describe("a token that belongs to no family", () => {
     it("still works, as the dev token command needs", async () => {
-      const { sent, userId } = await newSession();
+      const { userId } = await newSession();
+      const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
 
-      const token = await app.get(JwtService).signAsync({ sub: userId, username: sent.username });
+      const token = new JwtSigner(accessToken!).sign({ sub: String(userId) });
 
       const me = await whoAmI(token).expect(200);
       expect(me.body).toMatchObject({ id: userId });
     });
   });
 
-  // The routes these replaced. Signing in is POST /auth/token and signing out
-  // is POST /auth/token/revoke.
-  it.each(["/auth/login", "/auth/logout"])("POST %s is not a route any more", async (path) => {
+  // The paths these routes had before. Signing in is POST /auth/token,
+  // refreshing is POST /auth/token/refresh, signing out is
+  // POST /auth/token/revoke or POST /auth/sign-out-everywhere, signing up is
+  // POST /auth/sign-up, and a reset is POST /auth/password/forgot and
+  // POST /auth/password/reset.
+  it.each([
+    "/auth/login",
+    "/auth/refresh",
+    "/auth/logout",
+    "/auth/logout-all",
+    "/auth/signup",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+  ])("POST %s is not a route any more", async (path) => {
     await request(app.getHttpServer()).post(path).send({}).expect(404);
   });
 
@@ -808,9 +599,9 @@ describe("Tokens (e2e)", () => {
     it("401 when a refresh token is sent as the bearer token", async () => {
       const { pair } = await newSession();
 
-      const { body } = await whoAmI(pair.refreshToken).expect(401);
+      const response = await whoAmI(pair.refreshToken).expect(401);
 
-      expect(body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      expect(response.headers["www-authenticate"]).toContain('error="invalid_token"');
     });
   });
 });

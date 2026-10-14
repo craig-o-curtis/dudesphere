@@ -1,7 +1,7 @@
+import { PasswordHasher } from "@nestjs/authentication";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 
-import { HashingProvider } from "../hashing/hashing.provider.js";
 import { User, UserRole } from "./user.entity.js";
 import { UsersSeedService } from "./users.seed.js";
 
@@ -14,22 +14,22 @@ describe("UsersSeedService", () => {
     save: vi.fn(),
   };
 
-  const hashingProvider = { hashPassword: vi.fn(), comparePassword: vi.fn() };
+  // A fake hasher, so the seed tests do not run scrypt. hash() wraps its
+  // input, so a stored hash is easy to tell from the password.
+  const passwordHasher = { hash: vi.fn(), verify: vi.fn(), needsRehash: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
     usersRepository.create.mockImplementation((values: object) => values);
     // The real save() returns the row with the id the database gave it.
     usersRepository.save.mockImplementation((user: object) => Promise.resolve({ id: 7, ...user }));
-    hashingProvider.hashPassword.mockImplementation((plain: string) =>
-      Promise.resolve(`hashed(${plain})`),
-    );
+    passwordHasher.hash.mockImplementation((plain: string) => Promise.resolve(`hashed(${plain})`));
 
     const module = await Test.createTestingModule({
       providers: [
         UsersSeedService,
         { provide: getRepositoryToken(User), useValue: usersRepository },
-        { provide: HashingProvider, useValue: hashingProvider },
+        { provide: PasswordHasher, useValue: passwordHasher },
       ],
     }).compile();
 
@@ -70,7 +70,7 @@ describe("UsersSeedService", () => {
   it("does nothing, and returns null, when the email or the password is not set", async () => {
     await expect(seedService.seed("admin@example.com", "")).resolves.toBeNull();
 
-    expect(hashingProvider.hashPassword).not.toHaveBeenCalled();
+    expect(passwordHasher.hash).not.toHaveBeenCalled();
     expect(usersRepository.save).not.toHaveBeenCalled();
   });
 

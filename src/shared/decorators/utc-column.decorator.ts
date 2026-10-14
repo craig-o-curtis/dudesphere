@@ -18,10 +18,12 @@ import { isoTimestampTransformer } from "../utils/iso-timestamp-transformer.js";
  * machine's local time. A `timestamptz` column stores the instant itself, so
  * there is nothing to guess in either direction.
  */
-export function UtcColumn(options?: { nullable?: boolean }): PropertyDecorator {
+export function UtcColumn(options?: { nullable?: boolean; name?: string }): PropertyDecorator {
   const columnOptions: ColumnOptions = {
     type: "timestamptz",
     ...(options?.nullable ? { nullable: true } : {}),
+    // The column's name in the database, when it differs from the property's.
+    ...(options?.name ? { name: options.name } : {}),
     transformer: isoTimestampTransformer,
   };
 

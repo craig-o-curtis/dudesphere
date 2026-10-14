@@ -1,11 +1,19 @@
+import { createHmac } from "node:crypto";
+
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import { INestApplication } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
+import type { ConfigType } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
+import authConfig from "./../src/auth/config/auth.config.js";
 import { UserRole } from "./../src/users/user.entity.js";
 import { bearer, setRole, signedInAs, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
@@ -21,7 +29,10 @@ import { signUp, signUpBody } from "./sign-up.js";
 // run ends.
 describe("Authorization (e2e)", () => {
   let app: INestApplication<App>;
-  let jwt: JwtService;
+  // Signs tokens with the app's own key, issuer and audience, as a leaked key
+  // or the app itself would.
+  let signer: JwtSigner;
+  let secret: string;
 
   // A plain user, and a second one to be the stranger in the ownership cases.
   let owner: { token: string; userId: number };
@@ -39,7 +50,9 @@ describe("Authorization (e2e)", () => {
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
     await listenOnLoopback(app);
-    jwt = app.get(JwtService);
+    const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+    signer = new JwtSigner(accessToken!);
+    secret = app.get<ConfigType<typeof authConfig>>(authConfig.KEY).secret;
 
     owner = await signedInAs(app, UserRole.USER);
     stranger = await signedInAs(app, UserRole.USER);
@@ -70,8 +83,8 @@ describe("Authorization (e2e)", () => {
       await request(app.getHttpServer()).get(path).expect(status);
     });
 
-    // On a public route the token is optional. A good one identifies the
-    // caller; a bad one is ignored and must never turn the route into a 401.
+    // On a @Public() route the authentication guard reads no token at all,
+    // good or bad, so a bad one must never turn the route into a 401.
     it.each([
       ["a token this app did not sign", "Bearer not.a.token"],
       ["a header that is not a bearer token", "Basic abc123"],
@@ -84,7 +97,7 @@ describe("Authorization (e2e)", () => {
     });
 
     // Both have to stay open or there is no way to get a first token.
-    it("POST /auth/token and POST /auth/signup are reachable anonymously", async () => {
+    it("POST /auth/token and POST /auth/sign-up are reachable anonymously", async () => {
       await request(app.getHttpServer())
         .post("/auth/token")
         .send({ identifier: "nobody@example.com", password: "wrong" })
@@ -141,7 +154,7 @@ describe("Authorization (e2e)", () => {
     });
 
     // Creating a user directly is for admins. Everyone else signs up through
-    // POST /auth/signup.
+    // POST /auth/sign-up.
     it("POST /users", async () => {
       await request(app.getHttpServer())
         .post("/users")
@@ -310,7 +323,7 @@ describe("Authorization (e2e)", () => {
     // Signed by this app, so the signature is good, but no user has this id.
     // The guard looks the user up and finds nobody.
     it("401 when the token's user does not exist", async () => {
-      const token = await jwt.signAsync({ sub: 2_000_000_000, username: "e2e-nobody" });
+      const token = signer.sign({ sub: "2000000000" });
 
       const response = await request(app.getHttpServer())
         .post("/abidings")
@@ -318,7 +331,8 @@ describe("Authorization (e2e)", () => {
         .send({ message: "posted by nobody" })
         .expect(401);
 
-      expect(response.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      // JwtAuth.validate returned null, which the package reports this way.
+      expect(response.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
     });
   });
 
@@ -340,13 +354,17 @@ describe("Authorization (e2e)", () => {
       return JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Record<string, unknown>;
     }
 
+    // The package answers a bad token with a 401 whose message says what was
+    // wrong, and a WWW-Authenticate header that tells the client to sign in
+    // again, as RFC 6750 describes.
     async function expectRefused(token: string) {
       const response = await request(app.getHttpServer())
         .get("/users")
         .set(bearer(token))
         .expect(401);
 
-      expect(response.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      expect(response.body).toMatchObject({ statusCode: 401, error: "Unauthorized" });
+      expect(response.headers["www-authenticate"]).toContain('error="invalid_token"');
     }
 
     it("401 for text that is not a token at all", async () => {
@@ -379,15 +397,17 @@ describe("Authorization (e2e)", () => {
       await expectRefused(unsigned);
     });
 
-    // Signed with the app's real key, so only the pinned algorithm in
-    // AuthModule refuses it.
+    // Signed with the app's real key, so only the algorithm the
+    // `accessToken` options pin refuses it. Made by hand: the package's own
+    // signer will not use HS512 with a key this short.
     it("401 for a token signed with an algorithm other than HS256", async () => {
-      const token = await jwt.signAsync(
-        { sub: owner.userId, username: "e2e" },
-        { algorithm: "HS512" },
-      );
+      const [, payload] = partsOf(owner.token);
+      const header = encode({ alg: "HS512", typ: "JWT" });
+      const signature = createHmac("sha512", secret)
+        .update(`${header}.${payload}`)
+        .digest("base64url");
 
-      await expectRefused(token);
+      await expectRefused([header, payload, signature].join("."));
     });
   });
 
@@ -397,18 +417,15 @@ describe("Authorization (e2e)", () => {
     // Signed by the app itself, as a leaked key or an old token would be.
     // The claim is simply not read.
     it("403 on an admin route for a signed token that claims admin for a plain user", async () => {
-      const token = await jwt.signAsync({
-        sub: owner.userId,
-        username: "e2e",
-        role: UserRole.ADMIN,
-      });
+      const token = signer.sign({ sub: String(owner.userId), role: UserRole.ADMIN });
 
       const response = await request(app.getHttpServer())
         .get("/users")
         .set(bearer(token))
         .expect(403);
 
-      expect(response.body).toMatchObject({ errorCode: "ROLE_REQUIRED" });
+      // UserPolicy refused it. The body never names the policy or the ability.
+      expect(response.body).toMatchObject({ statusCode: 403, message: "Forbidden" });
     });
 
     it("a demoted admin loses admin on the next request, with the same token", async () => {

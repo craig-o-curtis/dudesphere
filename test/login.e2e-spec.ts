@@ -25,7 +25,7 @@ describe("Login (e2e)", () => {
   const tag = randomUUID().slice(0, 8);
   const username = `e2e-${tag}`;
   const email = `e2e-${tag}@example.com`;
-  const password = "secret123";
+  const password = "a-long-secret-123";
   let userId: number;
 
   function login(identifier: unknown, withPassword: string = password) {
@@ -36,7 +36,7 @@ describe("Login (e2e)", () => {
 
   function signup(body: { username: string; email: string }) {
     return request(app.getHttpServer())
-      .post("/auth/signup")
+      .post("/auth/sign-up")
       .send(signUpBody({ ...body, password }));
   }
 
@@ -140,9 +140,20 @@ describe("Login (e2e)", () => {
       ["an empty identifier", { identifier: "   ", password }],
       ["an identifier longer than an email can be", { identifier: "a".repeat(101), password }],
       ["no password", { identifier: email }],
-      ["a password longer than 72 bytes", { identifier: email, password: "a".repeat(73) }],
     ])("%s", async (_what, body) => {
       await request(app.getHttpServer()).post("/auth/token").send(body).expect(400);
+    });
+
+    // Sign-in sets no length rule on the password, as in the NestJS docs, so
+    // a password set under an older rule still works. A long one is simply
+    // the wrong password.
+    it("401, not 400, for a password longer than 72 bytes", async () => {
+      const { body } = await request(app.getHttpServer())
+        .post("/auth/token")
+        .send({ identifier: email, password: "a".repeat(73) })
+        .expect(401);
+
+      expect(body).toMatchObject({ errorCode: "BAD_CREDENTIALS" });
     });
   });
 

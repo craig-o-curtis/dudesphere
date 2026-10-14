@@ -1,16 +1,21 @@
+import { TokenService } from "@nestjs/authentication";
 import { UnauthorizedException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
-import { UserRole } from "../users/user.entity.js";
-import { AuthService } from "./auth.service.js";
-import { TokenService } from "./token.service.js";
+import { CredentialsService } from "./credentials.service.js";
 import { TokensController } from "./tokens.controller.js";
 
+// TokenService is the package's, and has its own tests. These check that
+// each handler hands it the right values and answers with what it returns.
 describe("TokensController", () => {
   let controller: TokensController;
 
-  const authService = { signIn: vi.fn() };
-  const tokenService = { issue: vi.fn(), refresh: vi.fn(), revoke: vi.fn(), revokeAll: vi.fn() };
+  const credentialsService = { verify: vi.fn() };
+  const tokenService = { issue: vi.fn(), refresh: vi.fn(), revoke: vi.fn() };
+
+  // A made-up member. Nothing here is a real account.
+  const walter = { id: 25, username: "walter", email: "walter@example.com" };
+  const pair = { accessToken: "a.b.c", refreshToken: "r".repeat(43), expiresIn: 900 };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -18,31 +23,52 @@ describe("TokensController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TokensController],
       providers: [
-        { provide: AuthService, useValue: authService },
+        { provide: CredentialsService, useValue: credentialsService },
         { provide: TokenService, useValue: tokenService },
       ],
     }).compile();
 
-    controller = module.get(TokensController);
+    controller = module.get<TokensController>(TokensController);
   });
 
   describe("issue", () => {
     const body = { identifier: "walter", password: "secret1" };
 
-    it("hands the body to AuthService and answers with the tokens it returns", async () => {
-      const tokens = { accessToken: "a.b.c", refreshToken: "r".repeat(43), expiresIn: 900 };
-      authService.signIn.mockResolvedValue(tokens);
+    it("checks the identifier and password, then answers with the new pair", async () => {
+      credentialsService.verify.mockResolvedValue(walter);
+      tokenService.issue.mockResolvedValue(pair);
 
-      await expect(controller.issue(body)).resolves.toBe(tokens);
+      await expect(controller.issue(body)).resolves.toBe(pair);
 
-      expect(authService.signIn).toHaveBeenCalledWith(body);
+      expect(credentialsService.verify).toHaveBeenCalledWith("walter", "secret1");
     });
 
-    it("lets the 401 through when the credentials are wrong", async () => {
-      const refused = new UnauthorizedException("Invalid username, email or password");
-      authService.signIn.mockRejectedValue(refused);
+    // The id goes in as a string, the way the package keeps every user id.
+    // `amr` says how the member signed in, and is carried into every
+    // refreshed token.
+    it("issues the tokens for the member's id, signed in with a password", async () => {
+      credentialsService.verify.mockResolvedValue(walter);
+      tokenService.issue.mockResolvedValue(pair);
 
-      await expect(controller.issue(body)).rejects.toBe(refused);
+      await controller.issue(body);
+
+      expect(tokenService.issue).toHaveBeenCalledTimes(1);
+      expect(tokenService.issue).toHaveBeenCalledWith("25", {
+        method: "password",
+        claims: { amr: ["pwd"] },
+      });
+    });
+
+    it("answers 401 BAD_CREDENTIALS, and issues nothing, when the check fails", async () => {
+      credentialsService.verify.mockResolvedValue(null);
+
+      const thrown: unknown = await controller.issue(body).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(UnauthorizedException);
+      const exception = thrown as UnauthorizedException;
+      expect(exception.errorCode).toBe("BAD_CREDENTIALS");
+      expect(exception.message).toBe("Invalid username, email or password");
+      expect(tokenService.issue).not.toHaveBeenCalled();
     });
   });
 
@@ -50,16 +76,17 @@ describe("TokensController", () => {
     const refreshToken = "r".repeat(43);
 
     it("hands the refresh token to TokenService and answers with the new pair", async () => {
-      const tokens = { accessToken: "a.b.c", refreshToken: "s".repeat(43), expiresIn: 900 };
-      tokenService.refresh.mockResolvedValue(tokens);
+      tokenService.refresh.mockResolvedValue(pair);
 
-      await expect(controller.refresh({ refreshToken })).resolves.toBe(tokens);
+      await expect(controller.refresh({ refreshToken })).resolves.toBe(pair);
 
       expect(tokenService.refresh).toHaveBeenCalledWith(refreshToken);
     });
 
-    it("lets the service's 401 through", async () => {
-      const refused = new UnauthorizedException("Invalid or expired refresh token");
+    // An unknown, expired or reused token is refused by the package. The
+    // controller must not turn that into anything else.
+    it("lets TokenService's refusal through", async () => {
+      const refused = new UnauthorizedException("Invalid refresh token");
       tokenService.refresh.mockRejectedValue(refused);
 
       await expect(controller.refresh({ refreshToken })).rejects.toBe(refused);
@@ -73,19 +100,6 @@ describe("TokensController", () => {
       await expect(controller.revoke({ refreshToken: "r".repeat(43) })).resolves.toBeUndefined();
 
       expect(tokenService.revoke).toHaveBeenCalledWith("r".repeat(43));
-    });
-  });
-
-  describe("revokeAll", () => {
-    // The id comes from the access token, so a caller can only ever sign
-    // themselves out.
-    it("ends the sessions of the caller, by the id in their token", async () => {
-      tokenService.revokeAll.mockResolvedValue(undefined);
-      const caller = { userId: 25, username: "walter", role: UserRole.USER };
-
-      await expect(controller.revokeAll(caller)).resolves.toBeUndefined();
-
-      expect(tokenService.revokeAll).toHaveBeenCalledWith(25);
     });
   });
 });

@@ -7,7 +7,7 @@ import type { App } from "supertest/types.js";
 // Every e2e sign-up goes through this file, so a change to what sign up takes
 // is made here once and not in each suite.
 
-/** What POST /auth/signup and POST /users take. */
+/** What POST /auth/sign-up and POST /users take. */
 export interface SignUpBody {
   username: string;
   email: string;
@@ -43,7 +43,7 @@ export function signUpBody(overrides: Partial<SignUpBody> = {}): SignUpBody {
   return {
     username: `e2e-${tag}`,
     email: `e2e-${tag}@example.com`,
-    password: "secret123",
+    password: "a-long-secret-123",
     ...overrides,
     profile: { displayName: `e2e ${tag}`, ...overrides.profile },
   };
@@ -60,6 +60,6 @@ export async function signUp(
   overrides: Partial<SignUpBody> = {},
 ): Promise<{ sent: SignUpBody; user: SignedUpUser }> {
   const sent = signUpBody(overrides);
-  const response = await request(app.getHttpServer()).post("/auth/signup").send(sent).expect(201);
+  const response = await request(app.getHttpServer()).post("/auth/sign-up").send(sent).expect(201);
   return { sent, user: response.body as SignedUpUser };
 }

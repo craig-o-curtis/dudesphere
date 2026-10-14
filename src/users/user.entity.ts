@@ -51,8 +51,8 @@ export class User {
   //
   // An access token issued before this moment is refused, so changing a
   // password signs out every device that was signed in with the old one,
-  // including one a thief is using. UsersService.updateUser sets it and
-  // UsersService.getUserForToken checks it.
+  // including one a thief is using. UsersService.updateUser and
+  // PasswordResetMailer.updatePassword set it, and JwtAuth.validate checks it.
   @UtcColumn({ nullable: true })
   @Exclude()
   passwordChangedAt: string | null;
@@ -77,3 +77,49 @@ export class User {
   @SoftDeleteUtcColumn()
   deletedAt: string | null;
 }
+
+// SQL equivalent
+// CREATE EXTENSION IF NOT EXISTS citext;
+
+// CREATE TABLE "user" (
+//     id                 SERIAL PRIMARY KEY,
+//     username           CITEXT NOT NULL,
+//     email              CITEXT NOT NULL,
+//     password           VARCHAR(255) NOT NULL,
+//     role               VARCHAR(255) NOT NULL DEFAULT 'user',
+//     "passwordChangedAt" TIMESTAMPTZ,
+//     "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT now(),
+//     "updatedAt"        TIMESTAMPTZ NOT NULL DEFAULT now(),
+//     "deletedAt"        TIMESTAMPTZ
+// );
+
+// -- Unique (case-insensitive thanks to citext)
+// ALTER TABLE "user"
+//     ADD CONSTRAINT uq_user_username UNIQUE (username),
+//     ADD CONSTRAINT uq_user_email UNIQUE (email);
+
+// -- The @Check constraints, with the names from the entity
+// ALTER TABLE "user"
+//     ADD CONSTRAINT CHK_user_username_length
+//         CHECK (char_length("username") <= 24),
+//     ADD CONSTRAINT CHK_user_email_length
+//         CHECK (char_length("email") <= 100),
+//     ADD CONSTRAINT CHK_user_username_characters
+//         CHECK ("username" !~ '[[:space:]@]');
+
+// -- simple-enum → varchar backed by a CHECK, so the DB rejects values the enum doesn't have
+// ALTER TABLE "user"
+//     ADD CONSTRAINT CHK_user_role
+//         CHECK (role IN ('admin', 'user'));
+
+// CREATE OR REPLACE FUNCTION set_updated_at()
+// RETURNS trigger AS $$
+// BEGIN
+//     NEW."updatedAt" := now();
+//     RETURN NEW;
+// END;
+// $$ LANGUAGE plpgsql;
+
+// CREATE TRIGGER trg_user_updated_at
+//     BEFORE UPDATE ON "user"
+//     FOR EACH ROW EXECUTE FUNCTION set_updated_at();

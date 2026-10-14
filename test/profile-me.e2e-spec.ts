@@ -1,5 +1,9 @@
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import { INestApplication } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -50,7 +54,8 @@ describe("GET /profiles/me (e2e)", () => {
   // who does not exist must not fall back to someone else's profile. The
   // guard looks the user up, finds nobody, and refuses the token.
   it("returns 401 for a token whose user does not exist", async () => {
-    const token = await app.get(JwtService).signAsync({ sub: 2_000_000_000, username: "nobody" });
+    const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+    const token = new JwtSigner(accessToken!).sign({ sub: "2000000000" });
 
     await request(app.getHttpServer())
       .get("/profiles/me")
