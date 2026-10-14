@@ -20,9 +20,13 @@ import { signUp as signUpUser } from "./sign-up.js";
 // each message, and the test reads the token out of the link, as a person
 // would from their inbox.
 //
+// The links themselves are @nestjs/authentication's: PasswordResetService
+// makes, stores and checks them, in the email_tokens table. The app's half is
+// PasswordResetMailer. See https://docs.nestjs.com/security/authentication.
+//
 // Needs the databases running and the migrations applied. Creates throwaway
-// e2e- users. test/global-setup.ts deletes them when the run ends, and the
-// foreign key's cascade takes their reset tokens with them.
+// e2e- users. test/global-setup.ts deletes them, and their links, when the
+// run ends.
 describe("Password reset (e2e)", () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
@@ -52,17 +56,23 @@ describe("Password reset (e2e)", () => {
   }
 
   function forgot(email: string) {
-    return request(app.getHttpServer()).post("/auth/forgot-password").send({ email });
+    return request(app.getHttpServer()).post("/auth/password/forgot").send({ email });
   }
 
-  function reset(token: string, password = newPassword, confirmPassword = password) {
-    return request(app.getHttpServer())
-      .post("/auth/reset-password")
-      .send({ token, password, confirmPassword });
+  function reset(token: string, password = newPassword) {
+    return request(app.getHttpServer()).post("/auth/password/reset").send({ token, password });
+  }
+
+  /** The member's stored reset links. */
+  function linksOf(userId: number): Promise<{ id: string }[]> {
+    return dataSource.query(
+      `SELECT id FROM email_tokens WHERE user_id = $1 AND purpose = 'password-reset'`,
+      [String(userId)],
+    );
   }
 
   function login(identifier: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/login").send({ identifier, password });
+    return request(app.getHttpServer()).post("/auth/token").send({ identifier, password });
   }
 
   function emailsTo(address: string): MailMessage[] {
@@ -135,13 +145,11 @@ describe("Password reset (e2e)", () => {
 
       const token = await requestToken(user.email);
 
-      const rows: { tokenHash: string }[] = await dataSource.query(
-        `SELECT "tokenHash" FROM "password_reset_token" WHERE "userId" = $1`,
-        [user.id],
-      );
+      const rows = await linksOf(user.id);
       expect(rows).toHaveLength(1);
-      expect(rows[0].tokenHash).toBe(createHash("sha256").update(token).digest("hex"));
-      expect(rows[0].tokenHash).not.toContain(token);
+      // The package's own format: SHA-256, in base64url.
+      expect(rows[0].id).toBe(createHash("sha256").update(token).digest("base64url"));
+      expect(rows[0].id).not.toContain(token);
     });
 
     // The email column ignores case, so the lookup does too. The email goes
@@ -195,19 +203,17 @@ describe("Password reset (e2e)", () => {
     it("ends the access tokens that were signed before the reset", async () => {
       const user = await signUp();
       const { body: session } = await login(user.email, oldPassword).expect(200);
-      const earlier = await signedAMinuteEarlier(
-        app,
-        (session as { accessToken: string }).accessToken,
-      );
+      const earlier = signedAMinuteEarlier(app, (session as { accessToken: string }).accessToken);
       await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
 
       await reset(await requestToken(user.email)).expect(204);
 
+      // Refused through passwordChangedAt, which PasswordResetMailer stamps.
       const refused = await request(app.getHttpServer())
         .get("/users/me")
         .set(bearer(earlier))
         .expect(401);
-      expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      expect(refused.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
 
       const { body: fresh } = await login(user.email, newPassword).expect(200);
       await request(app.getHttpServer())
@@ -216,27 +222,25 @@ describe("Password reset (e2e)", () => {
         .expect(200);
     });
 
-    // The sessions go with the old password, so a refresh token from before
-    // the reset cannot be swapped for a new pair.
-    it("ends the sessions that were open before the reset", async () => {
+    // The package ends every sign-in of the member after a reset, so a
+    // refresh token from before it cannot be swapped for a new pair. The
+    // access token that came with it is the test above: one signed in the
+    // same second as the reset still passes, on purpose.
+    it("ends the refresh tokens from before the reset", async () => {
       const user = await signUp();
       const { body: session } = await login(user.email, oldPassword).expect(200);
-      const { accessToken, refreshToken } = session as {
-        accessToken: string;
-        refreshToken: string;
-      };
+      const { refreshToken } = session as { refreshToken: string };
 
       await reset(await requestToken(user.email)).expect(204);
 
-      await request(app.getHttpServer()).get("/users/me").set(bearer(accessToken)).expect(401);
       const refused = await request(app.getHttpServer())
-        .post("/auth/refresh")
+        .post("/auth/token/refresh")
         .send({ refreshToken })
         .expect(401);
-      expect(refused.body).toMatchObject({ errorCode: "REFRESH_TOKEN_INVALID" });
+      expect(refused.body).toMatchObject({ statusCode: 401, message: "Refresh token invalid" });
     });
 
-    it("stores the new password as a bcrypt hash, as sign-up does", async () => {
+    it("stores the new password as a scrypt hash, as sign-up does", async () => {
       const user = await signUp();
       const token = await requestToken(user.email);
       await reset(token).expect(204);
@@ -245,7 +249,7 @@ describe("Password reset (e2e)", () => {
         `SELECT "password" FROM "user" WHERE "id" = $1`,
         [user.id],
       );
-      expect(rows[0].password).toMatch(/^\$2[aby]\$/);
+      expect(rows[0].password).toMatch(/^\$scrypt\$/);
       expect(rows[0].password).not.toContain(newPassword);
     });
 
@@ -266,11 +270,7 @@ describe("Password reset (e2e)", () => {
       const token = await requestToken(user.email);
       await reset(token).expect(204);
 
-      const rows: unknown[] = await dataSource.query(
-        `SELECT 1 FROM "password_reset_token" WHERE "userId" = $1`,
-        [user.id],
-      );
-      expect(rows).toEqual([]);
+      expect(await linksOf(user.id)).toEqual([]);
     });
 
     it("400 for a token that was never issued", async () => {
@@ -285,8 +285,8 @@ describe("Password reset (e2e)", () => {
       // Moved into the past with raw SQL. No route can do it, and waiting
       // out the real 30 minutes is not an option.
       await dataSource.query(
-        `UPDATE "password_reset_token" SET "expiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE "userId" = $1`,
-        [user.id],
+        `UPDATE email_tokens SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE user_id = $1`,
+        [String(user.id)],
       );
 
       const { body } = await reset(token).expect(400);
@@ -295,14 +295,18 @@ describe("Password reset (e2e)", () => {
       await login(user.email, oldPassword).expect(200);
     });
 
-    it("asking again kills the earlier link", async () => {
+    // As the docs describe it: asking again sends a new link and leaves the
+    // earlier one working, in case the newer email is the one that is late.
+    // Using either link kills the other.
+    it("asking again leaves both links working until one of them is used", async () => {
       const user = await signUp();
       const first = await requestToken(user.email);
       const second = await requestToken(user.email);
 
       expect(second).not.toBe(first);
-      expect((await reset(first).expect(400)).body).toEqual(refused);
-      await reset(second).expect(204);
+      expect(await linksOf(user.id)).toHaveLength(2);
+      await reset(first).expect(204);
+      expect((await reset(second).expect(400)).body).toEqual(refused);
     });
 
     it("400 for a user who closed their account after the email was sent", async () => {
@@ -321,15 +325,21 @@ describe("Password reset (e2e)", () => {
   });
 
   describe("400 for a body that is not a reset", () => {
-    // Refused before the token is looked at, so the link still works after.
-    it("confirmPassword that differs from password, and the link survives it", async () => {
+    // The docs' reset takes the token and the password, nothing else.
+    // Typing the password twice is the web page's job. A client that still
+    // sends confirmPassword is refused before the token is looked at, so the
+    // link still works after.
+    it("confirmPassword, which the route no longer takes, and the link survives it", async () => {
       const user = await signUp();
       const token = await requestToken(user.email);
 
-      const { body } = await reset(token, newPassword, "a-different-secret").expect(400);
+      const { body } = await request(app.getHttpServer())
+        .post("/auth/password/reset")
+        .send({ token, password: newPassword, confirmPassword: newPassword })
+        .expect(400);
 
       expect((body as { message: string[] }).message).toContain(
-        "confirmPassword must match password",
+        "property confirmPassword should not exist",
       );
       await reset(token).expect(204);
     });
@@ -348,8 +358,8 @@ describe("Password reset (e2e)", () => {
       const user = await signUp();
 
       const { body } = await request(app.getHttpServer())
-        .post("/auth/reset-password")
-        .send({ email: user.email, password: newPassword, confirmPassword: newPassword })
+        .post("/auth/password/reset")
+        .send({ email: user.email, password: newPassword })
         .expect(400);
 
       expect((body as { message: string[] }).message).toEqual(

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { UserRole } from "../users/user.entity.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { ProfilesController } from "./profiles.controller.js";
 import { ProfilesService } from "./profiles.service.js";
 
@@ -19,6 +19,21 @@ describe("ProfilesController", () => {
     createdAt: "2026-10-06T00:00:00.000Z",
     updatedAt: "2026-10-06T23:59:59.999Z",
   };
+
+  // The user AuthenticationModule's guard puts on the request: the User row
+  // JwtAuth loads, without the password hash, as UsersRepository returns it.
+  function member(id: number, username: string, role: UserRole): User {
+    return {
+      id,
+      username,
+      email: `${username}@example.com`,
+      role,
+      passwordChangedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: null,
+    } as User;
+  }
 
   const profilesServiceMock = {
     getProfiles: vi.fn(),
@@ -73,11 +88,7 @@ describe("ProfilesController", () => {
     it("asks for the profile of the user on the request", async () => {
       profilesServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
 
-      const result = await controller.getMyProfile({
-        userId: 25,
-        username: "walter",
-        role: UserRole.USER,
-      });
+      const result = await controller.getMyProfile(member(25, "walter", UserRole.USER));
 
       expect(profilesServiceMock.getProfileByUserId).toHaveBeenCalledWith(25);
       expect(result).toBe(mockProfile);
@@ -112,7 +123,7 @@ describe("ProfilesController", () => {
       profilesServiceMock.getProfileByUserId.mockResolvedValue(mockProfile);
       profilesServiceMock.updateProfile.mockResolvedValue({ ...mockProfile, bio: "Updated bio" });
 
-      const caller = { userId: 42, username: "dude", role: UserRole.USER };
+      const caller = member(42, "dude", UserRole.USER);
 
       const result = await controller.updateMyProfile(updateDto, caller);
 
@@ -131,7 +142,7 @@ describe("ProfilesController", () => {
       const updateDto = { bio: "Updated bio" };
       profilesServiceMock.updateProfile.mockResolvedValue(mockProfile);
 
-      const caller = { userId: 42, username: "dude", role: UserRole.USER };
+      const caller = member(42, "dude", UserRole.USER);
 
       const result = await controller.updateProfile({ id: 1 }, updateDto, caller);
 

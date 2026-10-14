@@ -2,7 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { UserRole } from "./user.entity.js";
+import { type User, UserRole } from "./user.entity.js";
 import { UsersController } from "./users.controller.js";
 import { UsersService } from "./users.service.js";
 
@@ -11,6 +11,10 @@ import { UsersService } from "./users.service.js";
 // serialization only run on a real HTTP request, so they belong in e2e tests.
 describe("UsersController", () => {
   let controller: UsersController;
+
+  // The member @CurrentUser() hands a handler: the User entity JwtAuth loaded.
+  // The handlers here read only its id.
+  const dude = { id: 25, username: "dude", role: UserRole.USER } as User;
 
   const usersService = {
     getUsers: vi.fn(),
@@ -69,11 +73,7 @@ describe("UsersController", () => {
       const user = { id: 25, username: "dude" };
       usersService.getUserById.mockResolvedValue(user);
 
-      const result = await controller.getMyUser({
-        userId: 25,
-        username: "dude",
-        role: UserRole.USER,
-      });
+      const result = await controller.getMyUser(dude);
 
       expect(usersService.getUserById).toHaveBeenCalledWith(25);
       expect(result).toBe(user);
@@ -83,14 +83,13 @@ describe("UsersController", () => {
   describe("getUserById", () => {
     it("passes the id and the caller to the service and returns its result", async () => {
       const user = { id: 7, username: "walter" };
-      const caller = { userId: 25, username: "dude", role: UserRole.USER };
       usersService.getUserForCaller.mockResolvedValue(user);
 
-      const result = await controller.getUserById({ id: 7 }, caller);
+      const result = await controller.getUserById({ id: 7 }, dude);
 
       // getUserForCaller, not getUserById: it is the one that checks who is
       // asking. Calling getUserById here would hand any member any user.
-      expect(usersService.getUserForCaller).toHaveBeenCalledWith(7, caller);
+      expect(usersService.getUserForCaller).toHaveBeenCalledWith(7, dude);
       expect(usersService.getUserById).not.toHaveBeenCalled();
       expect(result).toBe(user);
     });
@@ -99,9 +98,7 @@ describe("UsersController", () => {
       const refusal = new NotOwnerException("Not authorized to read this user");
       usersService.getUserForCaller.mockRejectedValue(refusal);
 
-      await expect(
-        controller.getUserById({ id: 7 }, { userId: 25, username: "dude", role: UserRole.USER }),
-      ).rejects.toBe(refusal);
+      await expect(controller.getUserById({ id: 7 }, dude)).rejects.toBe(refusal);
     });
   });
 
@@ -142,11 +139,7 @@ describe("UsersController", () => {
       const updated = { id: 25, username: "newdude" };
       usersService.updateMyUser.mockResolvedValue(updated);
 
-      const result = await controller.updateMyUser(body, {
-        userId: 25,
-        username: "dude",
-        role: UserRole.USER,
-      });
+      const result = await controller.updateMyUser(body, dude);
 
       // updateMyUser, not updateUser: it is the one that checks currentPassword.
       expect(usersService.updateMyUser).toHaveBeenCalledWith(25, body);
@@ -159,11 +152,9 @@ describe("UsersController", () => {
     it("deletes the user on the request, not one from the URL", async () => {
       // resolve as undefined because the return type is void
       usersService.deleteUser.mockResolvedValue(undefined);
-      const mockUser = { userId: 25, username: "walter", role: UserRole.USER };
+      await controller.deleteMe(dude);
 
-      await controller.deleteMe(mockUser);
-
-      expect(usersService.deleteUser).toHaveBeenCalledWith(mockUser.userId);
+      expect(usersService.deleteUser).toHaveBeenCalledWith(dude.id);
     });
   });
 

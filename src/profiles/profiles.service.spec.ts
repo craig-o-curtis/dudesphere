@@ -5,9 +5,8 @@ import { EntityManager, In, IsNull, Not, QueryFailedError } from "typeorm";
 
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
-import type { AuthUser } from "../shared/guards/auth-user.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
-import { UserRole } from "../users/user.entity.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { Profile } from "./profile.entity.js";
 import { ProfilesService } from "./profiles.service.js";
 
@@ -37,10 +36,26 @@ describe("ProfilesService", () => {
     updatedAt: "2026-10-06T23:59:59.999Z",
   };
 
+  // Who is asking: the user AuthenticationModule's guard puts on the
+  // request. That is the User row JwtAuth loads, without the password hash,
+  // as UsersRepository returns it.
+  function member(id: number, username: string, role: UserRole): User {
+    return {
+      id,
+      username,
+      email: `${username}@example.com`,
+      role,
+      passwordChangedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: null,
+    } as User;
+  }
+
   // mockProfile.userId is 42, so `owner` owns it and `other` does not.
-  const owner: AuthUser = { userId: 42, username: "dude", role: UserRole.USER };
-  const other: AuthUser = { userId: 7, username: "donny", role: UserRole.USER };
-  const admin: AuthUser = { userId: 9, username: "maude", role: UserRole.ADMIN };
+  const owner = member(42, "dude", UserRole.USER);
+  const other = member(7, "donny", UserRole.USER);
+  const admin = member(9, "maude", UserRole.ADMIN);
 
   beforeEach(async () => {
     vi.resetAllMocks();

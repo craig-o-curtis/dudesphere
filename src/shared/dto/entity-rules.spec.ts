@@ -66,8 +66,12 @@ describe.each(pairs)("%s follows its entity", (_name, dto, entity) => {
   it("rejects a value longer than its column, however the length is counted", async () => {
     // A varchar's length, or the char_length check that stands in for one on
     // a citext column. See test/column-limits.ts.
+    // A hashed field's column holds the hash, never what was sent, so its
+    // length says nothing about the field's limit.
     const limits = columnLimits(entity);
-    const sized = sharedColumns(dto, entity).filter((column) => limits.has(column.propertyName));
+    const sized = sharedColumns(dto, entity).filter(
+      (column) => limits.has(column.propertyName) && !HASHED_FIELDS.has(column.propertyName),
+    );
 
     for (const column of sized) {
       const field = column.propertyName;

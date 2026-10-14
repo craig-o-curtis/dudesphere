@@ -1,78 +1,42 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule, type ConfigType } from "@nestjs/config";
-import { JwtModule } from "@nestjs/jwt";
+import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { MailModule } from "../mail/mail.module.js";
+import {
+  EmailTokenEntity,
+  RefreshTokenEntity,
+  SessionEntity,
+} from "../typeorm/authentication.entities.js";
+import { TypeOrmAuthenticationStore } from "../typeorm/typeorm-authentication.store.js";
 import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
-import { AuthService } from "./auth.service.js";
 import authConfig from "./config/auth.config.js";
-import { PasswordResetToken } from "./password-reset/password-reset-token.entity.js";
-import { PasswordResetService } from "./password-reset/password-reset.service.js";
-import { SessionsModule } from "./sessions/sessions.module.js";
+import { CredentialsService } from "./credentials.service.js";
+import { JwtAuth } from "./jwt-auth.provider.js";
+import { PasswordResetController } from "./password-reset.controller.js";
+import { PasswordResetMailer } from "./password-reset.mailer.js";
+import { SessionsController } from "./sessions.controller.js";
+import { TokensController } from "./tokens.controller.js";
 
-// Registers the "auth" config namespace. It is not global, so each module
-// that injects authConfig.KEY has to import it. Two do so here: AuthModule,
-// for PasswordResetService, and JwtModule, for the factory below. Both import
-// this one constant. SessionsModule imports the namespace for itself.
+// Everything the app adds to @nestjs/authentication: the routes, the
+// credential provider, the password check, the reset mailer and the store.
+// AuthenticationModule itself, with its options, is registered in AppModule,
+// as the docs do.
 //
-// Not authConfig.asProvider(). That returns a ready-made set of registerAsync
-// options: this same import and inject, plus a factory that hands the config
-// back unchanged. It suits a module whose options are the config object
-// itself. JwtModule's options are built from the config, so the factory below
-// is written out. asProvider() also returns options and not a module, so it
-// could not go in AuthModule's own imports for PasswordResetService.
-const authConfigModule = ConfigModule.forFeature(authConfig);
-
-// The one algorithm tokens are signed and checked with: an HMAC with SHA-256,
-// keyed by JWT_SECRET. Named for both directions, so the allowed list is this
-// app's rule and not whatever the library allows by default. A token whose
-// header names any other algorithm, or "none", is refused.
-const JWT_ALGORITHM = "HS256";
-
+// JwtAuth, PasswordResetMailer and TypeOrmAuthenticationStore register
+// themselves with the package from their constructors, so listing them here
+// is all they need.
 @Module({
-  controllers: [AuthController],
-  providers: [AuthService, PasswordResetService],
   imports: [
     UsersModule,
-    // For PasswordResetService: the mail it sends and the table it keeps.
     MailModule,
-    TypeOrmModule.forFeature([PasswordResetToken]),
-    // For SessionsService, which login, refresh and logout call.
-    SessionsModule,
-    authConfigModule,
-    // global: AppModule registers JwtAuthGuard as an APP_GUARD, and the guard
-    // needs JwtService there. Global makes JwtService injectable in every
-    // module, so nothing has to import AuthModule to get it.
-    JwtModule.registerAsync({
-      global: true,
-      // Auth owns its own config, so it is loaded here and not in AppModule.
-      // The rule for JWT_SECRET still lives in src/config/env.validate.ts,
-      // which checks every variable before any module loads.
-      imports: [authConfigModule],
-      inject: [authConfig.KEY],
-      // Set once here for signing and verifying. SessionsService and JwtAuthGuard
-      // then call signAsync and verifyAsync with no options of their own, and
-      // the guard rejects a token with the wrong audience, issuer or
-      // algorithm. A call that does pass options has them laid over these, so
-      // it still gets every one it does not replace.
-      useFactory: (auth: ConfigType<typeof authConfig>) => ({
-        secret: auth.secret,
-        signOptions: {
-          algorithm: JWT_ALGORITHM,
-          expiresIn: auth.expiresIn,
-          audience: auth.audience,
-          issuer: auth.issuer,
-        },
-        verifyOptions: {
-          algorithms: [JWT_ALGORITHM],
-          audience: auth.audience,
-          issuer: auth.issuer,
-        },
-      }),
-    }),
+    ConfigModule.forFeature(authConfig),
+    // Registers the store's entities with the app's one connection, which
+    // loads them through autoLoadEntities.
+    TypeOrmModule.forFeature([SessionEntity, RefreshTokenEntity, EmailTokenEntity]),
   ],
-  exports: [AuthService],
+  controllers: [AuthController, PasswordResetController, TokensController, SessionsController],
+  providers: [JwtAuth, CredentialsService, PasswordResetMailer, TypeOrmAuthenticationStore],
 })
 export class AuthModule {}

@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  AUTHENTICATION_MODULE_OPTIONS,
+  type AuthenticationModuleOptions,
+  JwtSigner,
+} from "@nestjs/authentication";
 import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
+import * as bcrypt from "bcrypt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -11,25 +16,25 @@ import { DataSource } from "typeorm";
 import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
-import { bearer, signedAMinuteEarlier } from "./auth-helpers.js";
+import { bearer, claimsOf, signedAMinuteEarlier } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUpBody } from "./sign-up.js";
 
-// Proves over real HTTP, with real bcrypt and the real database, that a
+// Proves over real HTTP, with real scrypt and the real database, that a
 // password is stored as a hash and checked against that hash. The unit specs
 // fake the hasher, so only this file shows the whole path working.
 //
 // Needs the databases running. It deletes the users it creates.
 describe("Passwords (e2e)", () => {
   let app: INestApplication<App>;
-  let jwt: JwtService;
+  let accessTokenOptions: NonNullable<AuthenticationModuleOptions["accessToken"]>;
   let dataSource: DataSource;
   const createdUserIds: number[] = [];
 
   async function register(password: string) {
     const sent = signUpBody({ password });
 
-    const response = await request(app.getHttpServer()).post("/auth/signup").send(sent);
+    const response = await request(app.getHttpServer()).post("/auth/sign-up").send(sent);
     const { id } = response.body as { id?: number };
     if (id !== undefined) {
       createdUserIds.push(id);
@@ -38,7 +43,7 @@ describe("Passwords (e2e)", () => {
   }
 
   function login(email: string, password: string) {
-    return request(app.getHttpServer()).post("/auth/login").send({ identifier: email, password });
+    return request(app.getHttpServer()).post("/auth/token").send({ identifier: email, password });
   }
 
   async function storedPassword(userId: number | undefined): Promise<string> {
@@ -59,29 +64,32 @@ describe("Passwords (e2e)", () => {
     // app that actually runs. See src/app-setup.ts.
     configureApp(app);
     await listenOnLoopback(app);
-    jwt = app.get(JwtService);
+    accessTokenOptions = app.get<AuthenticationModuleOptions>(
+      AUTHENTICATION_MODULE_OPTIONS,
+    ).accessToken!;
     dataSource = app.get(DataSource);
   });
 
   afterAll(async () => {
-    // The sessions first. Their foreign key is ON DELETE RESTRICT, so a user
-    // who has logged in cannot be deleted while those rows exist. Each
-    // session's refresh tokens go with it.
-    // the ANY($1) here
-    await dataSource.query(`DELETE FROM "session" WHERE "userId" = ANY($1)`, [createdUserIds]);
+    // The refresh tokens first. They hold the user id as text, with no
+    // foreign key, so nothing removes them with the user.
+    await dataSource.query(`DELETE FROM refresh_tokens WHERE user_id = ANY($1::text[])`, [
+      createdUserIds.map(String),
+    ]);
     // The profile rows go with them: the foreign key is ON DELETE CASCADE.
     await dataSource.query(`DELETE FROM "user" WHERE "id" = ANY($1)`, [createdUserIds]);
     await app.close();
   });
 
   describe("sign-up", () => {
-    it("stores a bcrypt hash, not the password", async () => {
+    // PasswordHasher's format: scrypt, with the cost it was made at.
+    it("stores a scrypt hash, not the password", async () => {
       const { userId } = await register("secret123");
 
       const stored = await storedPassword(userId);
 
       expect(stored).not.toContain("secret123");
-      expect(stored).toMatch(/^\$2[aby]\$12\$.{53}$/);
+      expect(stored).toMatch(/^\$scrypt\$ln=17,r=8,p=1\$/);
     });
 
     it("gives two users with the same password different hashes", async () => {
@@ -93,13 +101,13 @@ describe("Passwords (e2e)", () => {
 
     it("never returns the password or its hash", async () => {
       const response = await request(app.getHttpServer())
-        .post("/auth/signup")
+        .post("/auth/sign-up")
         .send(signUpBody())
         .expect(201);
       createdUserIds.push((response.body as { id: number }).id);
 
       expect(response.body).not.toHaveProperty("password");
-      expect(JSON.stringify(response.body)).not.toContain("$2");
+      expect(JSON.stringify(response.body)).not.toContain("$scrypt");
     });
   });
 
@@ -129,28 +137,50 @@ describe("Passwords (e2e)", () => {
 
       expect(unknownEmail.body).toEqual(wrongPassword.body);
     });
+
+    // Hashes stored before PasswordHasher are bcrypt. They still sign in, and
+    // the first sign-in replaces the hash with a scrypt one, since only then
+    // is the password at hand.
+    it("signs in with an old bcrypt hash, and replaces it with scrypt", async () => {
+      const { email, userId } = await register("secret123");
+      const oldHash = await bcrypt.hash("secret123", 4);
+      await dataSource.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
+        oldHash,
+        userId,
+      ]);
+
+      await login(email, "secret124").expect(401);
+      expect(await storedPassword(userId)).toBe(oldHash);
+
+      await login(email, "secret123").expect(200);
+      expect(await storedPassword(userId)).toMatch(/^\$scrypt\$/);
+      await login(email, "secret123").expect(200);
+    });
   });
 
   describe("sign-up password length", () => {
-    it("accepts 72 bytes, and that password then logs in", async () => {
-      const password = "a".repeat(72);
+    it("accepts 128 characters, and that password then signs in", async () => {
+      const password = "a".repeat(128);
       const { email, status } = await register(password);
 
       expect(status).toBe(201);
       await login(email, password).expect(200);
     });
 
-    it("rejects 73 bytes with a 400", async () => {
-      const { status } = await register("a".repeat(73));
+    it("rejects 129 characters with a 400", async () => {
+      const { status } = await register("a".repeat(129));
 
       expect(status).toBe(400);
     });
 
-    // 37 characters, but "é" is 2 bytes, so 74 bytes.
-    it("counts bytes, not characters", async () => {
-      const { status } = await register("é".repeat(37));
+    // bcrypt read only the first 72 bytes, so two long passwords that shared
+    // them both signed in. scrypt reads every character.
+    it("tells apart two long passwords that share their first 72 bytes", async () => {
+      const password = `${"a".repeat(72)}-one`;
+      const { email } = await register(password);
 
-      expect(status).toBe(400);
+      await login(email, `${"a".repeat(72)}-two`).expect(401);
+      await login(email, password).expect(200);
     });
   });
 
@@ -203,7 +233,7 @@ describe("Passwords (e2e)", () => {
     // the member is changing the password to get rid of.
     it("ends the tokens that were signed before the change", async () => {
       const { email, token } = await signUp();
-      const earlier = await signedAMinuteEarlier(app, token);
+      const earlier = signedAMinuteEarlier(app, token);
       await request(app.getHttpServer()).get("/users/me").set(bearer(earlier)).expect(200);
 
       await changePassword(token, { password: "secret456", currentPassword: "secret123" }).expect(
@@ -214,7 +244,8 @@ describe("Passwords (e2e)", () => {
         .get("/users/me")
         .set(bearer(earlier))
         .expect(401);
-      expect(refused.body).toMatchObject({ errorCode: "TOKEN_INVALID" });
+      // JwtAuth.validate refuses it, which the package reports this way.
+      expect(refused.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
 
       // The member logs in again with the new password, and that token works.
       const { body } = await login(email, "secret456").expect(200);
@@ -227,7 +258,7 @@ describe("Passwords (e2e)", () => {
     // Only a password change signs anybody out.
     it("keeps the tokens when only the username changes", async () => {
       const { token } = await signUp();
-      const earlier = await signedAMinuteEarlier(app, token);
+      const earlier = signedAMinuteEarlier(app, token);
 
       await changePassword(token, { username: `e2e-${randomUUID().slice(0, 8)}` }).expect(200);
 
@@ -249,7 +280,7 @@ describe("Passwords (e2e)", () => {
       const { email } = await register("secret123");
       const { body } = await login(email, "secret123").expect(200);
 
-      const claims: Record<string, unknown> = jwt.decode(
+      const claims: Record<string, unknown> = claimsOf(
         (body as { accessToken: string }).accessToken,
       );
 
@@ -264,10 +295,9 @@ describe("Passwords (e2e)", () => {
     it("is rejected when it was issued for another audience", async () => {
       const { email, userId } = await register("secret123");
       const { body } = await login(email, "secret123").expect(200);
-      const forged = await jwt.signAsync(
-        { sub: userId, role: "user" },
-        { audience: "some-other-app" },
-      );
+      const forged = new JwtSigner({ ...accessTokenOptions, audience: "some-other-app" }).sign({
+        sub: String(userId),
+      });
 
       await request(app.getHttpServer())
         .get("/users/me")

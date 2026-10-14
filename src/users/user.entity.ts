@@ -51,8 +51,8 @@ export class User {
   //
   // An access token issued before this moment is refused, so changing a
   // password signs out every device that was signed in with the old one,
-  // including one a thief is using. UsersService.updateUser sets it and
-  // UsersService.getUserForToken checks it.
+  // including one a thief is using. UsersService.updateUser and
+  // PasswordResetMailer.updatePassword set it, and JwtAuth.validate checks it.
   @UtcColumn({ nullable: true })
   @Exclude()
   passwordChangedAt: string | null;

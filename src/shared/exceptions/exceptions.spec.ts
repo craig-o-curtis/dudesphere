@@ -7,7 +7,6 @@ import {
   RequestTimeoutException,
   ServiceUnavailableException,
   type Type,
-  UnauthorizedException,
 } from "@nestjs/common";
 
 import { ClockUnavailableException } from "./clock-unavailable.exception.js";
@@ -15,10 +14,7 @@ import { DatabaseFaultException } from "./database-fault.exception.js";
 import { DatabaseUnavailableException } from "./database-unavailable.exception.js";
 import { InvalidValueException } from "./invalid-value.exception.js";
 import { NotOwnerException } from "./not-owner.exception.js";
-import { RefreshTokenInvalidException } from "./refresh-token-invalid.exception.js";
-import { ResetTokenInvalidException } from "./reset-token-invalid.exception.js";
 import { TimeLimitExceededException } from "./time-limit-exceeded.exception.js";
-import { TokenMissingException } from "./token-missing.exception.js";
 import { ValueTakenException } from "./value-taken.exception.js";
 
 // One table for every exception class in this folder. Each row pins what a
@@ -118,21 +114,6 @@ describe("the app's own exception classes", () => {
       },
     ],
     [
-      "TokenMissingException",
-      () => new TokenMissingException("Missing or invalid authorization header"),
-      {
-        parent: UnauthorizedException,
-        status: 401,
-        body: {
-          statusCode: 401,
-          message: "Missing or invalid authorization header",
-          error: "Unauthorized",
-          errorCode: "TOKEN_MISSING",
-        },
-        errorCode: "TOKEN_MISSING",
-      },
-    ],
-    [
       "DatabaseUnavailableException",
       () => new DatabaseUnavailableException(cause),
       {
@@ -196,36 +177,6 @@ describe("the app's own exception classes", () => {
           errorCode: "CLOCK_UNAVAILABLE",
         },
         errorCode: "CLOCK_UNAVAILABLE",
-      },
-    ],
-    [
-      "RefreshTokenInvalidException",
-      () => new RefreshTokenInvalidException(),
-      {
-        parent: UnauthorizedException,
-        status: 401,
-        body: {
-          statusCode: 401,
-          message: "Invalid or expired refresh token",
-          error: "Unauthorized",
-          errorCode: "REFRESH_TOKEN_INVALID",
-        },
-        errorCode: "REFRESH_TOKEN_INVALID",
-      },
-    ],
-    [
-      "ResetTokenInvalidException",
-      () => new ResetTokenInvalidException(),
-      {
-        parent: BadRequestException,
-        status: 400,
-        body: {
-          statusCode: 400,
-          message: "Invalid or expired link",
-          error: "Bad Request",
-          errorCode: "RESET_TOKEN_INVALID",
-        },
-        errorCode: "RESET_TOKEN_INVALID",
       },
     ],
   ];

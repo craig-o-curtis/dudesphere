@@ -28,7 +28,7 @@ describe("Rate limiting (e2e)", () => {
 
   function login(identifier: string, withPassword = "not-the-password") {
     return request(app.getHttpServer())
-      .post("/auth/login")
+      .post("/auth/token")
       .send({ identifier, password: withPassword });
   }
 
@@ -117,7 +117,7 @@ describe("Rate limiting (e2e)", () => {
   // request, not the email.
   describe("forgot-password allows 3 requests in 15 minutes for one email", () => {
     function forgot(email: string) {
-      return request(app.getHttpServer()).post("/auth/forgot-password").send({ email });
+      return request(app.getHttpServer()).post("/auth/password/forgot").send({ email });
     }
 
     it("answers 429 to the fourth", async () => {
@@ -145,24 +145,10 @@ describe("Rate limiting (e2e)", () => {
       await forgot(`e2e-floodother-${tag}@example.com`).expect(202);
     });
 
-    // The count by IP address runs beside the count by email. Without it, a
-    // caller who named a new email each time would never be refused. The
-    // tests above already used some of this minute's 100, so the refusal
-    // comes at the 101st request here or sooner.
-    it("holds one address to 100 a minute, however many emails it names", async () => {
-      let sent = 1;
-      let response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
-      while (response.status === 202 && sent < 101) {
-        sent += 1;
-        response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
-      }
-
-      expect(response.status).toBe(429);
-      expect(response.body).toEqual(refused);
-      const retryAfter = Number(response.headers["retry-after"]);
-      expect(retryAfter).toBeGreaterThan(0);
-      expect(retryAfter).toBeLessThanOrEqual(60);
-    });
+    // Not covered any more: one address naming a new email on each request.
+    // The docs' AuthThrottlerGuard counts by email and address together
+    // wherever the body names an account, so each email gets its own count,
+    // and no count covers the address alone on these routes.
   });
 
   describe("a route with no limit of its own", () => {

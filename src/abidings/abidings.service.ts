@@ -6,7 +6,6 @@ import { Model, type QueryFilter } from "mongoose";
 import { HashtagsService } from "../hashtags/hashtags.service.js";
 import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
-import type { AuthUser } from "../shared/guards/auth-user.js";
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import {
@@ -14,7 +13,7 @@ import {
   extractHashtags,
   normalizeHashtag,
 } from "../shared/utils/hashtag.js";
-import { UserRole } from "../users/user.entity.js";
+import { type User, UserRole } from "../users/user.entity.js";
 import { Abiding, AbidingDocument } from "./abiding.schema.js";
 import { AbidingResponseDto } from "./dto/abiding-response.dto.js";
 import { CreateAbidingDto } from "./dto/create-abiding.dto.js";
@@ -100,22 +99,22 @@ export class AbidingsService {
   // read from the request body, which let anyone post as anyone.
   async createAbiding(
     createAbidingDto: CreateAbidingDto,
-    caller: AuthUser,
+    caller: User,
   ): Promise<AbidingResponseDto> {
-    // Looked up before the write, not after. JwtAuthGuard already refuses a
+    // Looked up before the write, not after. JwtAuth already refuses a
     // token whose user is deleted, so this is a second lock: an account can
     // be closed in the moment between the guard and this line. A user and
     // their profile are deleted together, so getProfileByUserId throws a 404
     // for a user who is deleted or was never there, and no abiding is written
     // for an author nobody can find.
-    const author = await this.profilesService.getProfileByUserId(caller.userId);
+    const author = await this.profilesService.getProfileByUserId(caller.id);
 
     if (createAbidingDto.replyToId) {
       await this.assertReplyTargetExists(createAbidingDto.replyToId);
     }
 
     const newAbiding = await this.abidingModel.create({
-      userId: caller.userId,
+      userId: caller.id,
       message: createAbidingDto.message,
       // The DTO has always accepted imageUrl. It was never passed on here, so
       // a post with an image was stored without one.
@@ -144,7 +143,7 @@ export class AbidingsService {
   async patchAbiding(
     id: string,
     updateAbidingDto: UpdateAbidingDto,
-    caller: AuthUser,
+    caller: User,
   ): Promise<AbidingResponseDto> {
     const { message, imageUrl, replyToId } = updateAbidingDto;
 
@@ -206,7 +205,7 @@ export class AbidingsService {
     return this.withDisplayName(this.toResponseDto(updatedAbiding));
   }
 
-  async deleteAbiding(abidingId: string, caller: AuthUser): Promise<void> {
+  async deleteAbiding(abidingId: string, caller: User): Promise<void> {
     // deletedAt: null so an abiding hidden with its deleted user is a 404 here
     // too, and comes back intact if the user is restored. ownedBy adds the
     // authorization rule to the same filter.
@@ -224,8 +223,8 @@ export class AbidingsService {
 
   // An admin may touch anyone's abiding, so the filter gains nothing. Everyone
   // else is pinned to their own userId.
-  private ownedBy(caller: AuthUser): { userId?: number } {
-    return caller.role === UserRole.ADMIN ? {} : { userId: caller.userId };
+  private ownedBy(caller: User): { userId?: number } {
+    return caller.role === UserRole.ADMIN ? {} : { userId: caller.id };
   }
 
   // Called only when an ownership-scoped write matched nothing, to tell a

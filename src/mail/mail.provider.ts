@@ -13,8 +13,7 @@ export interface MailMessage {
  *
  * It is an abstract class, not an interface, so it can be the injection
  * token: a service asks for MailProvider and never names how the mail is
- * sent. MailModule decides which class stands behind it. This is the same
- * shape as HashingProvider in src/hashing.
+ * sent. MailModule decides which class stands behind it.
  *
  * A test puts a fake behind it and reads what would have been sent, so no
  * test needs a mail server.
