@@ -25,6 +25,13 @@ import type { Paginated as ApiPaginated } from "./pagination/paginated.interface
 /** true when A and B are assignable to each other, false otherwise. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
+/**
+ * true when A and B are assignable to each other and have the same field
+ * names. Assignability alone misses a renamed optional field: `{ name?: x }`
+ * and `{ displayName?: x }` each accept the other.
+ */
+type Matches<A, B> = Same<A, B> extends true ? Same<keyof A, keyof B> : false;
+
 /** Compiles only when given true, so a false from Same fails the build. */
 type Expect<T extends true> = T;
 
@@ -36,10 +43,10 @@ type UserBody = Omit<UserResponseDto, "password" | "deletedAt" | "role" | "profi
 };
 
 export type UserRoleMatches = Expect<Same<`${UserRole}`, SharedUserRole>>;
-export type UserMatches = Expect<Same<UserBody, UserResponse>>;
-export type ProfileMatches = Expect<Same<ProfileResponseDto, ProfileResponse>>;
-export type AbidingMatches = Expect<Same<AbidingResponseDto, AbidingResponse>>;
-export type HashtagMatches = Expect<Same<HashtagResponseDto, HashtagResponse>>;
-export type PaginatedMatches = Expect<Same<ApiPaginated<number>, Paginated<number>>>;
+export type UserMatches = Expect<Matches<UserBody, UserResponse>>;
+export type ProfileMatches = Expect<Matches<ProfileResponseDto, ProfileResponse>>;
+export type AbidingMatches = Expect<Matches<AbidingResponseDto, AbidingResponse>>;
+export type HashtagMatches = Expect<Matches<HashtagResponseDto, HashtagResponse>>;
+export type PaginatedMatches = Expect<Matches<ApiPaginated<number>, Paginated<number>>>;
 export type ErrorCodeMatches = Expect<Same<`${ErrorCode}`, ApiErrorCode>>;
-export type TokenPairMatches = Expect<Same<PackageTokenPair, TokenPair>>;
+export type TokenPairMatches = Expect<Matches<PackageTokenPair, TokenPair>>;
