@@ -74,6 +74,10 @@ Each story is `<REALM>-<n>: noun phrase`, such as
 `FEED-16: Thread page and intercepting-route modal`. The title names a thing,
 not an action.
 
+A story's PR title is `<ID> (#<issue>): <name>`, with the id and name copied
+from the GitHub issue, such as `ACHV-51 (#86): Fest Finder and Day of the Dude`.
+The PR copies the issue's labels and milestone.
+
 The numbers form one sequence across every realm. An id never changes once it is
 written, even when a story moves phase or splits. A split adds a letter, such as
 AUTH-52a. The ids do not match GitHub issue numbers; the tracker's Issue column
@@ -106,16 +110,17 @@ One milestone per phase: `Phase 0: Foundation`, `Phase 1: The Feed`,
 
 ### GitHub labels
 
-| Label              | Goes on                                                 |
-| ------------------ | ------------------------------------------------------- |
-| `epic-lebowski`    | every story in this epic                                |
-| `web`              | stories that change `apps/web`                          |
-| `api`              | stories that change `apps/api`                          |
-| `packages`         | stories that change `packages/*`                        |
-| `backend-gap`      | API work the web app found it needs                     |
-| `rendering-lesson` | web stories that add a row to `rendering-strategies.md` |
-| `enhancement`      | new behavior, as before the epic                        |
-| `documentation`    | docs-only stories, as before the epic                   |
+| Label              | Goes on                                                    |
+| ------------------ | ---------------------------------------------------------- |
+| `epic-lebowski`    | every story in this epic                                   |
+| `web`              | stories that change `apps/web`                             |
+| `api`              | stories that change `apps/api`                             |
+| `fullstack`        | stories that change both apps, in place of `web` and `api` |
+| `packages`         | stories that change `packages/*`                           |
+| `backend-gap`      | API work the web app found it needs                        |
+| `rendering-lesson` | web stories that add a row to `rendering-strategies.md`    |
+| `enhancement`      | new behavior, as before the epic                           |
+| `documentation`    | docs-only stories, as before the epic                      |
 
 Each issue body starts "Part of the Lebowski epic. See
 `context/epic-lebowski/index.md`. Realm: X." The spec from `issues/<ID>.md`

@@ -48,6 +48,31 @@ For `apps/web` (see `./context/suggested-frontend-skills.md`):
 - vitest: `.agents/skills/vitest`
 - tanstack-query-best-practices: `.agents/skills/tanstack-query-best-practices`. Skip its SSR hydration rules: TanStack Query is for client lists only
 
+## Agents
+
+Nine agents build the epic one story at a time. Each one lives in `.agents/<name>.md`, with a link in `.claude/agents/` so Claude Code loads it.
+
+| Agent                    | Does                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `planner`                | Reads the issue, spec and tracker, finds gaps, grills you, and writes the handoff                     |
+| `driver`                 | Sends each task in the handoff to a builder, runs the three reviewers, then hands off to pr-finalizer |
+| `fullstack-hooker-upper` | Builds `apps/api`, `packages/api-types` and the BFF seam in `apps/web`                                |
+| `fe-tdd-dev`             | Builds pages and components in `apps/web`, test first                                                 |
+| `3d-animator`            | Builds all motion: CSS, `motion/react`, View Transitions and React Three Fiber                        |
+| `qa-skeptic`             | Reviews standards and spec, and tries to break the work                                               |
+| `owasp-hacker`           | Reviews security against OWASP Top 10, on the local servers only                                      |
+| `a11y-expert`            | Reviews WCAG 2.2 AA, the keyboard and reduced motion                                                  |
+| `pr-finalizer`           | Runs every check, commits in chunks, writes the PR, and asks before the push                          |
+
+The flow for one story:
+
+1. `worktree branch --github <issue>` makes the story's worktree.
+2. `claude --agent planner` in that worktree plans the story with you. It writes `context/epic-lebowski/handoffs/<ID>.md`.
+3. `claude --agent driver` in the same worktree builds, reviews and finalizes from the handoff.
+4. To finish a story by hand, run `claude --agent pr-finalizer` on its own.
+
+The builders and reviewers never commit. pr-finalizer makes every commit, and asks before every push.
+
 ## Git
 
 NEVER run `git push` without asking me first and getting a yes. This holds even when the task seems to need it, such as updating a PR. Approval covers that one push only. Ask again for the next one.
