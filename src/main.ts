@@ -1,14 +1,22 @@
 import type { ConfigType } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 
 import { configureApp } from "./app-setup.js";
 import { AppModule, ObserveInstrument } from "./app.module.js";
 import appConfig from "./config/app.config.js";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     instrument: ObserveInstrument,
   });
+
+  // Behind a reverse proxy every request seems to come from the proxy, so
+  // the rate limiter would give all callers one shared count. This trusts
+  // X-Forwarded-For from a proxy on this machine only, as the docs show.
+  // A host whose proxy is elsewhere needs its address here instead.
+  // https://docs.nestjs.com/security/rate-limiting#proxies
+  app.set("trust proxy", "loopback");
 
   // Shared with the e2e suite, so the tests exercise the same app this does.
   // See src/app-setup.ts.
