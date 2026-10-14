@@ -302,15 +302,13 @@ describe("Passwords (e2e)", () => {
       const { email } = await register("a-long-secret-123");
       const { body } = await login(email, "a-long-secret-123").expect(200);
 
-      const claims: Record<string, unknown> = claimsOf(
-        (body as { accessToken: string }).accessToken,
-      );
+      const claims = claimsOf((body as { accessToken: string }).accessToken);
 
       expect(claims.aud).toBe("dudesphere-api");
       expect(claims.iss).toBe("dudesphere");
       // JWT_EXPIRES_IN: 900 seconds unless .env sets another value.
       const { expiresIn } = app.get<ConfigType<typeof authConfig>>(authConfig.KEY);
-      expect(Number(claims.exp) - Number(claims.iat)).toBe(expiresIn);
+      expect(claims.exp - claims.iat).toBe(expiresIn);
     });
 
     // Signed with this app's own secret, so only the audience is wrong.

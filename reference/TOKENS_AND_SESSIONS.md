@@ -10,11 +10,14 @@ works once.
 The refresh tokens of one sign-in form a **family**. The server can end a
 family at any moment, and its refresh tokens stop working at once.
 
-**The access token does not stop with its family.** Signing out ends the
-refresh tokens, and an access token already handed out keeps working until it
-expires, up to 15 minutes later. The NestJS docs accept this, and so does
-this app. A password change, a password reset and a closed account are
-different: they stop access tokens on the very next request.
+**The access token stops with its sign-in.** Every sign-in gets an id of its
+own, `sid`, and every access token of that sign-in carries it. On every
+request `JwtAuth` checks that the sign-in is still going. So a sign-out, a
+sign-out everywhere, a refresh token used twice, a password change, a
+password reset and a closed account all stop access tokens on the very next
+request. With the NestJS docs alone, an access token keeps working until it
+expires, up to 15 minutes later. This app adds one column and one check to
+close that gap.
 
 The code is the official packages `@nestjs/authentication` 0.1.1 and
 `@nestjs/authorization` 0.1.0, set up as
@@ -22,7 +25,10 @@ The code is the official packages `@nestjs/authentication` 0.1.1 and
 and
 [docs.nestjs.com/security/authorization](https://docs.nestjs.com/security/authorization)
 show. The app writes the parts only it knows: how to find a member, how to
-check a password, how to send the reset email, and where the rows live.
+check a password, how to send the reset email, and where the rows live. It
+also adds three things the docs do not have: the sign-in check on every
+access token, one transaction for a password change and the end of its
+sign-ins, and a second look at the password once a sign-in has started.
 
 The flows below are run over real HTTP and the real database by
 [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts). The password reset
@@ -40,6 +46,7 @@ the guards are in
 | Refresh token   | 43 random characters. Sent to two routes only: to get a new pair, or to sign out                           |
 | Pair            | One access token and one refresh token, handed out together                                                |
 | Family          | Every refresh token of one sign-in: the first one and each one swapped for since. They share a `family_id` |
+| Sign-in id      | `sid`: a UUID made at sign-in. It is in every access token of the family, and on every row of it           |
 | Successor       | The new refresh token a client gets when it swaps the old one                                              |
 | Rotation        | Replacing the refresh token on every use. Each one works once                                              |
 | Revoke          | End a family on purpose. `revoked` becomes `true` on its rows                                              |
@@ -54,54 +61,54 @@ refresh tokens. The word "session" now names something this API does not
 use: the package's browser sessions, kept in a cookie. The next table sets
 the three side by side.
 
-|                                | A family (what a sign-in is now)       | The old `session` row (gone) | A row in `sessions` (unused)                  |
-| ------------------------------ | -------------------------------------- | ---------------------------- | --------------------------------------------- |
-| What it stands for             | One sign-in from one device            | One sign-in from one device  | One browser signed in with a cookie           |
-| Where it lives                 | Rows in `refresh_tokens` sharing an id | One row in `session`         | One row in `sessions`                         |
-| Its id                         | `family_id`, 22 random characters      | `id`, a UUID                 | `id`, the hash of the cookie's value          |
-| Does the access token name it? | No                                     | Yes, as `sid`                | No access token is involved                   |
-| Checked on every request?      | No                                     | Yes                          | Only for a cookie, which this API never reads |
-| Made by                        | `TokenService.issue`                   | `SessionsService.start`      | `SignInService.signIn`, which nothing calls   |
+|                                | A family (what a sign-in is now)                             | The old `session` row (gone) | A row in `sessions` (unused)                  |
+| ------------------------------ | ------------------------------------------------------------ | ---------------------------- | --------------------------------------------- |
+| What it stands for             | One sign-in from one device                                  | One sign-in from one device  | One browser signed in with a cookie           |
+| Where it lives                 | Rows in `refresh_tokens` sharing an id                       | One row in `session`         | One row in `sessions`                         |
+| Its id                         | `family_id`, 22 random characters. Also `sid`, a UUID        | `id`, a UUID                 | `id`, the hash of the cookie's value          |
+| Does the access token name it? | Yes, as `sid`                                                | Yes, as `sid`                | No access token is involved                   |
+| Checked on every request?      | Yes, by `SignInsRepository.isLive`                           | Yes                          | Only for a cookie, which this API never reads |
+| Made by                        | `TokenService.issue`, with the `sid` from `TokensController` | `SessionsService.start`      | `SignInService.signIn`, which nothing calls   |
 
 ## Old name, new name
 
 Everything below was renamed or replaced on 2026-10-14. Use this table to
 read older notes, commits and the course.
 
-| Before                               | Now                                                                                   |
-| ------------------------------------ | ------------------------------------------------------------------------------------- |
-| `POST /auth/login`                   | `POST /auth/token`                                                                    |
-| `POST /auth/refresh`                 | `POST /auth/token/refresh`                                                            |
-| `POST /auth/logout`                  | `POST /auth/token/revoke`                                                             |
-| `POST /auth/logout-all`              | `POST /auth/sign-out-everywhere`                                                      |
-| `POST /auth/signup`                  | `POST /auth/sign-up`                                                                  |
-| `POST /auth/forgot-password`         | `POST /auth/password/forgot`                                                          |
-| `POST /auth/reset-password`          | `POST /auth/password/reset`, without `confirmPassword`                                |
-| One `AuthController` for every route | `AuthController`, `TokensController`, `SessionsController`, `PasswordResetController` |
-| `AuthService.login`                  | `CredentialsService.verify`, then `TokenService.issue`                                |
-| `SessionsService.start`              | `TokenService.issue`                                                                  |
-| `SessionsService.refresh`            | `TokenService.refresh`                                                                |
-| `SessionsService.end`                | `TokenService.revoke`                                                                 |
-| `SessionsService.endAll`             | `TokenService.revokeAll`, called by `SignInService.signOutEverywhere`                 |
-| `SessionsService.isLive`             | Nothing. An access token is no longer checked against its sign-in                     |
-| `SessionsRepository`                 | `TypeOrmAuthenticationStore`                                                          |
-| Table `session`                      | A family: the `family_id` column of `refresh_tokens`                                  |
-| Table `refresh_token`                | Table `refresh_tokens`                                                                |
-| Table `password_reset_token`         | Table `email_tokens`, with `purpose` set to `password-reset`                          |
-| The app's `PasswordResetService`     | The package's `PasswordResetService`, plus the app's `PasswordResetMailer`            |
-| `one-time-token.ts`                  | The package makes and hashes its own tokens                                           |
-| `JwtAuthGuard`                       | The `AuthenticationModule` guard, with the app's `JwtAuth` provider                   |
-| `RolesGuard` and `@Auth(roles)`      | The `AuthorizationModule` guard, with `@Can(Policy, ability)` or `@Can.Anyone()`      |
-| `HashingProvider`, bcrypt            | `PasswordHasher`, scrypt. Old bcrypt hashes still sign in, and are replaced           |
-| The `sid` claim                      | Gone. The access token names no sign-in                                               |
-| `LoginDto`                           | `SignInDto`                                                                           |
-| `RefreshDto`, `LogoutDto`            | `RefreshTokenDto`, for both routes                                                    |
-| `ForgotPasswordDto`                  | `EmailDto`                                                                            |
-| 401 `TOKEN_MISSING`                  | 401 with `errorCode: "missing_credentials"`                                           |
-| 401 `TOKEN_INVALID`                  | 401 whose `message` says what was wrong, such as `"invalid signature"`                |
-| 401 `REFRESH_TOKEN_INVALID`          | 401 `"Refresh token invalid"`, `"expired"` or `"reused"`                              |
-| `SESSION_EXPIRES_IN`                 | `REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN`                                                   |
-| `SESSION_RETENTION` (180 days)       | Gone. A family's rows go when the family reaches its end                              |
+| Before                               | Now                                                                                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/login`                   | `POST /auth/token`                                                                                                                 |
+| `POST /auth/refresh`                 | `POST /auth/token/refresh`                                                                                                         |
+| `POST /auth/logout`                  | `POST /auth/token/revoke`                                                                                                          |
+| `POST /auth/logout-all`              | `POST /auth/sign-out-everywhere`                                                                                                   |
+| `POST /auth/signup`                  | `POST /auth/sign-up`                                                                                                               |
+| `POST /auth/forgot-password`         | `POST /auth/password/forgot`                                                                                                       |
+| `POST /auth/reset-password`          | `POST /auth/password/reset`, without `confirmPassword`                                                                             |
+| One `AuthController` for every route | `AuthController`, `TokensController`, `SessionsController`, `PasswordResetController`                                              |
+| `AuthService.login`                  | `CredentialsService.verify`, then `TokenService.issue`                                                                             |
+| `SessionsService.start`              | `TokenService.issue`                                                                                                               |
+| `SessionsService.refresh`            | `TokenService.refresh`                                                                                                             |
+| `SessionsService.end`                | `TokenService.revoke`                                                                                                              |
+| `SessionsService.endAll`             | `TokenService.revokeAll` for a sign-out everywhere. `SignInsRepository.endAllForUser` for a password change, a close and a restore |
+| `SessionsService.isLive`             | `SignInsRepository.isLive`, which reads `refresh_tokens` by `sid`                                                                  |
+| `SessionsRepository`                 | `TypeOrmAuthenticationStore`                                                                                                       |
+| Table `session`                      | A family: the `family_id` column of `refresh_tokens`                                                                               |
+| Table `refresh_token`                | Table `refresh_tokens`                                                                                                             |
+| Table `password_reset_token`         | Table `email_tokens`, with `purpose` set to `password-reset`                                                                       |
+| The app's `PasswordResetService`     | The package's `PasswordResetService`, plus the app's `PasswordResetMailer`                                                         |
+| `one-time-token.ts`                  | The package makes and hashes its own tokens                                                                                        |
+| `JwtAuthGuard`                       | The `AuthenticationModule` guard, with the app's `JwtAuth` provider                                                                |
+| `RolesGuard` and `@Auth(roles)`      | The `AuthorizationModule` guard, with `@Can(Policy, ability)` or `@Can.Anyone()`                                                   |
+| `HashingProvider`, bcrypt            | `PasswordHasher`, scrypt. Old bcrypt hashes still sign in, and are replaced                                                        |
+| The `sid` claim                      | Still `sid`, still a UUID. It names a family now, through the `sid` column                                                         |
+| `LoginDto`                           | `SignInDto`                                                                                                                        |
+| `RefreshDto`, `LogoutDto`            | `RefreshTokenDto`, for both routes                                                                                                 |
+| `ForgotPasswordDto`                  | `EmailDto`                                                                                                                         |
+| 401 `TOKEN_MISSING`                  | 401 with `errorCode: "missing_credentials"`                                                                                        |
+| 401 `TOKEN_INVALID`                  | 401 whose `message` says what was wrong, such as `"invalid signature"`                                                             |
+| 401 `REFRESH_TOKEN_INVALID`          | 401 `"Refresh token invalid"`, `"expired"` or `"reused"`                                                                           |
+| `SESSION_EXPIRES_IN`                 | `REFRESH_TOKEN_ABSOLUTE_EXPIRES_IN`                                                                                                |
+| `SESSION_RETENTION` (180 days)       | Gone. A family's rows go when the family reaches its end                                                                           |
 
 The migration
 [1791960794027-AuthenticationTables.ts](../src/database/migrations/1791960794027-AuthenticationTables.ts)
@@ -109,20 +116,28 @@ copied every old refresh token and reset link into the new tables, so nobody
 was signed out and no reset link stopped working. Each old session became a
 family with the same id.
 
+A second migration,
+[1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts),
+added the `sid` column. It gave every family that already existed a new
+UUID, written to the column and into `claims`. So a member signed in before
+it stays signed in. The access token they held then has no `sid`, so it is
+refused once, and the client refreshes as it does after any 401. Every
+access token from that refresh on carries the `sid`.
+
 ## The two tokens
 
-|                              | Access token                                  | Refresh token                                    |
-| ---------------------------- | --------------------------------------------- | ------------------------------------------------ |
-| What it is                   | A JWT: three parts with dots between          | 32 random bytes, written as 43 characters        |
-| What it carries              | The member's id, and how they signed in       | Nothing. It is only a key to a row               |
-| How long it lasts            | 15 minutes                                    | 7 days, and each use starts a new 7 days         |
-| The longest a sign-in lasts  | Not limited by the access token               | 30 days after the sign-in, however often renewed |
-| How often it is sent         | With every request                            | Only when the access token has run out           |
-| Where it is sent             | Every route that needs a signed-in member     | `/auth/token/refresh` and `/auth/token/revoke`   |
-| How the server checks it     | Verifies the signature, then reads the member | Looks up its hash in `refresh_tokens`            |
-| What the server stores       | Nothing                                       | A SHA-256 hash of it, never the token            |
-| How many times it works      | As often as needed until it expires           | Once                                             |
-| Can the server end it early? | Only by a password change or closed account   | Yes, at any moment, by revoking its family       |
+|                              | Access token                                                                                  | Refresh token                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| What it is                   | A JWT: three parts with dots between                                                          | 32 random bytes, written as 43 characters        |
+| What it carries              | The member's id, the sign-in's id, and how they signed in                                     | Nothing. It is only a key to a row               |
+| How long it lasts            | 15 minutes                                                                                    | 7 days, and each use starts a new 7 days         |
+| The longest a sign-in lasts  | Not limited by the access token                                                               | 30 days after the sign-in, however often renewed |
+| How often it is sent         | With every request                                                                            | Only when the access token has run out           |
+| Where it is sent             | Every route that needs a signed-in member                                                     | `/auth/token/refresh` and `/auth/token/revoke`   |
+| How the server checks it     | Verifies the signature, then reads the member and the sign-in                                 | Looks up its hash in `refresh_tokens`            |
+| What the server stores       | Nothing. Its `sid` is a column on its family's rows                                           | A SHA-256 hash of it, never the token            |
+| How many times it works      | As often as needed, until it expires or its sign-in ends                                      | Once                                             |
+| Can the server end it early? | Yes, on the next request, by ending its sign-in, changing the password or closing the account | Yes, at any moment, by revoking its family       |
 
 **Why two?** They pull in opposite directions. The token that travels with
 every request is the one most likely to leak, so it should die fast. But a
@@ -153,7 +168,8 @@ package functions. The likeness ends there.
 | The code                    | `TokenService`, `TypeOrmAuthenticationStore` | `PasswordResetService`, `PasswordResetMailer`      |
 
 The two meet in one place. A password reset ends every family the member
-has, so every refresh token they held stops working.
+has, so every refresh token they held stops working, and every access token
+with it.
 
 [TOKEN_FYI.md](./TOKEN_FYI.md) walks through the reset flow step by step.
 
@@ -171,6 +187,7 @@ The payload of an access token from this app:
   "aud": "dudesphere-api",
   "jti": "3vQh8Zp1LmN0aR7tYw2kXc",
   "amr": ["pwd"],
+  "sid": "0f8e5b2a-6c1d-4e7f-9a3b-2d4c6e8f0a1b",
   "sub": "25",
   "iat": 1791700000,
   "exp": 1791700900
@@ -183,6 +200,7 @@ The payload of an access token from this app:
 | `aud` | "Audience": who the token is for                                        | `JwtSigner`, from `JWT_AUDIENCE`                     |
 | `jti` | "JWT id": 16 random bytes, different in every token                     | `JwtSigner`. Nothing here reads it                   |
 | `amr` | "Authentication methods": how the member signed in. `pwd` is a password | `TokensController.issue` passes it to `TokenService` |
+| `sid` | "Session id": here, the sign-in's id. A UUID, the same for the family   | `TokensController.issue`, with `randomUUID()`        |
 | `sub` | "Subject": the member's user id, as a string                            | `TokenService.issue`, from `String(user.id)`         |
 | `iat` | "Issued at", in seconds since 1970                                      | `JwtSigner`                                          |
 | `exp` | "Expires", in seconds since 1970. Here `iat` plus 900                   | `JwtSigner`, from `JWT_EXPIRES_IN`                   |
@@ -190,10 +208,16 @@ The payload of an access token from this app:
 `JwtSigner` is the package's class. `TokenService` builds one from the
 `accessToken` options in [src/app.module.ts](../src/app.module.ts).
 
-**There is no family id in it.** The old token carried `sid`, and the guard
-read that session's row on every request. That is what made a sign-out stop
-the access token at once. The package's tokens name no family, so a sign-out
-cannot reach them.
+**It names its sign-in, as `sid`.** `JwtAuth.validate` looks the sign-in up
+on every request, so a sign-out stops the access token at once. The old
+token carried a `sid` too, for the same reason. The package's own tokens
+name no family. `sid` is the app's addition, and the section "How an access
+token is tied to its sign-in" below walks through it.
+
+**`sid` is not the `family_id`.** `TokenService.issue` takes the claims
+first, and makes the family id after. So the app cannot put the family id
+in the token. It makes its own id instead, and the store writes it on every
+row of the family.
 
 **There is no role and no username in it, on purpose.** A token cannot
 change once it is signed. A role in it would be a copy that goes stale the
@@ -201,9 +225,10 @@ moment an admin is demoted, and a username the moment a member is renamed.
 `JwtAuth.validate` reads the member from the database on every request, and
 a client that wants these asks `GET /users/me`.
 
-**`amr` stays the same for the whole family.** `TokenService.issue` stores
-it in the `claims` column of the family's rows, and `TokenService.refresh`
-copies it into every new access token.
+**`amr` and `sid` stay the same for the whole family.**
+`TokenService.issue` stores both in the `claims` column of the family's
+first row. `TokenService.refresh` copies the claims to each new row, and
+into every new access token.
 
 ## The tables
 
@@ -215,25 +240,29 @@ reads and writes them.
 
 ```text
 user ──< family ──< refresh_tokens row
-             (no table: the rows share a family_id)
+             (no table: the rows share a family_id and a sid)
+
+access token ──► sub (the member) and sid (the family)
 ```
 
 Read `──<` as "has many". A family is not a table of its own. It is every
-row in `refresh_tokens` with the same `family_id`.
+row in `refresh_tokens` with the same `family_id`. Those rows also share one
+`sid`, which is how an access token finds them.
 
 **`refresh_tokens`**: one row for each refresh token handed out.
 
-| Column              | Holds                                                                         |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `id`                | The SHA-256 hash of the token, as 43 base64url characters. The primary key    |
-| `family_id`         | The sign-in it belongs to. 22 random characters, the same on every row of it  |
-| `user_id`           | Whose it is: the user id as text, such as `"25"`                              |
-| `created_at`        | When the row was made                                                         |
-| `expires_at`        | When this one token stops working: 7 days on, but never past the family's end |
-| `family_expires_at` | When the whole family ends: 30 days after the sign-in. The same on every row  |
-| `used_at`           | When the token was swapped. Empty until then                                  |
-| `revoked`           | `true` once the family was ended on purpose. Set on every row of the family   |
-| `claims`            | What goes into each new access token: here `{ "amr": ["pwd"] }`               |
+| Column              | Holds                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `id`                | The SHA-256 hash of the token, as 43 base64url characters. The primary key                |
+| `family_id`         | The sign-in. 22 random characters, the same on every row. A UUID if copied from `session` |
+| `user_id`           | Whose it is: the user id as text, such as `"25"`                                          |
+| `created_at`        | When the row was made                                                                     |
+| `expires_at`        | When this one token stops working: 7 days on, but never past the family's end             |
+| `family_expires_at` | When the whole family ends: 30 days after the sign-in. The same on every row              |
+| `used_at`           | When the token was swapped. Empty until then                                              |
+| `revoked`           | `true` once the family was ended on purpose. Set on every row of the family               |
+| `claims`            | What goes into each new access token: here `{ "amr": ["pwd"], "sid": "…" }`               |
+| `sid`               | The sign-in's id, copied out of `claims`. Indexed. Not in the docs (see below)            |
 
 **`email_tokens`**: one row for each reset link that can still be used.
 
@@ -265,11 +294,11 @@ token rows. The app never deletes a user row, so this does not come up yet.
 Here is one family over three days. Walter signs in on Monday, and his
 client refreshes on Tuesday and on Wednesday. That is three rows:
 
-| `id` (hash of) | `family_id` | `used_at` | `expires_at`   | `family_expires_at` | `revoked` |
-| -------------- | ----------- | --------- | -------------- | ------------------- | --------- |
-| token A        | `kP3x…`     | Tuesday   | next Monday    | Monday + 30 days    | false     |
-| token B        | `kP3x…`     | Wednesday | next Tuesday   | Monday + 30 days    | false     |
-| token C        | `kP3x…`     |           | next Wednesday | Monday + 30 days    | false     |
+| `id` (hash of) | `family_id` | `sid`   | `used_at` | `expires_at`   | `family_expires_at` | `revoked` |
+| -------------- | ----------- | ------- | --------- | -------------- | ------------------- | --------- |
+| token A        | `kP3x…`     | `0f8e…` | Tuesday   | next Monday    | Monday + 30 days    | false     |
+| token B        | `kP3x…`     | `0f8e…` | Wednesday | next Tuesday   | Monday + 30 days    | false     |
+| token C        | `kP3x…`     | `0f8e…` |           | next Wednesday | Monday + 30 days    | false     |
 
 Read it like this:
 
@@ -278,8 +307,12 @@ Read it like this:
   member who keeps coming back stays signed in.
 - `family_expires_at` never moves. It is set at sign-in. After 30 days the
   family ends, whatever the member did.
-- If Walter signs out on Thursday, one thing changes: `revoked` becomes
-  `true` on all three rows.
+- `sid` never moves either. Every access token of the family carries
+  `0f8e…`.
+- If Walter signs out on Thursday, one thing changes in the table: `revoked`
+  becomes `true` on all three rows. His access token is refused on its next
+  request, because `SignInsRepository.isLive("0f8e…")` now finds a revoked
+  row.
 
 ## Signing in, step by step
 
@@ -315,14 +348,24 @@ Read it like this:
      password change that lands in between is never undone.
 5. A wrong identifier or password is 401 `BAD_CREDENTIALS`, with one message
    whichever was wrong.
-6. `TokenService.issue` (the package's) starts the family:
+6. `TokensController.issue` makes the sign-in's id with `randomUUID()`, and
+   calls `TokenService.issue` (the package's) with
+   `claims: { amr: ["pwd"], sid }`. That starts the family:
    - it picks a new family id, 16 random bytes, and a family end 30 days
      away;
    - it makes a refresh token, 32 random bytes;
-   - `TypeOrmAuthenticationStore.saveRefreshToken` saves a row holding the
-     token's hash, the family id and `{ "amr": ["pwd"] }`;
-   - it signs an access token with `sub` and `amr`.
-7. The answer is 200:
+   - `TypeOrmAuthenticationStore.saveRefreshToken`
+     ([src/typeorm/typeorm-authentication.store.ts](../src/typeorm/typeorm-authentication.store.ts))
+     saves a row holding the token's hash, the family id and the claims. It
+     copies `sid` out of the claims into the row's own `sid` column;
+   - it signs an access token with `sub`, `amr` and `sid`.
+7. **The recheck.** `TokensController.issue` calls
+   `CredentialsService.stillValid`, which asks
+   `UsersRepository.signInStillValid` whether the account is still open and
+   the password unchanged since step 4. If not, `TokenService.revoke` ends
+   the new family, and the answer is 401 `BAD_CREDENTIALS`, as for a wrong
+   password. "The sign-in recheck" below says why.
+8. The answer is 200:
 
 ```json
 {
@@ -360,17 +403,26 @@ The authentication guard does three checks on the access token:
 2. **Is the token real?** The package's `JwtBearerProvider` checks the
    signature, the algorithm (HS256 only), the expiry, the issuer and the
    audience. This needs no database.
-3. **Is the member still there, with the same password?** `JwtAuth.validate`
-   ([src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)) reads
-   the member by the `sub` in the token, with `UsersRepository.findById`. It
-   refuses the token if:
-   - no live member has that id, because the account is closed; or
+3. **Is the member still there, with the same password, and is the sign-in
+   still going?** `JwtAuth.validate`
+   ([src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)) runs
+   two reads side by side: `UsersRepository.findById` with the token's
+   `sub`, and `SignInsRepository.isLive` with its `sid`. It refuses the
+   token if:
+   - no live member has that id, because the account is closed;
    - the token was signed in an earlier second than the member's
-     `passwordChangedAt`, because the password changed since.
+     `passwordChangedAt`, because the password changed since;
+   - the sign-in has ended, so `isLive` answers false;
+   - the token has no `sid`, and its `amr` is anything but exactly
+     `["dev"]`. Only a `pnpm dev:token` token passes without one; or
+   - the `sid` is not a UUID. That is refused without reading
+     `refresh_tokens`. The member read still runs.
 
 If all three pass, the member becomes `request.user`, and
 `@CurrentUser()` hands it to the controller. A failed check 2 or 3 is a 401
 whose `message` says why, such as `"token expired"` or `"unknown subject"`.
+Every refusal by `JwtAuth.validate` reads `"unknown subject"`, an ended
+sign-in included.
 
 The authorization guard reads what the route declares:
 
@@ -394,9 +446,10 @@ as nobody: `@CurrentUser()` is `null`. A route that wants the caller when
 there is one, and lets guests in too, uses `@Authenticate({ optional: true })`
 instead. No route in this app does.
 
-**The cost is one small query for each signed-in request**:
-`UsersRepository.findById`. The old guard ran two, the member and the
-session.
+**The cost is two small queries for each signed-in request**, run at the
+same time: `UsersRepository.findById` and `SignInsRepository.isLive`. The
+docs' setup runs only the first. The old guard ran two as well, the member
+and the session.
 
 ## Refreshing, step by step
 
@@ -432,8 +485,9 @@ Details worth knowing:
 - **`TokenService.refresh` does not read the member.** A closed account's
   families are revoked when it closes, so step 2 catches it. If one slipped
   through, the new access token would still fail at `JwtAuth.validate`.
-- **The old access token is not cancelled by a refresh.** It works until its
-  own 15 minutes are up.
+- **The old access token is not cancelled by a refresh.** It carries the
+  same `sid` as the new one, and the family is still going. So it works
+  until its own 15 minutes are up, or until the family ends.
 
 ## Why a token used twice ends the whole family
 
@@ -453,8 +507,9 @@ moved first.
 3. Walter's client, which still holds A, tries to swap it.
 4. A is already used. The server revokes the family.
 5. The thief's token B is in that family, so it is dead too.
-6. **The thief's access token still works for up to 15 minutes.** Nothing
-   reaches it. This is the trade-off described below.
+6. **The thief's access token stops on its next request.** It carries the
+   family's `sid`, and `SignInsRepository.isLive` now finds the family
+   revoked.
 7. Walter signs in again with his password, which the thief does not have.
 
 **If Walter's client uses it first:**
@@ -465,7 +520,8 @@ moved first.
 4. Walter is signed out too, and signs in again. The thief gets nothing.
 
 Either way the thief loses the refresh token within one refresh, and the
-worst that happens to the member is typing a password. Without rotation, a
+access token on its next request. The worst that happens to the member is
+typing a password. Without rotation, a
 stolen refresh token would work quietly for the whole 30 days.
 
 The package reports the reuse as a `refresh-token-reused` event. This app
@@ -501,8 +557,10 @@ never send two refreshes at once for one family.
   token's row and calls
   `TypeOrmAuthenticationStore.revokeRefreshTokenFamily`. That sets `revoked`
   on every row of the family.
-- **That device's access token keeps working until it expires**, up to 15
-  minutes. The client should throw it away.
+- **That device's access token stops on its next request**, with 401
+  `"unknown subject"`. It carries the family's `sid`, and
+  `SignInsRepository.isLive` finds the family revoked. The client should
+  throw it away.
 - The member's other devices are untouched.
 - The route is public, so a client can sign out with an access token that has
   already expired.
@@ -521,8 +579,8 @@ the bearer token.
   calls the package's `SignInService.signOutEverywhere`. That ends every
   session (there are none) and calls `TokenService.revokeAll`, which sets
   `revoked` on every refresh token row the member has.
-- **Every access token the member holds keeps working until it expires**, up
-  to 15 minutes.
+- **Every access token the member holds stops on its next request**, the
+  caller's own included. Each one's family is now revoked.
 - The caller is signed out too.
 - The user id comes from the access token, through `@CurrentUser("id")`,
   never from the body. A caller can only ever sign themselves out.
@@ -531,66 +589,238 @@ the bearer token.
 
 ## Everything that ends a sign-in
 
-| What happened                          | Which families end  | The access tokens                | Where in the code                                                  |
-| -------------------------------------- | ------------------- | -------------------------------- | ------------------------------------------------------------------ |
-| `POST /auth/token/revoke`              | That one            | Work until they expire           | `TokenService.revoke`                                              |
-| `POST /auth/sign-out-everywhere`       | All of the caller's | Work until they expire           | `SignInService.signOutEverywhere`, `TokenService.revokeAll`        |
-| A refresh token used twice             | That one            | Work until they expire           | `TokenService.refresh`, step 4 or 5                                |
-| The member changes their password      | All of the member's | **Stop on the next request**     | `UsersService.updateUser`, then `endSignIns`                       |
-| An admin changes the member's password | All of the member's | **Stop on the next request**     | `UsersService.updateUser`, then `endSignIns`                       |
-| The member resets a forgotten password | All of the member's | **Stop on the next request**     | `PasswordResetService.reset`, `PasswordResetMailer.updatePassword` |
-| The account is closed                  | All of the member's | **Stop on the next request**     | `UsersService.deleteUser`, then `endSignIns`                       |
-| An admin restores the account          | All of the member's | See "What it does not do"        | `UsersService.restoreUser`, then `endSignIns`                      |
-| 30 days pass since the sign-in         | That one            | The last one runs its 15 minutes | `family_expires_at`                                                |
-| 7 days pass with no refresh            | That one, in effect | None left: the last ran out      | `expires_at`                                                       |
+| What happened                          | Which families end  | The access tokens            | Where in the code                                                                     |
+| -------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| `POST /auth/token/revoke`              | That one            | **Stop on the next request** | `TokenService.revoke`                                                                 |
+| `POST /auth/sign-out-everywhere`       | All of the caller's | **Stop on the next request** | `SignInService.signOutEverywhere`, `TokenService.revokeAll`                           |
+| A refresh token used twice             | That one            | **Stop on the next request** | `TokenService.refresh`, step 4 or 5                                                   |
+| The member changes their password      | All of the member's | **Stop on the next request** | `UsersService.updateUser`, with `SignInsRepository.endAllForUser` in its transaction  |
+| An admin changes the member's password | All of the member's | **Stop on the next request** | `UsersService.updateUser`, with `SignInsRepository.endAllForUser` in its transaction  |
+| The member resets a forgotten password | All of the member's | **Stop on the next request** | `PasswordResetService.reset`, `PasswordResetMailer.updatePassword`                    |
+| The account is closed                  | All of the member's | **Stop on the next request** | `UsersService.deleteUser`, with `SignInsRepository.endAllForUser` in its transaction  |
+| An admin restores the account          | All of the member's | **Stay stopped**             | `UsersService.restoreUser`, with `SignInsRepository.endAllForUser` in its transaction |
+| 30 days pass since the sign-in         | That one            | **Stop at the family's end** | `family_expires_at`, read by `SignInsRepository.isLive`                               |
+| 7 days pass with no refresh            | That one, in effect | None left: the last ran out  | `expires_at`                                                                          |
 
-**Why the password rows stop access tokens and the sign-out rows do not.**
-`JwtAuth.validate` reads the member on every request. A password change
-writes `passwordChangedAt`, and a closed account sets `deletedAt`. Both are
-on the member's row, so the very next request sees them. A sign-out writes
-only to `refresh_tokens`, which `JwtAuth.validate` never reads.
+**Two places decide whether an access token still works.** `JwtAuth.validate`
+reads both on every request, side by side:
 
-**A password change and the end of its families are two writes.**
-`UsersService.updateUser` stores the new hash and `passwordChangedAt` first.
-Then `endSignIns` revokes the families. The package writes through its own
-store, so the two cannot share one transaction. If the second write fails,
-the password is changed and the old refresh tokens still work until the
-member tries again. Before 2026-10-14 the two were one transaction.
+|                     | The member's row, in `user`                   | The sign-in's rows, in `refresh_tokens`                      |
+| ------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| Found by            | The token's `sub`                             | The token's `sid`                                            |
+| Read by             | `UsersRepository.findById`                    | `SignInsRepository.isLive`                                   |
+| What it looks at    | `deletedAt` and `passwordChangedAt`           | `revoked` and `family_expires_at`                            |
+| What it catches     | A closed account, a changed or reset password | Any ended family: every line of the table above but the last |
+| In the NestJS docs? | Yes                                           | No. The app's own check                                      |
+
+A password change, a reset and a closed account show up in both. The
+sign-in check also catches a token signed in the same second as a password
+change, which the member check lets through on purpose (see "Why is a token
+from the same second as a password change let through?" below).
+
+**A password change and the end of its sign-ins are one transaction.**
+`UsersService.updateUser`
+([src/users/users.service.ts](../src/users/users.service.ts)) opens a
+transaction. In it, it first writes the new hash and `passwordChangedAt` to
+the member's row. Then `SignInsRepository.endAllForUser`
+([src/typeorm/sign-ins.repository.ts](../src/typeorm/sign-ins.repository.ts))
+marks every refresh token of the member revoked, and deletes their browser
+sessions, through the same `EntityManager`. Both are saved, or neither is.
+If anything fails, the password stays as it was, and the caller can try
+again.
+
+`endAllForUser` makes the same two writes as the package's
+`TokenService.revokeAll` and `SessionService.revokeAll`. The app cannot use
+those two here, because they write through the package's store and cannot
+join a transaction. This is not in the NestJS docs, which end the sign-ins
+in writes of their own.
+
+Two copies of the same writes could drift apart, so there is only one.
+[src/typeorm/end-sign-ins.ts](../src/typeorm/end-sign-ins.ts) holds
+`revokeUserRefreshTokens` and `deleteUserSessions`, each taking an
+`EntityManager`:
+
+| Path                  | Who calls it                                                                                        | Which manager                    |
+| --------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------- |
+| The package's own     | `TokenService.revokeAll`, `SessionService.revokeAll`, through the store's methods of the same names | The store's, on its own          |
+| The app's transaction | `SignInsRepository.endAllForUser`                                                                   | The caller's, in its transaction |
+
+What could still drift is the package: a new version could make `revokeAll`
+reach a third store method. The "matches the package's revokeAll" cases in
+[src/typeorm/sign-ins.repository.spec.ts](../src/typeorm/sign-ins.repository.spec.ts)
+build the package's real `TokenService` and `SessionService` on a store that
+records every call, and fail if either reaches anything but these two.
+
+The other three use the same method in the same way:
+
+- `PasswordResetMailer.updatePassword`
+  ([src/auth/password-reset.mailer.ts](../src/auth/password-reset.mailer.ts))
+  stores the hash, stamps `passwordChangedAt` and ends the sign-ins in one
+  transaction. The package's `PasswordResetService.reset` also ends the
+  sign-ins just before and just after it calls `updatePassword`. The call
+  before does the real work. The call after usually finds nothing left; it
+  is there to catch a sign-in that started in between.
+- `UsersService.deleteUser` ends the sign-ins inside the transaction that
+  closes the account and its profile.
+- `UsersService.restoreUser` ends them inside the transaction that brings the
+  account back.
 
 **A member who changes their own password is signed out everywhere**, on the
 device they used too. They sign in again with the new password. Whoever was
 signed in with the old one, the member or somebody else, has to know the new
 one to get back in.
 
-## The trade-off: an access token outlives a sign-out
+## How an access token is tied to its sign-in
 
-This is the one real step back from the code before 2026-10-14.
+**Ending a sign-in stops its access tokens on the next request.** Every
+access token carries its sign-in's id, `sid`, and `JwtAuth` checks on every
+request that the sign-in is still going.
 
-**Signing out, signing out everywhere, and a reuse alarm do not stop access
-tokens.** Each ends refresh tokens only. An access token already handed out
-keeps working until it expires, up to 15 minutes later.
-
-The old code stopped it on the next request. Its access token carried `sid`,
-and its guard read that session's row every time. The package's access token
-carries no family, and its guard reads no family.
-
-The NestJS docs accept the same trade-off. In their words,
+**This is not in the NestJS docs.** The package's access token names no
+family, and its guard reads no family. The docs accept that. In their words,
 `signOutEverywhere()` leaves "access tokens that were already issued ...
 valid until they expire, which is why they only last 15 minutes." This app
-follows the docs.
+goes one step past the docs. It costs one column, one check, and one indexed
+read on every signed-in request.
 
-What this means in practice:
+The old code, before 2026-10-14, did the same with its own `session` table.
+The check came back with the column below.
 
-- A member who signs out on a shared computer, and leaves the access token
-  behind, leaves up to 15 minutes in which it works.
-- A thief caught by reuse detection keeps the access token they already had,
-  for up to 15 minutes.
-- A thief locked out by a **password change, a reset or a closed account**
-  loses the access token too, on their next request. Those three go through
-  the member's row.
+### The four steps
 
-`JWT_EXPIRES_IN` is the lever. A shorter access token narrows the window,
-and the client refreshes more often.
+| #   | Step               | File and method                                                                                                              | What happens                                                                                                                                                                                     |
+| --- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Sign in            | [TokensController.issue](../src/auth/tokens.controller.ts)                                                                   | Makes the sign-in's id with `randomUUID()`, and passes `claims: { amr: ["pwd"], sid }` to `TokenService.issue`                                                                                   |
+| 2   | Claims             | `TokenService.issue` and `TokenService.refresh`, in the package                                                              | Stores the claims with the family's first row, and signs them into the access token. Each refresh copies them to the new row and into the new access token                                       |
+| 3   | The store's column | [TypeOrmAuthenticationStore.saveRefreshToken](../src/typeorm/typeorm-authentication.store.ts)                                | Copies `claims.sid` into the row's `sid` column, on every row the family gets. The column has two indexes: `refresh_tokens_sid_idx`, and `refresh_tokens_revoked_sid_idx` over revoked rows only |
+| 4   | The check          | [JwtAuth.validate](../src/auth/jwt-auth.provider.ts), then [SignInsRepository.isLive](../src/typeorm/sign-ins.repository.ts) | On every signed-in request, asks whether the sign-in named by the token's `sid` is still going. Runs beside `UsersRepository.findById`, so it adds little wait                                   |
+
+The column is in
+[src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts).
+It is a copy of what `claims` already holds. It exists so that the check can
+use an index.
+
+`isLive` is one SQL query:
+
+```sql
+SELECT EXISTS (
+         SELECT 1 FROM refresh_tokens
+         WHERE sid = $1 AND user_id = $2 AND family_expires_at > $3
+       )
+   AND NOT EXISTS (
+         SELECT 1 FROM refresh_tokens WHERE sid = $1 AND revoked
+       ) AS live
+```
+
+`$1` is the token's `sid`, `$2` its `sub`, and `$3` the time now, from the
+app's clock. The answer is true only when all three hold:
+
+- the sign-in has a row of this member's. A made-up `sid` never had any,
+  another member's `sid` has none of theirs, and a family's rows are deleted
+  at the first cleanup after its end;
+- its family's end is still ahead;
+- none of its rows is revoked. The store marks every row of a family, and a
+  successor saved a moment after a sign-out is caught by the older rows.
+
+**Why two checks and not one.** A sign-in gains a row on every refresh: up
+to about 2,900 in 30 days with 15-minute access tokens. A query that read
+every row of the sign-in, on every request, would get slower the longer a
+member stayed signed in. Each half of this one stops at the first row it
+finds:
+
+| Check                                           | Index it uses                                                   | Rows it reads, for a sign-in still going                 |
+| ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------- |
+| `EXISTS` a row of this member's, before its end | `refresh_tokens_sid_idx`                                        | One: every row of a family shares its member and its end |
+| `NOT EXISTS` a revoked row                      | `refresh_tokens_revoked_sid_idx`, which holds only revoked rows | None                                                     |
+
+### Which tokens pass
+
+| The access token                             | What `JwtAuth.validate` does                                                 |
+| -------------------------------------------- | ---------------------------------------------------------------------------- |
+| Has the `sid` of a sign-in still going       | Passes this check. The member checks still run                               |
+| Has the `sid` of a sign-in that ended        | Refuses it: 401 `"unknown subject"`                                          |
+| Has a `sid` that names no sign-in            | Refuses it                                                                   |
+| Has the `sid` of another member's sign-in    | Refuses it                                                                   |
+| Has a `sid` that is not a UUID               | Refuses it, without reading `refresh_tokens`                                 |
+| Has no `sid`, and `amr` is exactly `["dev"]` | Passes this check, except in production. This is what `pnpm dev:token` signs |
+| Has no `sid`, and any other `amr`, or none   | Refuses it                                                                   |
+
+Only the app's key can sign a token, so nobody outside can make a dev token.
+In production a dev token is refused anyway: `pnpm dev:token` will not sign
+one there, and if one were signed with the production key, nothing but its
+own 30 days would end it.
+
+`test/tokens.e2e-spec.ts` proves each row over real HTTP, except the
+production one: "stops the device's access token on the next request",
+"stops the family's access tokens on the next request", the
+sign-out-everywhere, password-change and restore cases, "a token that
+belongs to no sign-in" and "an access token's sign-in". The production row
+is proved in
+[src/auth/jwt-auth.provider.spec.ts](../src/auth/jwt-auth.provider.spec.ts),
+since the e2e tests never run as production.
+
+### Members who signed in before the column
+
+The migration
+[1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts)
+gave every family that already existed a new UUID, in the `sid` column and
+in `claims`. Their refresh tokens keep working, and each refresh hands out
+an access token with the `sid`. Only the access token they held at the time
+has no `sid`. It is refused once, and the client refreshes as it does after
+any 401.
+
+## The sign-in recheck
+
+**Once a sign-in has started, `TokensController.issue` checks the password
+once more.** Not the password itself: whether it has changed since it was
+checked. This is not in the NestJS docs.
+
+**Why.** Checking a password takes about a tenth of a second, on purpose. A
+password change can commit inside that time. The change ends every sign-in
+the member has, but the new one does not exist yet, so the change cannot
+reach it. Without the recheck, a sign-in that began with the old password
+could outlive the change.
+
+The steps, in
+[src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts):
+
+1. `CredentialsService.verify` checks the password, and returns the member as
+   it read them, `passwordChangedAt` included.
+2. `TokenService.issue` starts the new family and saves its first row.
+3. `CredentialsService.stillValid(user)`
+   ([src/auth/credentials.service.ts](../src/auth/credentials.service.ts))
+   calls `UsersRepository.signInStillValid(user.id, user.passwordChangedAt)`
+   ([src/users/users.repository.ts](../src/users/users.repository.ts)). That
+   opens a transaction and reads the member's row `FOR SHARE`. It answers
+   true only when the account is still open and `passwordChangedAt` is the
+   same as in step 1.
+4. If it answers false, `TokenService.revoke` ends the new family, and the
+   answer is 401 `BAD_CREDENTIALS`, the same as for a wrong password.
+
+**Why it compares `passwordChangedAt`, not the hash.** Signing in with an old
+bcrypt hash replaces it with a scrypt hash of the same password (step 4 of
+"Signing in, step by step"). The hash changes, the password does not, and
+`passwordChangedAt` stays as it was. Comparing hashes would refuse the
+member's own sign-in.
+
+**Why every timing is covered.** A password change runs in one transaction:
+it writes the member's row first, then ends the sign-ins (see "Everything
+that ends a sign-in"). The new family from step 2 is saved either before the
+change ends the sign-ins, or after.
+
+| When the new family is saved                 | What stops it                                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Before the change ends the member's sign-ins | `SignInsRepository.endAllForUser`, in the change's transaction, marks the new family revoked with the rest                                                         |
+| After that                                   | The change has already written the member's row. The recheck sees the new `passwordChangedAt`. If the change has not committed yet, `FOR SHARE` waits for it first |
+
+A closed account works the same way. `UsersService.deleteUser` writes the
+member's row and ends the sign-ins in one transaction, and the recheck finds
+no live member.
+
+`test/tokens.e2e-spec.ts` tests this under "the sign-in recheck": "holds
+until the password changes", "waits for a password change that is in
+flight", "fails once the account is closed" and "lets a member with an old
+bcrypt hash sign in".
 
 ## What a client has to do
 
@@ -609,21 +839,21 @@ The only client planned is the Nuxt server. Its side of the bargain:
    wait for it.
 6. **On a 401 from `/auth/token/refresh`, give up and send the member to sign
    in.** Do not retry it. Nothing will make that token work again.
-7. **On sign-out, throw away the access token as well.** The server cannot
-   stop it, so the client must stop using it.
+7. **On sign-out, throw away the access token as well.** The server refuses
+   it from the next request, so it is of no use to keep.
 
 ## The answers when something is refused
 
-| Answer                                                    | It means                                                        | What a client does           |
-| --------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------- |
-| 401 `BAD_CREDENTIALS`                                     | Wrong username, email or password at sign-in                    | Shows the sign-in error      |
-| 401, `errorCode: "missing_credentials"`                   | No `Authorization: Bearer` header on a route that needs it      | Sends the member to sign in  |
-| 401, `message` such as `"token expired"`                  | The access token is expired, forged or malformed                | Refreshes once, then retries |
-| 401, `message: "unknown subject"`                         | The token is real, but its member is closed or changed password | Refreshes once, then retries |
-| 401, `"Refresh token invalid"`, `"expired"` or `"reused"` | The refresh token cannot be swapped                             | Sends the member to sign in  |
-| 403, `message: "Forbidden"`                               | A `@Can()` check said no                                        | Shows "not allowed"          |
-| 400 `RESET_TOKEN_INVALID`                                 | The reset link is wrong, used or expired                        | Asks for a new link          |
-| 429 `RATE_LIMITED`                                        | Too many tries. See "Rate limits" below                         | Waits for `Retry-After`      |
+| Answer                                                    | It means                                                                              | What a client does           |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
+| 401 `BAD_CREDENTIALS`                                     | Wrong username, email or password at sign-in                                          | Shows the sign-in error      |
+| 401, `errorCode: "missing_credentials"`                   | No `Authorization: Bearer` header on a route that needs it                            | Sends the member to sign in  |
+| 401, `message` such as `"token expired"`                  | The access token is expired, forged or malformed                                      | Refreshes once, then retries |
+| 401, `message: "unknown subject"`                         | The token is real, but its member is closed or changed password, or its sign-in ended | Refreshes once, then retries |
+| 401, `"Refresh token invalid"`, `"expired"` or `"reused"` | The refresh token cannot be swapped                                                   | Sends the member to sign in  |
+| 403, `message: "Forbidden"`                               | A `@Can()` check said no                                                              | Shows "not allowed"          |
+| 400 `RESET_TOKEN_INVALID`                                 | The reset link is wrong, used or expired                                              | Asks for a new link          |
+| 429 `RATE_LIMITED`                                        | Too many tries. See "Rate limits" below                                               | Waits for `Retry-After`      |
 
 Every 401 from the authentication guard carries a `WWW-Authenticate` header.
 With no token it is `Bearer realm="dudesphere"`. With a bad token it adds
@@ -742,10 +972,11 @@ copies of the app do not share them.
 The NestJS team publishes `@nestjs/authentication` and
 `@nestjs/authorization`, and the docs teach them. Code that follows the docs
 can be compared line by line with the docs, and the package's own tests
-check the store. The cost is the trade-off above: the package does not stop
-an access token with its family. When version 0.1.0 came out, that cost was
-the reason this app stayed by hand. On 2026-10-14 it moved to the package
-and accepted the cost.
+check the store. The package has one gap: it does not stop an access token
+with its family. When version 0.1.0 came out, that gap was the reason this
+app stayed by hand. On 2026-10-14 it moved to the package, and closed the gap
+with one column and one check of its own. See "How an access token is tied
+to its sign-in".
 
 **Why is the refresh token random text and not a second JWT?**
 The course signs a second JWT. A random token is simpler and safer here:
@@ -816,7 +1047,9 @@ while it is in use holds far fewer.
 The access token's `iat` is written by the app. `passwordChangedAt` is
 compared with it, so it is written by the app too, with `utcNowOrThrow`. If
 it came from the database's clock, two machines a second apart could refuse
-a member's new token straight after a reset. The package passes JavaScript
+a member's new token straight after a reset. `SignInsRepository.isLive`
+compares `family_expires_at` with the app's clock too, which is the clock
+that wrote it. The package passes JavaScript
 `Date`s to the store, and the store turns each into an ISO string at once,
 so no `Date` reaches the rest of the app.
 
@@ -826,6 +1059,10 @@ far more often the member signing in straight after a reset than an old
 token. `signedAfterPasswordChange` in
 [src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts) refuses
 any earlier second.
+
+An old token from that same second is still refused, by the other check.
+The password change ended its sign-in, so `SignInsRepository.isLive` says
+no. The member's new sign-in has a new `sid`, and passes both.
 
 ## The settings
 
@@ -855,30 +1092,33 @@ An env file that sets one of these wins over the default.
 
 ## Where the code is
 
-| File                                                                                              | Its job                                                                                   |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [src/app.module.ts](../src/app.module.ts)                                                         | Registers both packages with their options, and `AuthThrottlerGuard`                      |
-| [src/auth/auth.module.ts](../src/auth/auth.module.ts)                                             | The app's parts: four controllers, `JwtAuth`, `CredentialsService`, the mailer, the store |
-| [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)                                 | `POST /auth/token`, `/auth/token/refresh`, `/auth/token/revoke`                           |
-| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                             | `POST /auth/sign-out-everywhere`                                                          |
-| [src/auth/auth.controller.ts](../src/auth/auth.controller.ts)                                     | `POST /auth/sign-up`                                                                      |
-| [src/auth/password-reset.controller.ts](../src/auth/password-reset.controller.ts)                 | `POST /auth/password/forgot` and `/auth/password/reset`                                   |
-| [src/auth/credentials.service.ts](../src/auth/credentials.service.ts)                             | `verify`: checks a password at sign-in, and upgrades a bcrypt hash                        |
-| [src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)                                 | `JwtAuth.validate`: loads the member on every signed-in request                           |
-| [src/auth/password-reset.mailer.ts](../src/auth/password-reset.mailer.ts)                         | Finds the account, sends the reset email, stores the new hash                             |
-| [src/auth/auth.dto.ts](../src/auth/auth.dto.ts)                                                   | `SignInDto`, `RefreshTokenDto`, `EmailDto`, `ResetPasswordDto`                            |
-| [src/auth/auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)                           | Rate limits, by account and address                                                       |
-| [src/auth/auth-types.ts](../src/auth/auth-types.ts)                                               | Tells the package that a signed-in user is a `User`                                       |
-| [src/auth/config/auth.config.ts](../src/auth/config/auth.config.ts)                               | The settings, read from the environment                                                   |
-| [src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts)               | The `sessions`, `refresh_tokens` and `email_tokens` tables                                |
-| [src/typeorm/typeorm-authentication.store.ts](../src/typeorm/typeorm-authentication.store.ts)     | Every query on those tables. It decides nothing                                           |
-| [src/users/users.repository.ts](../src/users/users.repository.ts)                                 | `findById`, `findCredentials`, `updatePasswordHash`, `replacePasswordHash`                |
-| [src/users/password-hashes.ts](../src/users/password-hashes.ts)                                   | Checks a bcrypt or scrypt hash                                                            |
-| [src/users/users.service.ts](../src/users/users.service.ts)                                       | `endSignIns`, on a password change, a closed account and a restore                        |
-| [src/users/user.policy.ts](../src/users/user.policy.ts)                                           | Who may manage other members: admins only                                                 |
-| [src/hashtags/hashtag.policy.ts](../src/hashtags/hashtag.policy.ts)                               | Who may delete and restore hashtags: admins only                                          |
-| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                                             | The flows in this document, over real HTTP and the real database                          |
-| [test/typeorm-authentication.store.e2e-spec.ts](../test/typeorm-authentication.store.e2e-spec.ts) | The package's own test suite, run against this app's store                                |
+| File                                                                                                                                      | Its job                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [src/app.module.ts](../src/app.module.ts)                                                                                                 | Registers both packages with their options, and `AuthThrottlerGuard`                                               |
+| [src/auth/auth.module.ts](../src/auth/auth.module.ts)                                                                                     | The app's parts: four controllers, `JwtAuth`, `CredentialsService`, the mailer, the store. Imports `SignInsModule` |
+| [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)                                                                         | `POST /auth/token`, `/auth/token/refresh`, `/auth/token/revoke`                                                    |
+| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                                                                     | `POST /auth/sign-out-everywhere`                                                                                   |
+| [src/auth/auth.controller.ts](../src/auth/auth.controller.ts)                                                                             | `POST /auth/sign-up`                                                                                               |
+| [src/auth/password-reset.controller.ts](../src/auth/password-reset.controller.ts)                                                         | `POST /auth/password/forgot` and `/auth/password/reset`                                                            |
+| [src/auth/credentials.service.ts](../src/auth/credentials.service.ts)                                                                     | `verify`: checks a password at sign-in, and upgrades a bcrypt hash. `stillValid`: the recheck                      |
+| [src/auth/jwt-auth.provider.ts](../src/auth/jwt-auth.provider.ts)                                                                         | `JwtAuth.validate`: loads the member and checks the sign-in, on every signed-in request                            |
+| [src/auth/password-reset.mailer.ts](../src/auth/password-reset.mailer.ts)                                                                 | Finds the account, sends the reset email, stores the new hash and ends the sign-ins in one transaction             |
+| [src/auth/auth.dto.ts](../src/auth/auth.dto.ts)                                                                                           | `SignInDto`, `RefreshTokenDto`, `EmailDto`, `ResetPasswordDto`                                                     |
+| [src/auth/auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)                                                                   | Rate limits, by account and address                                                                                |
+| [src/auth/auth-types.ts](../src/auth/auth-types.ts)                                                                                       | Tells the package that a signed-in user is a `User`                                                                |
+| [src/auth/config/auth.config.ts](../src/auth/config/auth.config.ts)                                                                       | The settings, read from the environment                                                                            |
+| [src/typeorm/authentication.entities.ts](../src/typeorm/authentication.entities.ts)                                                       | The `sessions`, `refresh_tokens` and `email_tokens` tables                                                         |
+| [src/typeorm/typeorm-authentication.store.ts](../src/typeorm/typeorm-authentication.store.ts)                                             | Every query the package asks for on those tables. Copies `sid` into its column. It decides nothing                 |
+| [src/typeorm/sign-ins.repository.ts](../src/typeorm/sign-ins.repository.ts)                                                               | The app's own two: `isLive`, for `JwtAuth`, and `endAllForUser`, inside a caller's transaction                     |
+| [src/typeorm/sign-ins.module.ts](../src/typeorm/sign-ins.module.ts)                                                                       | Provides `SignInsRepository` to `AuthModule` and `UsersModule`, and registers the three tables                     |
+| [src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts](../src/database/migrations/1791967006363-SessionIdOnRefreshTokens.ts) | Adds the `sid` column, and gives every family that existed a `sid`                                                 |
+| [src/users/users.repository.ts](../src/users/users.repository.ts)                                                                         | `findById`, `findCredentials`, `updatePasswordHash`, `replacePasswordHash`, `signInStillValid`                     |
+| [src/users/password-hashes.ts](../src/users/password-hashes.ts)                                                                           | Checks a bcrypt or scrypt hash                                                                                     |
+| [src/users/users.service.ts](../src/users/users.service.ts)                                                                               | Calls `endAllForUser` inside the transaction of a password change, a close and a restore                           |
+| [src/users/user.policy.ts](../src/users/user.policy.ts)                                                                                   | Who may manage other members: admins only                                                                          |
+| [src/hashtags/hashtag.policy.ts](../src/hashtags/hashtag.policy.ts)                                                                       | Who may delete and restore hashtags: admins only                                                                   |
+| [test/tokens.e2e-spec.ts](../test/tokens.e2e-spec.ts)                                                                                     | The flows in this document, over real HTTP and the real database                                                   |
+| [test/typeorm-authentication.store.e2e-spec.ts](../test/typeorm-authentication.store.e2e-spec.ts)                                         | The package's own test suite, run against this app's store                                                         |
 
 `TokenService`, `SignInService`, `PasswordResetService`, `PasswordHasher`,
 `JwtSigner` and both guards are in the packages, under
@@ -956,31 +1196,32 @@ curl -s -X POST http://localhost:3000/auth/token/refresh \
 # 401 "Refresh token reused"
 
 curl -s http://localhost:3000/users/me -H "Authorization: Bearer $NEW_ACCESS"
-# 200: the family is over, and the access token runs out by itself
+# 401 "unknown subject": the family is over, and its access tokens with it
 ```
 
 What each step answers. `test/tokens.e2e-spec.ts` checks every row but
 "The first access token, after that refresh". No test sends that token again
 after a refresh:
 
-| Step                                          | Answer                                     |
-| --------------------------------------------- | ------------------------------------------ |
-| Sign in                                       | 200, with the three keys                   |
-| `GET /users/me` with the access token         | 200                                        |
-| Refresh                                       | 200, with a new pair                       |
-| The first access token, after that refresh    | 200, until it expires                      |
-| The old refresh token, sent again             | 401 `"Refresh token reused"`               |
-| The newest refresh token, after that          | 401 `"Refresh token invalid"`              |
-| The newest access token, after that           | 200, until it expires                      |
-| Sign in again, then `POST /auth/token/revoke` | 204                                        |
-| That family's access token                    | 200, until it expires                      |
-| `revoke` with a made-up token                 | 204                                        |
-| Sign in again, then `sign-out-everywhere`     | 204, and every refresh token then gets 401 |
+| Step                                          | Answer                                                      |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| Sign in                                       | 200, with the three keys                                    |
+| `GET /users/me` with the access token         | 200                                                         |
+| Refresh                                       | 200, with a new pair                                        |
+| The first access token, after that refresh    | 200, until it expires or its family ends                    |
+| The old refresh token, sent again             | 401 `"Refresh token reused"`                                |
+| The newest refresh token, after that          | 401 `"Refresh token invalid"`                               |
+| The newest access token, after that           | 401 `"unknown subject"`                                     |
+| Sign in again, then `POST /auth/token/revoke` | 204                                                         |
+| That family's access token                    | 401 `"unknown subject"`                                     |
+| `revoke` with a made-up token                 | 204                                                         |
+| Sign in again, then `sign-out-everywhere`     | 204, and every refresh token and access token then gets 401 |
 
 To watch the table while you do it, in pgAdmin or `psql`:
 
 ```sql
-SELECT left("id", 8) AS hash, left("family_id", 8) AS family, "user_id",
+SELECT left("id", 8) AS hash, left("family_id", 8) AS family,
+       left("sid", 8) AS sid, "user_id",
        "used_at", "expires_at", "family_expires_at", "revoked"
 FROM "refresh_tokens"
 ORDER BY "created_at" DESC
@@ -989,14 +1230,16 @@ LIMIT 10;
 
 `pnpm dev:token` is still the easy way to try other routes.
 [src/dev/dev-token.ts](../src/dev/dev-token.ts) signs a token with the
-package's `JwtSigner` and the app's own `accessToken` options, so `JwtAuth`
-accepts it like any other. It lasts 30 days, has no refresh token and
-belongs to no family. Only the app's key can sign one.
+package's `JwtSigner` and the app's own `accessToken` options. It carries
+`amr: ["dev"]` and no `sid`, and `JwtAuth.validate` lets a token without a
+`sid` through only with that mark, and never in production. It lasts 30 days, has no refresh token
+and belongs to no family. Only the app's key can sign one.
 
 ## What it does not do
 
-- **A sign-out does not stop an access token.** It works until it expires,
-  up to 15 minutes. See "The trade-off" above.
+- **A refresh does not stop the access token it replaces.** Both carry the
+  same `sid`, so the old one works until its own 15 minutes are up, unless
+  the family ends first.
 - **No list of "your devices".** A member can sign out everywhere, but
   cannot see their sign-ins or pick one to end. The docs' list is for
   browser sessions, which this API does not use.
@@ -1005,21 +1248,8 @@ belongs to no family. Only the app's key can sign one.
 - **No notice and no log** when a family ends because a token was used
   twice. The package emits a `refresh-token-reused` event, and nothing here
   listens for it.
-- **No recheck after sign-in.** The old `AuthService.login` checked the
-  password a second time once the session existed. Nothing does now. A
-  sign-in that starts with the old password, a tenth of a second before a
-  password change finishes, can end with a family the change did not reach.
-  It needs the old password, and the timing cannot be forced.
-- **A password change and the end of its families are two writes.** If the
-  second fails, the old refresh tokens keep working. See "Everything that
-  ends a sign-in".
-- **A restored account can bring back a recent access token.** Closing an
-  account stops its access tokens because `JwtAuth.validate` finds nobody.
-  Restoring it makes the member findable again, so an access token signed
-  less than 15 minutes before the close works again until it expires. The
-  restore does end every family.
-- **A sign-out does not stop a `pnpm dev:token` token.** It belongs to no
-  family, so there is nothing to end. It lasts its 30 days unless the
+- **A sign-out does not stop a `pnpm dev:token` token.** It has no `sid`
+  and belongs to no family, so there is nothing to end. It lasts its 30 days unless the
   account is closed or its password changes. The command refuses to run in
   production, and does run on staging.
 - **No real delete of a user.** The token tables have no foreign key to

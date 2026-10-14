@@ -397,7 +397,7 @@ and comes with no refresh token, so there is nothing to refresh.
 | Answer                                       | What it means                                                                         | What to do                                       |
 | -------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                                      | Set the Auth tab to Bearer and paste a token     |
-| 401 with a `message` such as "token expired" | Expired, forged, or its account was closed or its password changed                    | Run `pnpm dev:token` again                       |
+| 401 with a `message` such as "token expired" | Expired, forged, signed out, or its account was closed or its password changed        | Run `pnpm dev:token` again                       |
 | 403 "Forbidden"                              | The route is for admins and the token is a member's                                   | Use `pnpm dev:token` with no name, for the admin |
 | 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                                          | Use that member's token, or the admin's          |
 | 429 `RATE_LIMITED`                           | Over 100 requests a minute, 5 sign-ins in 15 minutes, or 3 reset emails in 15 minutes | Wait for the time in the `Retry-After` header    |

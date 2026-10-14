@@ -97,7 +97,7 @@ describe("createDevToken", () => {
 
     // No role and no username. JwtAuth reads the member from the database
     // on each request, so a 30-day token cannot keep a role its member has
-    // lost.
+    // lost. The only claim of its own is the dev mark.
     it("carries nothing about the member but the id", async () => {
       findByIdentifier.mockResolvedValue(walter);
 
@@ -107,6 +107,7 @@ describe("createDevToken", () => {
       });
 
       expect(Object.keys(claimsOf(token)).sort()).toEqual([
+        "amr",
         "aud",
         "exp",
         "iat",
@@ -114,6 +115,21 @@ describe("createDevToken", () => {
         "jti",
         "sub",
       ]);
+    });
+
+    // It belongs to no sign-in, so it has no `sid`. JwtAuth lets a token
+    // without one through only when `amr` holds "dev".
+    it("is marked as a dev token, with no sid", async () => {
+      findByIdentifier.mockResolvedValue(walter);
+
+      const { token } = await createDevToken(signer, usersRepository, {
+        ...development,
+        identifier: "walter",
+      });
+
+      const claims = claimsOf(token);
+      expect(claims.amr).toEqual(["dev"]);
+      expect(claims).not.toHaveProperty("sid");
     });
 
     it("lasts 30 days", async () => {

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { Public, TokenService } from "@nestjs/authentication";
-import { Body, Controller, HttpCode, Post, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, HttpCode, Logger, Post, UnauthorizedException } from "@nestjs/common";
 import { minutes, Throttle } from "@nestjs/throttler";
 
 import { ErrorCode } from "../shared/error-codes.js";
@@ -23,6 +25,8 @@ import { CredentialsService } from "./credentials.service.js";
 @Public()
 @Controller("auth/token")
 export class TokensController {
+  private readonly logger = new Logger(TokensController.name);
+
   constructor(
     private readonly credentialsService: CredentialsService,
     private readonly tokenService: TokenService,
@@ -37,17 +41,36 @@ export class TokensController {
   async issue(@Body() body: SignInDto) {
     const user = await this.credentialsService.verify(body.identifier, body.password);
     if (!user) {
-      // One message for every case, so the answer doesn't reveal which
-      // usernames and emails have an account.
-      throw new UnauthorizedException("Invalid username, email or password", {
-        errorCode: ErrorCode.BAD_CREDENTIALS,
-      });
+      throw badCredentials();
     }
-    return this.tokenService.issue(String(user.id), {
+    const pair = await this.tokenService.issue(String(user.id), {
       method: "password",
-      // `amr` goes into this access token and into every refreshed one.
-      claims: { amr: ["pwd"] },
+      // Both go into this access token and into every refreshed one. `amr`
+      // says how the member signed in, as in the docs. `sid` is this
+      // sign-in's own id, which the docs do not have: JwtAuth checks it on
+      // every request, so an access token stops when its sign-in ends.
+      claims: { amr: ["pwd"], sid: randomUUID() },
     });
+    // Checking the password takes about a tenth of a second. A password
+    // change, or a closed account, that landed in that time ended the
+    // member's sign-ins before this one started, so this one would outlive
+    // it. Not in the docs. The new sign-in is ended, and the caller gets the
+    // same answer as for a wrong password.
+    if (!(await this.credentialsService.stillValid(user))) {
+      // The pair never leaves this method, so nobody holds the new refresh
+      // token. Ending it is tidiness, and the answer is the same 401 whether
+      // or not that write succeeds. A failure is logged, by member id only,
+      // never the token: the family then stays live, unheld, until its end.
+      try {
+        await this.tokenService.revoke(pair.refreshToken);
+      } catch (error) {
+        this.logger.warn(
+          `Could not end the sign-in the recheck refused, for user ${user.id}: ${String(error)}`,
+        );
+      }
+      throw badCredentials();
+    }
+    return pair;
   }
 
   // An unknown, expired or reused refresh token gets a 401.
@@ -65,4 +88,12 @@ export class TokensController {
   async revoke(@Body() { refreshToken }: RefreshTokenDto): Promise<void> {
     await this.tokenService.revoke(refreshToken);
   }
+}
+
+// One message for every case, so the answer doesn't reveal which usernames
+// and emails have an account.
+function badCredentials(): UnauthorizedException {
+  return new UnauthorizedException("Invalid username, email or password", {
+    errorCode: ErrorCode.BAD_CREDENTIALS,
+  });
 }

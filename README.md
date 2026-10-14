@@ -225,7 +225,7 @@ Sign up with `{ "username": "...", "email": "...", "password": "...", "profile":
 
 To try a route by hand, in Thunder Client or with curl, see [Try the API by hand](DEVELOPMENT.md#try-the-api-by-hand). `pnpm dev:token` prints a token for local use.
 
-Sign in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces. The answer is `{ accessToken, refreshToken, expiresIn }`: the access token lasts 15 minutes, and the refresh token is swapped, once, for a new pair. Signing out ends the refresh token at once. The access token works until it expires. [context/overview.md](context/overview.md) has the full rules.
+Sign in with `{ "identifier": "...", "password": "..." }`. `identifier` is your username or your email, and letter case does not matter in either. A username cannot contain `@` or spaces. The answer is `{ accessToken, refreshToken, expiresIn }`: the access token lasts 15 minutes, and the refresh token is swapped, once, for a new pair. Signing out ends the refresh token at once, and the access token on its next request. [context/overview.md](context/overview.md) has the full rules.
 
 Forgot your password? Post `{ "email": "..." }` to `/auth/password/forgot`. In development the email lands in Mailpit at http://localhost:8025. Post `{ "token": "...", "password": "..." }`, with the token from its link, to `/auth/password/reset`.
 

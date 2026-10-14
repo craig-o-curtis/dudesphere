@@ -44,4 +44,14 @@ export class CredentialsService {
     }
     return found.user;
   }
+
+  /**
+   * Whether a sign-in that `verify` just let through is still sound, now that
+   * it has started: the account is open, and the password has not changed
+   * since `verify` read it. See UsersRepository.signInStillValid for the gap
+   * this closes.
+   */
+  stillValid(user: User): Promise<boolean> {
+    return this.usersRepository.signInStillValid(user.id, user.passwordChangedAt);
+  }
 }

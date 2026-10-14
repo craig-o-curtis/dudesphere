@@ -1,4 +1,4 @@
-import { PasswordHasher, SessionService, TokenService } from "@nestjs/authentication";
+import { PasswordHasher } from "@nestjs/authentication";
 import {
   BadRequestException,
   ForbiddenException,
@@ -21,6 +21,7 @@ import {
 import type { Page, PageRequest } from "../shared/pagination/paginated.interface.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
 import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
+import { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { UpdateMyUserDto } from "./dto/update-my-user.dto.js";
 import { UpdateUserDto } from "./dto/update-user.dto.js";
@@ -37,8 +38,7 @@ export class UsersService {
     private readonly userAbidingsService: UserAbidingsService,
     private readonly passwordHasher: PasswordHasher,
     private readonly paginationProvider: PaginationProvider,
-    private readonly sessionService: SessionService,
-    private readonly tokenService: TokenService,
+    private readonly signIns: SignInsRepository,
   ) {}
 
   async getUsers(pageRequest: PageRequest): Promise<Page<UserResponseDto>> {
@@ -207,28 +207,34 @@ export class UsersService {
     // deletedAt: IsNull() because update() does not apply the soft-delete
     // filter that find() does. Without it a deleted row gets mutated and
     // the caller still gets a 404 from getUserById below.
-    this.assertFound(
-      await this.usersRepository.update({ id, deletedAt: IsNull() }, userFields),
-      id,
-    );
+    const liveUser = { id, deletedAt: IsNull() };
 
-    // A new password signs the member out everywhere: every refresh token
-    // and every session they have is ended, on the device that changed the
-    // password too. Whoever was signed in with the old password, the member
-    // or someone else, signs in again with the new one.
-    //
-    // The ending runs after the password is stored, not in the same
-    // transaction, because the package's services write through their own
-    // store. If it fails, the password is changed and the old refresh tokens
-    // still work until the caller tries again. That is less strict than one
-    // transaction. The docs' password reset works the same way.
-    if (password !== undefined) {
-      await this.endSignIns(id);
+    if (password === undefined) {
+      this.assertFound(await this.usersRepository.update(liveUser, userFields), id);
+      return this.getUserById(id);
     }
+
+    // A new password signs the member out everywhere: every sign-in they
+    // have is ended, on the device that changed the password too. Whoever was
+    // signed in with the old password, the member or someone else, signs in
+    // again with the new one.
+    //
+    // One transaction for the two writes. If ending the sign-ins failed after
+    // the password was stored, the old refresh tokens would go on working,
+    // which is the one thing a password change must stop. Here either both
+    // happen or neither does, and the caller can simply try again.
+    //
+    // The user row is written first. That holds a lock on it until the
+    // commit, which UsersRepository.signInStillValid waits on.
+    await this.dataSource.transaction(async (manager) => {
+      this.assertFound(await manager.update(User, liveUser, userFields), id);
+      await this.signIns.endAllForUser(id, manager);
+    });
     return this.getUserById(id);
   }
 
   // An update that matched no row means there is no such live user: a 404.
+  // Thrown inside a transaction, it also rolls the transaction back.
   private assertFound(result: UpdateResult, id: number): void {
     if (result.affected === 0) {
       throw new NotFoundException(`User #${id} not found`);
@@ -257,15 +263,16 @@ export class UsersService {
         throw new NotFoundException(`User #${id} not found`);
       }
       await this.profilesService.softDeleteForUser(manager, id);
+      // A closed account has no sign-ins. In this transaction, so the account
+      // cannot be closed with its sign-ins left going: if this fails, the
+      // account stays open and the caller tries again. The sign-ins stay
+      // ended if the account is restored, and the member signs in again.
+      await this.signIns.endAllForUser(id, manager);
       // Abidings live in Mongo, outside this transaction. They go last so any
       // earlier failure rolls back before Mongo is touched, and a Mongo
-      // failure throws and rolls back the user and the profile.
+      // failure throws and rolls back the user, the profile and the sign-ins.
       await this.userAbidingsService.softDeleteForUser(id);
     });
-    // A closed account has no sign-ins. Its access tokens already stop,
-    // because JwtAuth finds no live member. This ends its refresh tokens and
-    // sessions too, so they stay ended if the account is restored.
-    await this.endSignIns(id);
   }
 
   async restoreUser(id: number): Promise<UserResponseDto> {
@@ -285,24 +292,15 @@ export class UsersService {
         throw new NotFoundException(`Deleted user #${id} not found`);
       }
       await this.profilesService.restoreForUser(manager, id);
+      // An account comes back with no sign-ins, whatever it had when it was
+      // closed. deleteUser ended them already. This makes the same true of
+      // one that slipped in around the delete, so nobody is signed in to a
+      // restored account until they sign in to it.
+      await this.signIns.endAllForUser(id, manager);
       // Last, for the same reason as in deleteUser.
       await this.userAbidingsService.restoreForUser(id);
     });
-    // An account comes back with no sign-ins, whatever it had when it was
-    // closed. deleteUser ended them already. This makes the same true of one
-    // that slipped in around the delete, so nobody is signed in to a restored
-    // account until they sign in to it.
-    await this.endSignIns(id);
     return this.getUserById(id);
-  }
-
-  // Ends every refresh token and every session of the member. What the
-  // package's own password reset does, and SignInService.signOutEverywhere
-  // without the cookie, which a service has no response to clear.
-  private async endSignIns(id: number): Promise<void> {
-    const userId = String(id);
-    await this.sessionService.revokeAll(userId);
-    await this.tokenService.revokeAll(userId);
   }
 
   // The moment a password change is recorded at. It comes from the app's

@@ -1,5 +1,6 @@
 import type { JwtSigner } from "@nestjs/authentication";
 
+import { DEV_TOKEN_AMR } from "../auth/jwt-auth.provider.js";
 import type { User } from "../users/user.entity.js";
 import type { UsersRepository } from "../users/users.repository.js";
 
@@ -25,12 +26,13 @@ export interface DevTokenRequest {
  *
  * The signer is built from the app's own `accessToken` options (see
  * print-token.ts), so the key, the audience and the issuer are the app's, and
- * JwtAuth accepts the token like any other. Only the lifetime is passed here.
+ * JwtAuth accepts the token. Only the lifetime is passed here.
  *
- * The user is read from the database, so the token names a real id. It
- * carries nothing else: JwtAuth reads the member from the database on every
- * request, so this token is worth whatever its member is at that moment, and
- * nothing once the account is closed or the password changes.
+ * The user is read from the database, so the token names a real id. Beside
+ * it the token carries only `amr: ["dev"]`, the mark JwtAuth needs to let a
+ * token without a `sid` through. JwtAuth reads the member from the database
+ * on every request, so this token is worth whatever its member is at that
+ * moment, and nothing once the account is closed or the password changes.
  *
  * It belongs to no sign-in, so no refresh token comes with it, and a
  * sign-out does not end it. It runs out after DEV_TOKEN_DAYS.
@@ -63,6 +65,13 @@ export async function createDevToken(
   }
 
   // `sub` is the user id as a string, as TokenService.issue signs it.
-  const token = signer.sign({ sub: String(user.id) }, { ttl: `${DEV_TOKEN_DAYS}d` });
+  // `amr: ["dev"]` marks it as a dev token. It has no `sid`, because it
+  // belongs to no sign-in, and JwtAuth lets a token without one through only
+  // with this mark, and never in production. The mark is JwtAuth's own
+  // constant, so the two cannot disagree.
+  const token = signer.sign(
+    { sub: String(user.id), amr: [DEV_TOKEN_AMR] },
+    { ttl: `${DEV_TOKEN_DAYS}d` },
+  );
   return { token, user };
 }
