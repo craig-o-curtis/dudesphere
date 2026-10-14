@@ -110,17 +110,18 @@ One milestone per phase: `Phase 0: Foundation`, `Phase 1: The Feed`,
 
 ### GitHub labels
 
-| Label              | Goes on                                                    |
-| ------------------ | ---------------------------------------------------------- |
-| `epic-lebowski`    | every story in this epic                                   |
-| `web`              | stories that change `apps/web`                             |
-| `api`              | stories that change `apps/api`                             |
-| `fullstack`        | stories that change both apps, in place of `web` and `api` |
-| `packages`         | stories that change `packages/*`                           |
-| `backend-gap`      | API work the web app found it needs                        |
-| `rendering-lesson` | web stories that add a row to `rendering-strategies.md`    |
-| `enhancement`      | new behavior, as before the epic                           |
-| `documentation`    | docs-only stories, as before the epic                      |
+| Label              | Goes on                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `epic-lebowski`    | every story in this epic                                                                                                 |
+| `web`              | stories that change `apps/web`                                                                                           |
+| `api`              | stories that change `apps/api`                                                                                           |
+| `fullstack`        | stories that change both apps, in place of `web` and `api`                                                               |
+| `packages`         | stories that change `packages/*`                                                                                         |
+| `backend-gap`      | API work the web app found it needs                                                                                      |
+| `rendering-lesson` | web stories that add a row to `rendering-strategies.md`; the mentor writes their lesson in `lessons/rendering-lesson.md` |
+| `auth-lesson`      | stories that teach authentication or authorization; the mentor writes their lesson in `lessons/auth-lesson.md`           |
+| `enhancement`      | new behavior, as before the epic                                                                                         |
+| `documentation`    | docs-only stories, as before the epic                                                                                    |
 
 Each issue body starts "Part of the Lebowski epic. See
 `context/epic-lebowski/index.md`. Realm: X." The spec from `issues/<ID>.md`
