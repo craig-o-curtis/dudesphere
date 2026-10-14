@@ -5,6 +5,7 @@
   flex-direction: column;
 }
 
-.main:focus {
+/* Keyboard focus (the skip link) gets the global 3px ring. A click gets none. */
+.main:focus:not(:focus-visible) {
   outline: none;
 }
