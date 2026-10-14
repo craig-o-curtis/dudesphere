@@ -145,10 +145,32 @@ describe("Rate limiting (e2e)", () => {
       await forgot(`e2e-floodother-${tag}@example.com`).expect(202);
     });
 
-    // Not covered any more: one address naming a new email on each request.
-    // The docs' AuthThrottlerGuard counts by email and address together
-    // wherever the body names an account, so each email gets its own count,
-    // and no count covers the address alone on these routes.
+    // The IP count sends its own set of headers, with "-ip" on the end.
+    it("counts the address alone as well, in headers of its own", async () => {
+      const response = await forgot(`e2e-ipcount-${tag}@example.com`).expect(202);
+
+      expect(response.headers["x-ratelimit-limit-ip"]).toBe("100");
+      expect(Number(response.headers["x-ratelimit-remaining-ip"])).toBeLessThan(100);
+    });
+
+    // The count by IP address alone runs beside the count by email. Without
+    // it, a caller who named a new email each time would never be refused.
+    // The tests above already used some of this minute's 100, so the refusal
+    // comes at the 101st request here or sooner.
+    it("holds one address to 100 a minute, however many emails it names", async () => {
+      let sent = 1;
+      let response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
+      while (response.status === 202 && sent < 101) {
+        sent += 1;
+        response = await forgot(`e2e-spray-${sent}-${tag}@example.com`);
+      }
+
+      expect(response.status).toBe(429);
+      expect(response.body).toEqual(refused);
+      const retryAfter = Number(response.headers["retry-after"]);
+      expect(retryAfter).toBeGreaterThan(0);
+      expect(retryAfter).toBeLessThanOrEqual(60);
+    });
   });
 
   describe("a route with no limit of its own", () => {
@@ -163,6 +185,14 @@ describe("Rate limiting (e2e)", () => {
 
       expect(response.headers["x-ratelimit-limit"]).toBe("100");
       expect(Number(response.headers["x-ratelimit-remaining"])).toBeLessThan(100);
+    });
+
+    // A body that names no account is counted once, by the default count,
+    // which already goes by IP address. The IP count skips it.
+    it("is not counted a second time by the IP count", async () => {
+      const response = await request(app.getHttpServer()).get("/hashtags").expect(200);
+
+      expect(response.headers).not.toHaveProperty("x-ratelimit-remaining-ip");
     });
   });
 });
