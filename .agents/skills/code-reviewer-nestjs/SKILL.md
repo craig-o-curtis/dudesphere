@@ -5,6 +5,8 @@ description: Review a diff in this NestJS repo against its own rules, the nestjs
 
 # NestJS code review
 
+> **Where the API lives.** The repo is a pnpm workspace, and the API is in `apps/api`. Every `src/` and `test/` path below is relative to `apps/api`, so `src/auth/` means `apps/api/src/auth/`. Run an API script from the repo root with `pnpm --filter @dudesphere/api <script>`. Lint and format run from the root: `pnpm lint`, `pnpm format:check`.
+
 Review the diff between `HEAD` and a fixed point on two axes, and report them separately:
 
 - **Standards**: does the code follow this repo's rules?
@@ -32,12 +34,12 @@ Run every check on every review, before you read the diff. Don't skip one becaus
 | Tests     | `pnpm test`         | every test passes                    |
 | Build     | `pnpm build`        | exit 0                               |
 
-Two more checks need the databases in `.env` to be running:
+Two more checks need the databases in `apps/api/.env` to be running:
 
-| Check           | Command                | Passes when                               |
-| --------------- | ---------------------- | ----------------------------------------- |
-| End-to-end      | `pnpm test:e2e`        | every test passes                         |
-| Migration drift | `pnpm migration:check` | exit 0: the entities match the migrations |
+| Check           | Command                                         | Passes when                               |
+| --------------- | ----------------------------------------------- | ----------------------------------------- |
+| End-to-end      | `pnpm test:e2e`                                 | every test passes                         |
+| Migration drift | `pnpm --filter @dudesphere/api migration:check` | exit 0: the entities match the migrations |
 
 Run these two as well. If one fails because it can't connect, report it as "not run: no database". Never report a check as passing when it didn't run.
 
@@ -46,7 +48,7 @@ Rules for the results:
 - Report each failure as a hard Standards finding that cites the tool and quotes its output.
 - The bar is zero issues. A lint warning fails the check the same as an error, whether this diff added it or it was there before. Report every one as a hard finding. Never write "pass" beside a check that printed a warning.
 - Note the test count. If the spec states one, compare them in the Spec axis.
-- These commands only read the code. Never run `pnpm format`, `oxlint --fix` or `pnpm migration:run` during a review.
+- These commands only read the code. Never run `pnpm format`, `oxlint --fix` or `pnpm --filter @dudesphere/api migration:run` during a review.
 - With sub-agents (section 9), run the tooling yourself, once, and tell the Standards agent not to. Two runs at once slow each other down and tell you nothing new.
 
 After that, don't flag by hand what the tooling already enforces. Dates are the exception, because lint is switched off in some files (section 4).
@@ -61,14 +63,14 @@ App code holds no JavaScript `Date`. Timestamps are ISO 8601 UTC strings, create
 
 `pnpm lint` enforces it through `@northguild/gmt-oxlint`. Lint flags `Date` references and types, `new Date()`, `Date.now()`, `Date.parse`, `Date.UTC`, `getTimezoneOffset` and date-library imports. Check by hand where lint can't see:
 
-- **`*.entity.ts`, `*.schema.ts`, `src/shared/**`.** `.oxlintrc.json` switches the gmt rules off here, because these files are the database boundary.
+- **`*.entity.ts`, `*.schema.ts`, `src/shared/**`.** `apps/api/.oxlintrc.json` switches the gmt rules off here, because these files are the database boundary.
   - Entity timestamps use the decorators in `src/shared/decorators/` (`CreateUtcColumn`, `UpdateUtcColumn`, `SoftDeleteUtcColumn`, `UtcColumn`) and are typed `string` or `string | null`. TypeORM's own `@CreateDateColumn`, `@UpdateDateColumn` and `@DeleteDateColumn`, and a bare `@Column({ type: "timestamp" })`, return `Date` objects. Report any of these as a hard finding.
-  - Mongoose date paths need getters that return ISO strings, as `src/abiding/abiding.schema.ts` does.
+  - Mongoose date paths need getters that return ISO strings, as `src/abidings/abiding.schema.ts` does.
   - In `src/shared/**`, `Date` may appear only to convert a database value into an ISO string.
 - **New `oxlint-disable` comments for a gmt rule.** Report as a hard finding, unless the comment sits at that boundary and gives a reason.
 - **Best-practices examples.** Several nestjs-best-practices rules use `Date` in their examples (`api-use-interceptors`, `api-use-dto-serialization` and `db-use-transactions`, among others). Follow the pattern a rule teaches, not its date code.
 
-Only if you have a date finding, load the guide for the fix: `node_modules/@northguild/gmt-oxlint/skills/migration-refactor/SKILL.md`. The API guides are `gmt-basics`, `gmt-arithmetic` and `gmt-timezone`, under `node_modules/@northguild/gmt/skills/`.
+Only if you have a date finding, load the guide for the fix: `node_modules/@northguild/gmt-oxlint/skills/migration-refactor/SKILL.md`. The API guides are `gmt-basics`, `gmt-arithmetic` and `gmt-timezone`, under `apps/api/node_modules/@northguild/gmt/skills/`.
 
 ## 5. Standards: this repo's checks
 

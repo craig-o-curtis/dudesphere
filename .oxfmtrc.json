@@ -1,6 +1,21 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": [],
+  "ignorePatterns": [
+    ".agents/skills/animate/**",
+    ".agents/skills/better-accessibility/**",
+    ".agents/skills/grill-me/**",
+    ".agents/skills/grill-with-docs/**",
+    ".agents/skills/nestjs-best-practices/**",
+    ".agents/skills/next-cache-components-optimizer/**",
+    ".agents/skills/next-dev-loop/**",
+    ".agents/skills/nextjs-app-architecture/**",
+    ".agents/skills/playwright-best-practices/**",
+    ".agents/skills/r3f-fundamentals/**",
+    ".agents/skills/tanstack-query-best-practices/**",
+    ".agents/skills/vercel-react-best-practices/**",
+    ".agents/skills/vercel-react-view-transitions/**",
+    ".agents/skills/vitest/**"
+  ],
   "sortImports": {
     "enabled": true,
     "order": "asc",

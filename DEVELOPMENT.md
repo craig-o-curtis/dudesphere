@@ -1,5 +1,21 @@
 # Development Guide
 
+## Layout
+
+The repo is a pnpm workspace. Run every command in this guide from the repo root.
+
+| Path                   | What it holds                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/api`             | The NestJS API, `@dudesphere/api`. Its `.env` lives here                                               |
+| `apps/web`             | The web app, `@dudesphere/web`, on Next.js 16.4 and React 19.3. It runs on port 3001 and calls the API |
+| `packages/config`      | The shared tsconfig base                                                                               |
+| `packages/api-types`   | The API's response types, for the web app. A drift check keeps them in step with the API               |
+| `packages/lane-engine` | Bowling scoring                                                                                        |
+| `context`              | The project overview, the coding standards and the plans                                               |
+| `reference`            | Study notes on NestJS, the databases and tokens                                                        |
+
+The root `package.json` holds the scripts for the whole workspace, such as `pnpm dev`, `pnpm lint` and `pnpm db:up`. Run any other API script with `pnpm --filter @dudesphere/api <script>`. The API's scripts run inside `apps/api`, so a path you pass one is relative to `apps/api`.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v26 — the version in `.node-version`. With fnm, run `fnm use` in the repo root.
@@ -11,15 +27,27 @@
 ### 1. Environment Variables
 
 ```bash
-cp .env.example .env
-# Edit .env with your credentials (see below)
+cp apps/api/.env.example apps/api/.env
+# Edit apps/api/.env with your credentials (see below)
+```
+
+The web app reads `apps/web/.env.local`. It needs one line, the address of the API:
+
+```bash
+API_URL=http://localhost:3000
 ```
 
 ### 2. Start Databases
 
 ```bash
-docker compose up -d
+pnpm db:up
 ```
+
+`docker-compose.yml` sits at the repo root, but reads its credentials from
+`apps/api/.env`. `pnpm db:up` runs `docker compose --env-file apps/api/.env up -d`.
+A plain `docker compose up -d` does not pass that file, so Postgres starts
+with blank credentials. Give every other `docker compose` command
+`--env-file apps/api/.env` too.
 
 This starts:
 
@@ -34,27 +62,29 @@ This starts:
 Each port is bound to `127.0.0.1`, so only your own machine can reach these
 services. Other machines on the same network cannot.
 
-### 3. Start NestJS App
+### 3. Start the Apps
 
 ```bash
-pnpm run start:dev
+pnpm dev       # the API and the web app together
+pnpm dev:api   # the API alone
+pnpm dev:web   # the web app alone
 ```
 
-The app runs on `http://localhost:3000` (or the port specified in `.env`).
+The API runs on `http://localhost:3000` (or the port specified in `apps/api/.env`). The web app runs on `http://localhost:3001`.
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values.
+Copy `apps/api/.env.example` to `apps/api/.env` and fill in your values.
 
-Two git hooks stop a commit that would publish a value from your `.env`.
+Two git hooks stop a commit that would publish a value from your `apps/api/.env`.
 `pnpm install` turns them on. `pre-commit` checks the lines a commit adds,
 and refuses any `.env` file but `.env.example`. `commit-msg` checks the
 message. Each names the variable and the line, and never prints the value.
 Values shorter than 8 characters are not checked, and neither is any value
-written in `.env.example`. So if a value is not secret, put it there. The
-check is in `src/dev/check-env-leaks.ts`.
+written in `apps/api/.env.example`. So if a value is not secret, put it there. The
+check is in `apps/api/src/dev/check-env-leaks.ts`.
 
-The app checks every variable when it starts, in `src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
+The app checks every variable when it starts, in `apps/api/src/config/env.validate.ts`. It refuses to start if a required one is missing or a value is malformed, and the error names each bad variable. An empty value counts as not set.
 
 | Variable                            | Required | Description                                                                             | Example or default                                |
 | ----------------------------------- | -------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -78,11 +108,11 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 | `MAIL_USER`                         | no       | SMTP login. Mailpit needs none. With one set, the server must use TLS                   | (empty)                                           |
 | `MAIL_PASSWORD`                     | no       | SMTP password                                                                           | (empty)                                           |
 | `MAIL_FROM`                         | no       | Who every email is from                                                                 | default `Dudesphere <no-reply@dudesphere.local>`  |
-| `FRONTEND_URL`                      | no       | Where the web app is served. The reset email links to it                                | default `http://localhost:3000`                   |
+| `FRONTEND_URL`                      | no       | Where the web app is served, for the reset link. Use `http://localhost:3001`            | default `http://localhost:3000`                   |
 | `PASSWORD_RESET_EXPIRES_IN`         | no       | How long a reset link works, in seconds. At least 60                                    | default `1800`                                    |
 | `DUDE_OBSERVE_APP_KEY`              | yes      | Observe project key                                                                     | (from the Observe dashboard)                      |
 | `DUDE_OBSERVE_APP_SECRET`           | yes      | Observe project secret                                                                  | (from the Observe dashboard)                      |
-| `EMAIL`                             | seed     | Login of the seeded admin. Needed by `pnpm seed:run` and `pnpm dev:token`               | `admin@example.com`                               |
+| `EMAIL`                             | seed     | Login of the seeded admin. Needed by the API's `seed:run` and `dev:token`               | `admin@example.com`                               |
 | `PASSWORD`                          | seed     | Password of the seeded admin                                                            | (your password)                                   |
 | `MG_ADMIN_USER`                     | compose  | MongoDB admin user. Read by `docker-compose.yml`, not by the app                        | `dude`                                            |
 | `MG_ADMIN_PW`                       | compose  | MongoDB admin password. Read by `docker-compose.yml`                                    | (your password)                                   |
@@ -92,7 +122,7 @@ The app checks every variable when it starts, in `src/config/env.validate.ts`. I
 pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
 1. Open http://localhost:5050 and log in with `EMAIL` and `PG_ADMIN_PW` from
-   your `.env`. `docker-compose.yml` reads both from there.
+   your `apps/api/.env`. `docker-compose.yml` reads both from there.
 2. Right-click **Servers** → **Register** → **Server**
 3. Fill in:
    - **Name**: `dude-postgres`
@@ -104,7 +134,7 @@ pgAdmin doesn't auto-discover PostgreSQL. Add it manually:
 
 ## Mongo Express Setup
 
-Open http://localhost:8081 and log in with your MongoDB credentials from `.env`.
+Open http://localhost:8081 and log in with your MongoDB credentials from `apps/api/.env`.
 
 ## Mongo Schema Changes
 
@@ -116,8 +146,8 @@ Postgres and MongoDB change in different ways, and only Postgres has migrations.
   Adding a `@Prop` to a schema changes what the app writes from then on. It
   does nothing to documents already stored.
 
-`pnpm migration:check` will never notice a Mongo change. It reads
-`src/database/data-source.ts`, which only loads `*.entity.ts` files, and those
+`pnpm --filter @dudesphere/api migration:check` will never notice a Mongo change. It reads
+`apps/api/src/database/data-source.ts`, which only loads `*.entity.ts` files, and those
 are the two Postgres tables. That is correct, not a gap.
 
 So when you add a field to a Mongoose schema, the question is whether the
@@ -143,11 +173,11 @@ Write a backfill when any of these is true:
 - You sort on the field or build an index on it.
 - The value has to be worked out from other data. `Abiding.hashtags` was this
   kind: it is derived from `message`, and no query can infer it. That is why
-  `pnpm backfill:hashtags` exists.
+  `pnpm --filter @dudesphere/api backfill:hashtags` exists.
 
-To write one, follow `src/database/seeds/hashtag-backfill.seed.ts`: a service
+To write one, follow `apps/api/src/database/seeds/hashtag-backfill.seed.ts`: a service
 that is safe to run twice, a thin runner like `backfill-hashtags.ts`, a script
-in `package.json`, and a spec.
+in `apps/api/package.json`, and a spec.
 
 ### When you remove a field
 
@@ -227,25 +257,25 @@ A count is different. `countDocuments({ deletedAt: null })` reads every
 document, because no index holds `deletedAt`, and Mongo cannot answer a
 `null` match from an index alone. Every list request runs one for
 `meta.totalItems`. The comment on `paginateMongoModel` in
-`src/shared/pagination/pagination.provider.ts` says why that is accepted.
+`apps/api/src/shared/pagination/pagination.provider.ts` says why that is accepted.
 
 ## Seeds and Backfills
 
 ### Seed data
 
 ```bash
-pnpm seed:run
+pnpm --filter @dudesphere/api seed:run
 ```
 
-Creates the admin user and profile from `EMAIL` and `PASSWORD` in `.env`, and
+Creates the admin user and profile from `EMAIL` and `PASSWORD` in `apps/api/.env`, and
 some sample abidings. The password is stored as a scrypt hash. Running the seed
-again resets the admin's password to the value in `.env`. The abidings seed only runs when `NODE_ENV` is
+again resets the admin's password to the value in `apps/api/.env`. The abidings seed only runs when `NODE_ENV` is
 `development`, and skips itself if the collection already has documents.
 
 ### Hashtag backfill
 
 ```bash
-pnpm backfill:hashtags
+pnpm --filter @dudesphere/api backfill:hashtags
 ```
 
 Re-reads every abiding's `message`, rewrites its `hashtags` array, and adds
@@ -256,7 +286,7 @@ Run it when any of these is true:
 - **You have abidings that predate hashtags.** They have no `hashtags` field,
   so nothing finds them by tag and their tags are missing from the dropdown.
   This is the one-time case, and it is already done on existing environments.
-- **You changed the tag rules** in `src/shared/utils/hashtag.ts` — the
+- **You changed the tag rules** in `apps/api/src/shared/utils/hashtag.ts` — the
   character set, the 64-character limit, the 10-tag cap, the normalizing. Old
   abidings keep the tags derived under the old rules until you re-run this.
 - **`GET /hashtags` is missing a tag** that abidings clearly use. A tag is
@@ -291,21 +321,21 @@ send one.
 ### 1. Start everything
 
 ```bash
-docker compose up -d     # the databases
-pnpm start:dev           # the app
-pnpm seed:run            # once, to create the admin from EMAIL and PASSWORD in .env
+pnpm db:up                                # the databases
+pnpm dev:api                              # the app
+pnpm --filter @dudesphere/api seed:run    # once, to create the admin from EMAIL and PASSWORD in apps/api/.env
 ```
 
-The app listens on the `PORT` in your `.env`, 3000 unless you changed it. The
+The app listens on the `PORT` in your `apps/api/.env`, 3000 unless you changed it. The
 examples below use 3000.
 
 ### 2. Get a token
 
 ```bash
-pnpm dev:token                        # for the admin named by EMAIL in .env
-pnpm dev:token walter                 # for any member, by username
-pnpm dev:token walter@example.com     # or by email
-pnpm dev:token | pbcopy               # straight to the clipboard, on macOS
+pnpm --filter @dudesphere/api dev:token                      # for the admin named by EMAIL in apps/api/.env
+pnpm --filter @dudesphere/api dev:token walter               # for any member, by username
+pnpm --filter @dudesphere/api dev:token walter@example.com   # or by email
+pnpm --filter @dudesphere/api dev:token | pbcopy             # straight to the clipboard, on macOS
 ```
 
 The token is the only thing on standard output. pnpm's own line naming the
@@ -342,12 +372,12 @@ That is the word `Bearer`, one space, then the token.
 
 A request you sent before is in the **Activity** list, and it keeps its
 token. Open it from there to send it again. For a new request, paste the
-token again: `pnpm dev:token | pbcopy` makes that two keystrokes.
+token again: `pnpm --filter @dudesphere/api dev:token | pbcopy` makes that two keystrokes.
 
 **With curl:**
 
 ```bash
-TOKEN=$(pnpm dev:token 2>/dev/null)
+TOKEN=$(pnpm --filter @dudesphere/api dev:token 2>/dev/null)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/users/me
 ```
 
@@ -389,18 +419,18 @@ The answer holds `accessToken`, `refreshToken` and `expiresIn`. Send
 `{ "refreshToken": "..." }` to `POST /auth/token/refresh`, and keep the new
 refresh token from the answer: each one works once.
 
-For trying routes by hand, `pnpm dev:token` is easier. Its token lasts 30 days
+For trying routes by hand, `pnpm --filter @dudesphere/api dev:token` is easier. Its token lasts 30 days
 and comes with no refresh token, so there is nothing to refresh.
 
 ### When a request is refused
 
-| Answer                                       | What it means                                                                         | What to do                                       |
-| -------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                                      | Set the Auth tab to Bearer and paste a token     |
-| 401 with a `message` such as "token expired" | Expired, forged, signed out, or its account was closed or its password changed        | Run `pnpm dev:token` again                       |
-| 403 "Forbidden"                              | The route is for admins and the token is a member's                                   | Use `pnpm dev:token` with no name, for the admin |
-| 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                                          | Use that member's token, or the admin's          |
-| 429 `RATE_LIMITED`                           | Over 100 requests a minute, 5 sign-ins in 15 minutes, or 3 reset emails in 15 minutes | Wait for the time in the `Retry-After` header    |
+| Answer                                       | What it means                                                                         | What to do                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                                      | Set the Auth tab to Bearer and paste a token                              |
+| 401 with a `message` such as "token expired" | Expired, forged, signed out, or its account was closed or its password changed        | Run `pnpm --filter @dudesphere/api dev:token` again                       |
+| 403 "Forbidden"                              | The route is for admins and the token is a member's                                   | Use `pnpm --filter @dudesphere/api dev:token` with no name, for the admin |
+| 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                                          | Use that member's token, or the admin's                                   |
+| 429 `RATE_LIMITED`                           | Over 100 requests a minute, 5 sign-ins in 15 minutes, or 3 reset emails in 15 minutes | Wait for the time in the `Retry-After` header                             |
 
 A 401 for a bad token also has a `WWW-Authenticate` header that says why.
 
@@ -416,37 +446,37 @@ token in its Auth tab. A 30-day token keeps that to one paste a request.
 
 ```bash
 pnpm test:e2e                              # every suite
-pnpm test:e2e test/hashtags.e2e-spec.ts    # one suite
+pnpm test:e2e test/hashtags.e2e-spec.ts    # one suite, by its path inside apps/api
 ```
 
-The suites live in `test/*.e2e-spec.ts`. They run against the databases named
-in `.env`, which are your dev databases. There is no separate test database.
+The suites live in `apps/api/test/*.e2e-spec.ts`. They run against the databases named
+in `apps/api/.env`, which are your dev databases. There is no separate test database.
 
 Two things are set for you:
 
 - **The suites refuse to start unless both databases are on this machine.**
-  They write rows and then hard-delete them, so `test/global-setup.ts` checks
+  They write rows and then hard-delete them, so `apps/api/test/global-setup.ts` checks
   `PG_HOST` and `MONGO_URI` first and stops the run if either names another
-  host. The check is in `test/local-databases.ts`.
-- **The suites run in the `Asia/Tokyo` time zone.** `vitest.config.e2e.ts`
+  host. The check is in `apps/api/test/local-databases.ts`.
+- **The suites run in the `Asia/Tokyo` time zone.** `apps/api/vitest.config.e2e.ts`
   sets it. CI machines run in UTC, where a timestamp read in "the machine's
   zone" happens to be right, so a time zone bug cannot show there.
 
 Before the first run:
 
 ```bash
-docker compose up -d
-pnpm migration:run
+pnpm db:up
+pnpm --filter @dudesphere/api migration:run
 ```
 
 No suite needs the seed. Each one makes its own users, admins included,
-through `tokenFor` and `signedInAs` in `test/auth-helpers.ts`. Logging in as
+through `tokenFor` and `signedInAs` in `apps/api/test/auth-helpers.ts`. Logging in as
 the seeded admin would leave a `session` row behind on every run, since
 the cleanup only removes `e2e-` users.
 
 ### How the cleanup works
 
-`test/global-setup.ts` deletes what the suites wrote. `vitest.config.e2e.ts`
+`apps/api/test/global-setup.ts` deletes what the suites wrote. `apps/api/vitest.config.e2e.ts`
 registers it as `globalSetup`, so vitest runs it once before the first suite
 and once after the last one. Both runs do the same cleanup. A run that was
 killed halfway is cleaned up by the start of the next one.
@@ -486,12 +516,12 @@ The cleanup can only delete what it can recognise. A suite that breaks one of
 these rules leaves rows behind on every run.
 
 - **Give every user an `e2e-` email at `example.com` and an `e2e-` username.**
-  Sign up through `signUp` or `signUpBody` in `test/sign-up.ts`, which does
+  Sign up through `signUp` or `signUpBody` in `apps/api/test/sign-up.ts`, which does
   both and gives each user a display name no other run has used.
 - **Use tokens that belong to a user you registered.** The guard looks the
   user up on every request and answers 401 when there is none, so a token
   signed for a made-up id is refused, and so is one that only claims a role.
-  `tokenFor` and `signedInAs` in `test/auth-helpers.ts` sign up a real `e2e-`
+  `tokenFor` and `signedInAs` in `apps/api/test/auth-helpers.ts` sign up a real `e2e-`
   member, as an admin when asked. This is also what keeps every abiding tied
   to a `user` row the cleanup can find.
 - **Build hashtags as `e2e` plus 12 hex characters.** Copy `unusedSlug` in
@@ -499,17 +529,17 @@ these rules leaves rows behind on every run.
   prefix to match on. The cleanup matches the whole shape so that it cannot
   delete a real tag such as `#e2etesting`.
 - **If a suite writes to a new table or collection, add it to
-  `test/global-setup.ts`** in the same change.
+  `apps/api/test/global-setup.ts`** in the same change.
 
 ### Tips
 
-- **`pnpm start:dev` can stay running.** Each suite starts its own copy of the
+- **`pnpm dev:api` can stay running.** Each suite starts its own copy of the
   app on a free port.
 - **Start each suite the way the others do.** Call `configureApp(app)`, then
   `listenOnLoopback(app)` in place of `app.init()`. The first gives the suite
   the same pipes, filters and interceptors as `main.ts`. The second stops a
   request from reaching another program on your machine. The comment in
-  `test/listen-on-loopback.ts` explains how.
+  `apps/api/test/listen-on-loopback.ts` explains how.
 - **Suites run in parallel, against one database.** Make every name random, and
   never assert on a count that another suite or your own dev data could change,
   such as `meta.totalItems` on `GET /abidings`. A count is safe once the list
@@ -518,14 +548,14 @@ these rules leaves rows behind on every run.
 - **A list comes back one page at a time.** The row you are looking for may
   not be on page 1 of the dev database. To check that a row is on a list, or
   is not, follow `links.next` to the end, as `listEverySlug` does in
-  `test/hashtags.e2e-spec.ts`.
+  `apps/api/test/hashtags.e2e-spec.ts`.
 - **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
   links its abidings to the e2e run, and no later run removes them. If that
   happens, delete the stranded abidings in Mongo Express.
 - **Guards can only be tested here.** The guards of `AuthenticationModule`
   and `AuthorizationModule` are registered in `AppModule`, and a unit
   controller spec never loads them. A 401 or 403 test belongs in an e2e
-  suite. `test/route-access.e2e-spec.ts` already checks both on every route,
+  suite. `apps/api/test/route-access.e2e-spec.ts` already checks both on every route,
   so a new route needs no case of its own for "no token" or "not allowed".
 - **CI runs the same suites** against empty databases that it throws away. See
   "Continuous Integration" in the [README](README.md).
@@ -537,28 +567,30 @@ these rules leaves rows behind on every run.
 The PostgreSQL volume may contain stale data from a previous setup. Fix:
 
 ```bash
-docker compose down -v --remove-orphans
-docker compose up -d
-pnpm run start:dev
+docker compose --env-file apps/api/.env down -v --remove-orphans
+pnpm db:up
+pnpm dev:api
 ```
 
 ### Tables not appearing in pgAdmin
 
-Tables are created by migrations, not by starting the app. `synchronize` is turned off. Run `pnpm migration:run`, then refresh pgAdmin.
+Tables are created by migrations, not by starting the app. `synchronize` is turned off. Run `pnpm --filter @dudesphere/api migration:run`, then refresh pgAdmin.
 
 ## Useful Commands
 
+Every `docker compose` command needs `--env-file apps/api/.env`, as "Start Databases" explains.
+
 ```bash
 # View logs
-docker compose logs -f dude-postgres
-docker compose logs -f dude-mongo
+docker compose --env-file apps/api/.env logs -f postgres
+docker compose --env-file apps/api/.env logs -f mongo
 
 # Check status
-docker compose ps
+docker compose --env-file apps/api/.env ps
 
 # Stop everything
-docker compose down
+pnpm db:down
 
 # Stop + remove volumes (⚠️ deletes all data)
-docker compose down -v
+docker compose --env-file apps/api/.env down -v
 ```
