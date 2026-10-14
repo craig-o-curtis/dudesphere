@@ -135,6 +135,8 @@ export class TypeOrmAuthenticationStore
       familyExpiresAt: iso(record.familyExpiresAt),
       usedAt: record.usedAt ? iso(record.usedAt) : null,
       claims,
+      // The sign-in's id, out of the claims, for SignInsRepository.isLive.
+      sid: typeof record.claims?.sid === "string" ? record.claims.sid : null,
     });
     // A family past its absolute limit can never refresh again, revoked or
     // not, so its rows go as new ones are written.

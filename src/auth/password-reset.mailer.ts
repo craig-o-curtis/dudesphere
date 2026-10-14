@@ -5,9 +5,11 @@ import {
 } from "@nestjs/authentication";
 import { Inject, Injectable } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
+import { DataSource } from "typeorm";
 
 import { MailProvider } from "../mail/mail.provider.js";
 import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
+import { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import { UsersRepository } from "../users/users.repository.js";
 import authConfig from "./config/auth.config.js";
 
@@ -30,6 +32,8 @@ export class PasswordResetMailer extends PasswordResetHandler {
     @Inject(UsersRepository) private readonly usersRepository: UsersRepository,
     @Inject(MailProvider) private readonly mailProvider: MailProvider,
     @Inject(authConfig.KEY) private readonly auth: ConfigType<typeof authConfig>,
+    @Inject(DataSource) private readonly dataSource: DataSource,
+    @Inject(SignInsRepository) private readonly signIns: SignInsRepository,
     @Inject(AuthenticationRegistry) registry: AuthenticationRegistry,
   ) {
     super();
@@ -61,10 +65,16 @@ export class PasswordResetMailer extends PasswordResetHandler {
     });
   }
 
-  // Stamps passwordChangedAt too, so the member's access tokens stop at once.
-  // The package ends their refresh tokens and sessions after this returns.
+  // Stores the hash, stamps passwordChangedAt, and ends every sign-in of the
+  // member, in one transaction, so a reset never leaves the old sign-ins
+  // going. The package ends the sign-ins again around this call, which finds
+  // nothing left to end.
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
-    await this.usersRepository.updatePasswordHash(Number(userId), passwordHash, utcNowOrThrow());
+    const id = Number(userId);
+    await this.dataSource.transaction(async (manager) => {
+      await this.usersRepository.updatePasswordHash(id, passwordHash, utcNowOrThrow(), manager);
+      await this.signIns.endAllForUser(id, manager);
+    });
   }
 
   // Plain text only. An HTML body would have to escape the username, and a

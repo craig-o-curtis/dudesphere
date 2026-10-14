@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as pause } from "node:timers/promises";
 
 import {
   AUTHENTICATION_MODULE_OPTIONS,
@@ -9,6 +10,7 @@ import { INestApplication } from "@nestjs/common";
 import type { ConfigType } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getUtcNow, subtractUtc } from "@northguild/gmt";
+import * as bcrypt from "bcrypt";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { DataSource } from "typeorm";
@@ -17,6 +19,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
 import { UserRole } from "./../src/users/user.entity.js";
+import { UsersRepository } from "./../src/users/users.repository.js";
 import { bearer, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, type SignUpBody } from "./sign-up.js";
@@ -30,10 +33,11 @@ import { signUp, type SignUpBody } from "./sign-up.js";
 // request and lasts minutes. The refresh token is random text that is swapped,
 // once, for a new pair. The refresh tokens of one sign-in form a family.
 //
-// What a sign-out ends is the family. An access token carries no family, so
-// it works until it expires, at most JWT_EXPIRES_IN. The docs accept that,
-// and so do the tests below, which say so where it matters. A closed account
-// and a changed password do end access tokens, through JwtAuth.validate.
+// What a sign-out ends is the family. Every access token carries its
+// sign-in's id, `sid`, and JwtAuth.validate checks on every request that the
+// sign-in is still going. So an access token stops on the next request after
+// its family ends. The docs alone would let it run to its expiry; that check
+// is this app's own.
 //
 // The store's own rules, such as one winner when two requests spend one
 // token, are also proved by the package's contract suite in
@@ -317,16 +321,18 @@ describe("Tokens (e2e)", () => {
       expect(await storedToken(next.refreshToken)).toMatchObject({ revoked: true });
     });
 
-    // The access tokens carry no family, so nothing stops them early. They
-    // run out within JWT_EXPIRES_IN, as the docs say. A thief keeps what
-    // they stole until then.
-    it("leaves the family's access tokens working until they expire", async () => {
+    // The access tokens stop too, on the next request: each carries the
+    // family's `sid`, and JwtAuth finds that sign-in ended. A thief keeps
+    // nothing.
+    it("stops the family's access tokens on the next request", async () => {
       const { pair } = await newSession();
       const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
+      await whoAmI(next.accessToken).expect(200);
 
       await refresh(pair.refreshToken).expect(401);
 
-      await whoAmI(next.accessToken).expect(200);
+      await whoAmI(next.accessToken).expect(401);
+      await whoAmI(pair.accessToken).expect(401);
     });
 
     it("leaves the member's other sign-ins alone", async () => {
@@ -364,14 +370,24 @@ describe("Tokens (e2e)", () => {
       expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
     });
 
-    // As the docs say: a sign-out ends the refresh tokens, and an access
-    // token already handed out runs until it expires.
-    it("leaves the device's access token working until it expires", async () => {
+    // The access token stops with its refresh tokens, on the next request.
+    it("stops the device's access token on the next request", async () => {
       const { pair } = await newSession();
+      await whoAmI(pair.accessToken).expect(200);
 
       await revoke(pair.refreshToken).expect(204);
 
-      await whoAmI(pair.accessToken).expect(200);
+      const refusedMe = await whoAmI(pair.accessToken).expect(401);
+      expect(refusedMe.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
+    });
+
+    it("leaves the access token of the member's other device working", async () => {
+      const { sent, pair: phone } = await newSession();
+      const laptop = (await signInAs(sent).expect(200)).body as Pair;
+
+      await revoke(phone.refreshToken).expect(204);
+
+      await whoAmI(laptop.accessToken).expect(200);
     });
 
     it("leaves the member's other devices signed in", async () => {
@@ -442,6 +458,9 @@ describe("Tokens (e2e)", () => {
       expect(response.text).toBe("");
       await refresh(phone.refreshToken).expect(401);
       await refresh(laptop.refreshToken).expect(401);
+      // The access tokens of both devices stop at once too.
+      await whoAmI(phone.accessToken).expect(401);
+      await whoAmI(laptop.accessToken).expect(401);
     });
 
     it("leaves every other member signed in", async () => {
@@ -450,6 +469,7 @@ describe("Tokens (e2e)", () => {
 
       await signOutEverywhere(walter.pair.accessToken).expect(204);
 
+      await whoAmI(donny.pair.accessToken).expect(200);
       await refresh(donny.pair.refreshToken).expect(200);
     });
 
@@ -481,6 +501,10 @@ describe("Tokens (e2e)", () => {
 
       await refresh(phone.refreshToken).expect(401);
       await refresh(laptop.refreshToken).expect(401);
+      // Both access tokens stop at once, even one signed in the same second
+      // as the change: their sign-ins were ended in the same transaction.
+      await whoAmI(phone.accessToken).expect(401);
+      await whoAmI(laptop.accessToken).expect(401);
       const again = await signInAs({ ...sent, password: "a-new-secret-1" }).expect(200);
       await refresh((again.body as Pair).refreshToken).expect(200);
     });
@@ -540,6 +564,9 @@ describe("Tokens (e2e)", () => {
 
       expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
       await refresh(pair.refreshToken).expect(401);
+      // A restore no longer brings back a recent access token: its sign-in
+      // is ended.
+      await whoAmI(pair.accessToken).expect(401);
       const again = (await signInAs(sent).expect(200)).body as Pair;
       await whoAmI(again.accessToken).expect(200);
     });
@@ -562,17 +589,120 @@ describe("Tokens (e2e)", () => {
     });
   });
 
-  // `pnpm dev:token` signs a token with the app's own options and starts no
-  // family. JwtAuth checks the member alone, so it works like any other.
-  describe("a token that belongs to no family", () => {
-    it("still works, as the dev token command needs", async () => {
+  // What sign-in asks once it has started: has the password changed, or the
+  // account closed, since the password was checked? See
+  // UsersRepository.signInStillValid. It reads the row with a share lock, so
+  // only the real database can show it works.
+  describe("the sign-in recheck", () => {
+    async function stampOf(userId: number): Promise<string | null> {
+      const user = await app.get(UsersRepository).findById(userId);
+      return user?.passwordChangedAt ?? null;
+    }
+
+    it("holds until the password changes", async () => {
+      const { sent, userId, pair } = await newSession();
+      const users = app.get(UsersRepository);
+      const stamp = await stampOf(userId);
+
+      expect(await users.signInStillValid(userId, stamp)).toBe(true);
+
+      await request(app.getHttpServer())
+        .patch("/users/me")
+        .set(bearer(pair.accessToken))
+        .send({ password: "a-new-long-secret-2", currentPassword: sent.password })
+        .expect(200);
+
+      // A sign-in that had been checking the old password would now end the
+      // sign-in it started.
+      expect(await users.signInStillValid(userId, stamp)).toBe(false);
+    });
+
+    // The lock is what makes the recheck wait for a password change that has
+    // written the new stamp and not yet committed. Without it the recheck
+    // would read the old stamp, answer "still valid", and let the sign-in
+    // through. Here the change is held open by hand, and the recheck must
+    // still be waiting a fifth of a second later.
+    it("waits for a password change that is in flight", async () => {
       const { userId } = await newSession();
+      const stamp = await stampOf(userId);
+      const users = app.get(UsersRepository);
+      let settled = false;
+      let recheck: Promise<boolean> = Promise.resolve(true);
+
+      await dataSource.transaction(async (manager) => {
+        await manager.query(`UPDATE "user" SET "passwordChangedAt" = $1 WHERE "id" = $2`, [
+          getUtcNow(),
+          userId,
+        ]);
+
+        recheck = users.signInStillValid(userId, stamp).finally(() => {
+          settled = true;
+        });
+        await pause(200);
+
+        // Still waiting on the row lock this transaction holds.
+        expect(settled).toBe(false);
+      });
+
+      // The change has committed. The recheck now sees the new stamp.
+      await expect(recheck).resolves.toBe(false);
+    });
+
+    it("fails once the account is closed", async () => {
+      const { userId, pair } = await newSession();
+      const stamp = await stampOf(userId);
+
+      await request(app.getHttpServer())
+        .delete("/users/me")
+        .set(bearer(pair.accessToken))
+        .expect(204);
+
+      expect(await app.get(UsersRepository).signInStillValid(userId, stamp)).toBe(false);
+    });
+
+    // Upgrading an old bcrypt hash at sign-in changes the hash, not the
+    // stamp, so it must not count as a password change and refuse the
+    // member's own sign-in.
+    it("lets a member with an old bcrypt hash sign in", async () => {
+      const { sent, userId } = await newSession();
+      await dataSource.query(`UPDATE "user" SET "password" = $1 WHERE "id" = $2`, [
+        await bcrypt.hash(sent.password, 4),
+        userId,
+      ]);
+
+      const { body } = await signInAs(sent).expect(200);
+
+      await whoAmI((body as Pair).accessToken).expect(200);
+    });
+  });
+
+  // A token with no `sid` belongs to no sign-in. JwtAuth lets one through
+  // only when it is marked as a dev token.
+  describe("a token that belongs to no sign-in", () => {
+    function signedWithoutSid(claims: Record<string, unknown>): string {
       const { accessToken } = app.get<AuthenticationModuleOptions>(AUTHENTICATION_MODULE_OPTIONS);
+      return new JwtSigner(accessToken!).sign(claims);
+    }
 
-      const token = new JwtSigner(accessToken!).sign({ sub: String(userId) });
+    // What `pnpm dev:token` signs.
+    it("works when it is marked as a dev token", async () => {
+      const { userId } = await newSession();
 
-      const me = await whoAmI(token).expect(200);
+      const me = await whoAmI(signedWithoutSid({ sub: String(userId), amr: ["dev"] })).expect(200);
       expect(me.body).toMatchObject({ id: userId });
+    });
+
+    // Signed with the app's own key, so only the missing `sid` refuses it.
+    it("is refused without the dev mark", async () => {
+      const { userId } = await newSession();
+
+      await whoAmI(signedWithoutSid({ sub: String(userId), amr: ["pwd"] })).expect(401);
+    });
+
+    it("is refused with a sid that belongs to no sign-in", async () => {
+      const { userId } = await newSession();
+
+      await whoAmI(signedWithoutSid({ sub: String(userId), sid: randomUUID() })).expect(401);
     });
   });
 

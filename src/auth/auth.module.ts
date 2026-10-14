@@ -1,13 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { TypeOrmModule } from "@nestjs/typeorm";
 
 import { MailModule } from "../mail/mail.module.js";
-import {
-  EmailTokenEntity,
-  RefreshTokenEntity,
-  SessionEntity,
-} from "../typeorm/authentication.entities.js";
+import { SignInsModule } from "../typeorm/sign-ins.module.js";
 import { TypeOrmAuthenticationStore } from "../typeorm/typeorm-authentication.store.js";
 import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
@@ -32,9 +27,9 @@ import { TokensController } from "./tokens.controller.js";
     UsersModule,
     MailModule,
     ConfigModule.forFeature(authConfig),
-    // Registers the store's entities with the app's one connection, which
-    // loads them through autoLoadEntities.
-    TypeOrmModule.forFeature([SessionEntity, RefreshTokenEntity, EmailTokenEntity]),
+    // SignInsRepository, for JwtAuth's check and PasswordResetMailer's
+    // transaction. It also registers the store's tables with the connection.
+    SignInsModule,
   ],
   controllers: [AuthController, PasswordResetController, TokensController, SessionsController],
   providers: [JwtAuth, CredentialsService, PasswordResetMailer, TypeOrmAuthenticationStore],

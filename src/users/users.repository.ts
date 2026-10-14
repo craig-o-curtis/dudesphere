@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Repository } from "typeorm";
+import { DataSource, type EntityManager, IsNull, Repository } from "typeorm";
 
 import { User } from "./user.entity.js";
 
@@ -33,7 +33,12 @@ const WITHOUT_PASSWORD = {
  */
 @Injectable()
 export class UsersRepository {
-  constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly users: Repository<User>,
+    // @Inject names the token outright, because `pnpm seed:run` builds the
+    // whole app through tsx, which emits no constructor types.
+    @Inject(DataSource) private readonly dataSource: DataSource,
+  ) {}
 
   /** The member, without the password hash, or null. */
   findById(id: number): Promise<User | null> {
@@ -58,6 +63,7 @@ export class UsersRepository {
   /**
    * Stores the hash of a new password, and stamps `passwordChangedAt`, so
    * access tokens signed before that moment stop working (see JwtAuth).
+   * Pass `manager` to write inside the caller's transaction.
    *
    * Resolves false when there is no such live member.
    */
@@ -65,8 +71,10 @@ export class UsersRepository {
     id: number,
     passwordHash: string,
     passwordChangedAt: string,
+    manager?: EntityManager,
   ): Promise<boolean> {
-    const { affected } = await this.users.update(
+    const users = manager?.getRepository(User) ?? this.users;
+    const { affected } = await users.update(
       { id, deletedAt: IsNull() },
       { password: passwordHash, passwordChangedAt },
     );
@@ -89,6 +97,37 @@ export class UsersRepository {
       { password: newHash },
     );
     return affected === 1;
+  }
+
+  /**
+   * For sign-in, straight after the sign-in has started. True when the
+   * member's account is still open and their password has not changed since
+   * `passwordChangedAt`, the value read when the password was checked.
+   *
+   * It closes a gap of about a tenth of a second. Checking a password takes
+   * that long, on purpose. A password change that commits during it ends the
+   * member's sign-ins before this sign-in has started its own, so the new one
+   * would outlive the change. TokensController asks here after it has the
+   * new sign-in, and ends it when the answer is no.
+   *
+   * It compares `passwordChangedAt`, not the hash. A sign-in that upgrades a
+   * bcrypt hash changes the hash but not the password, and must not count as
+   * a change.
+   *
+   * The row is read with a share lock (FOR SHARE). A password change holds a
+   * lock on the row from its UPDATE until it commits, so this read waits for
+   * one that is in flight and then sees the new stamp. A lock needs a
+   * transaction, which is the only reason for one here.
+   */
+  signInStillValid(id: number, passwordChangedAt: string | null): Promise<boolean> {
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id },
+        select: { id: true, passwordChangedAt: true },
+        lock: { mode: "pessimistic_read" },
+      });
+      return user !== null && user.passwordChangedAt === passwordChangedAt;
+    });
   }
 }
 

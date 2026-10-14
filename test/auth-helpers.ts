@@ -89,8 +89,8 @@ export async function setRole(
 
 /**
  * The same member's token, as if they had signed in a minute earlier. It is
- * signed with the app's own `accessToken` options, so it is as real as the
- * one passed in.
+ * signed with the app's own `accessToken` options, and carries the same
+ * sign-in (`sid`) and `amr`, so it is as real as the one passed in.
  *
  * For a test that needs a token that is plainly older than something it is
  * about to do, such as a password change. A token records only the second it
@@ -102,20 +102,28 @@ export function signedAMinuteEarlier(app: INestApplication<App>, token: string):
   if (!accessToken) {
     throw new Error("AuthenticationModule has no accessToken options");
   }
-  const { sub, iat } = claimsOf(token);
+  const { sub, iat, sid, amr } = claimsOf(token);
   // The signer's clock, in milliseconds, set to a minute before the original.
   const signer = new JwtSigner({ ...accessToken, now: () => (iat - 60) * 1000 });
-  return signer.sign({ sub });
+  return signer.sign({ sub, sid, amr });
 }
 
 /** The claims of a JWT, read without checking it. Only for tokens a test just got. */
-export function claimsOf(token: string): { sub: string; iat: number; exp: number } {
+export function claimsOf(token: string): TokenClaims {
   const [, payload] = token.split(".");
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
-    sub: string;
-    iat: number;
-    exp: number;
-  };
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as TokenClaims;
+}
+
+/** What an access token from POST /auth/token carries. */
+export interface TokenClaims {
+  iss: string;
+  aud: string;
+  sub: string;
+  iat: number;
+  exp: number;
+  /** The sign-in's id. JwtAuth refuses the token once that sign-in ends. */
+  sid: string;
+  amr: string[];
 }
 
 // One member for each role, for each app. A suite calls tokenFor many times,

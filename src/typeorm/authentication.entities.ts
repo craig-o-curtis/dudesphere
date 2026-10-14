@@ -59,8 +59,11 @@ export class SessionEntity {
 
 // One row for each refresh token. The tokens of one sign-in share a family
 // id, and each use of a token adds its successor to the family.
+//
+// One column more than the docs: `sid`. See its comment.
 @Entity("refresh_tokens")
 @Index("refresh_tokens_family_id_idx", ["familyId"])
+@Index("refresh_tokens_sid_idx", ["sid"])
 @Index("refresh_tokens_user_id_idx", ["userId"])
 @Index("refresh_tokens_family_expires_at_idx", ["familyExpiresAt"])
 export class RefreshTokenEntity {
@@ -91,6 +94,15 @@ export class RefreshTokenEntity {
 
   @Column({ type: "jsonb", nullable: true })
   claims: Record<string, Json> | null;
+
+  // The sign-in's own id, the `sid` claim that TokensController puts in
+  // `claims` and the package signs into every access token of the family.
+  // Copied out of `claims` into a column of its own so JwtAuth can check,
+  // with one indexed read, that a token's sign-in has not been ended. The
+  // package cannot tell us the family id when it signs in, so this is how
+  // an access token is tied to its family. Not in the docs.
+  @Column({ type: "text", nullable: true })
+  sid: string | null;
 }
 
 // Password reset links, and later email verification links.

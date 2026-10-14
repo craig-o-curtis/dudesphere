@@ -1,6 +1,7 @@
 import type { AuthenticationRegistry } from "@nestjs/authentication";
 import { convertUtcToUnix } from "@northguild/gmt";
 
+import type { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import type { UsersRepository } from "../users/users.repository.js";
 import { JwtAuth } from "./jwt-auth.provider.js";
 
@@ -9,6 +10,7 @@ import { JwtAuth } from "./jwt-auth.provider.js";
 // claims that already passed those checks.
 describe("JwtAuth", () => {
   const usersRepository = { findById: vi.fn() };
+  const signIns = { isLive: vi.fn() };
   const registry = { registerProvider: vi.fn() };
 
   let provider: JwtAuth;
@@ -21,12 +23,18 @@ describe("JwtAuth", () => {
   const changedAt = "2026-10-14T09:00:00.500Z";
   const changedSecond = convertUtcToUnix(changedAt, { epochUnit: "seconds" }) as number;
 
+  // A sign-in's id, as TokensController makes it: a UUID.
+  const sid = "4f1c2a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
+
   beforeEach(() => {
     vi.resetAllMocks();
     provider = new JwtAuth(
       usersRepository as unknown as UsersRepository,
+      signIns as unknown as SignInsRepository,
       registry as unknown as AuthenticationRegistry,
     );
+    // Every sign-in is still going, unless a case says otherwise.
+    signIns.isLive.mockResolvedValue(true);
   });
 
   // Without this, the guard never asks it about a bearer token.
@@ -39,7 +47,7 @@ describe("JwtAuth", () => {
     it("loads the member named by `sub` and returns them", async () => {
       usersRepository.findById.mockResolvedValue(walter);
 
-      await expect(provider.validate({ sub: "25", iat: changedSecond })).resolves.toBe(walter);
+      await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBe(walter);
 
       expect(usersRepository.findById).toHaveBeenCalledWith(25);
     });
@@ -49,7 +57,7 @@ describe("JwtAuth", () => {
     it("returns null when no member has that id", async () => {
       usersRepository.findById.mockResolvedValue(null);
 
-      await expect(provider.validate({ sub: "25", iat: changedSecond })).resolves.toBeNull();
+      await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBeNull();
     });
 
     // `sub` is always String(user.id). Anything else was not signed by this
@@ -63,10 +71,12 @@ describe("JwtAuth", () => {
       ["a fraction", "2.5"],
       ["a space", " 25"],
       ["a username", "walter"],
+      ["an id past the largest the column holds", "2147483648"],
     ])("returns null for %s, without a lookup", async (_what, sub) => {
-      await expect(provider.validate({ sub, iat: changedSecond })).resolves.toBeNull();
+      await expect(provider.validate({ sub, sid, iat: changedSecond })).resolves.toBeNull();
 
       expect(usersRepository.findById).not.toHaveBeenCalled();
+      expect(signIns.isLive).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -74,10 +84,99 @@ describe("JwtAuth", () => {
       ["an iat that is text", String(changedSecond)],
     ])("returns null for %s, without a lookup", async (_what, iat) => {
       await expect(
-        provider.validate({ sub: "25", iat: iat as unknown as number }),
+        provider.validate({ sub: "25", sid, iat: iat as unknown as number }),
       ).resolves.toBeNull();
 
       expect(usersRepository.findById).not.toHaveBeenCalled();
+      expect(signIns.isLive).not.toHaveBeenCalled();
+    });
+
+    describe("the token's sign-in", () => {
+      beforeEach(() => {
+        usersRepository.findById.mockResolvedValue(walter);
+      });
+
+      it("accepts a token whose sign-in is still going", async () => {
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBe(
+          walter,
+        );
+
+        expect(signIns.isLive).toHaveBeenCalledTimes(1);
+        expect(signIns.isLive).toHaveBeenCalledWith(sid);
+      });
+
+      // A sign-out, a reset or a reused refresh token ended it. The access
+      // token must stop on the next request, not when it runs out.
+      it("refuses a token whose sign-in has ended", async () => {
+        signIns.isLive.mockResolvedValue(false);
+
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBeNull();
+      });
+
+      // TokensController only ever makes a UUID. Anything else was not
+      // signed by this app, so it never reaches the database.
+      it.each([
+        ["an empty sid", ""],
+        ["a sid that is not a UUID", "not-a-uuid"],
+        ["a UUID with more after it", `${sid}0`],
+        ["a sid that is a number", 42],
+        ["a null sid", null],
+      ])("refuses %s, without asking whether it is live", async (_what, badSid) => {
+        await expect(
+          provider.validate({ sub: "25", sid: badSid, iat: changedSecond }),
+        ).resolves.toBeNull();
+
+        expect(signIns.isLive).not.toHaveBeenCalled();
+      });
+
+      // `pnpm dev:token` signs a token that belongs to no sign-in, and
+      // marks it with `amr: ["dev"]`. See src/dev/dev-token.ts.
+      it("accepts a dev token with no sid, without asking whether it is live", async () => {
+        await expect(
+          provider.validate({ sub: "25", amr: ["dev"], iat: changedSecond }),
+        ).resolves.toBe(walter);
+
+        expect(signIns.isLive).not.toHaveBeenCalled();
+      });
+
+      // Every other token carries a sid. One without it, and without the
+      // dev mark, is refused.
+      it.each([
+        ["no amr", undefined],
+        ["a password sign-in's amr", ["pwd"]],
+        ["an amr that is text, not a list", "dev"],
+        ["an empty amr", []],
+      ])("refuses a token with no sid and %s", async (_what, amr) => {
+        await expect(provider.validate({ sub: "25", amr, iat: changedSecond })).resolves.toBeNull();
+
+        expect(signIns.isLive).not.toHaveBeenCalled();
+      });
+
+      // The two reads run side by side, so the sign-in check adds no wait.
+      // Both are asked before either answers.
+      it("asks for the member and the sign-in side by side", async () => {
+        let answerMember: (user: typeof walter) => void = () => {};
+        usersRepository.findById.mockReturnValue(
+          new Promise((resolve) => {
+            answerMember = resolve;
+          }),
+        );
+
+        const result = provider.validate({ sub: "25", sid, iat: changedSecond });
+
+        expect(usersRepository.findById).toHaveBeenCalledWith(25);
+        expect(signIns.isLive).toHaveBeenCalledWith(sid);
+
+        answerMember(walter);
+        await expect(result).resolves.toBe(walter);
+      });
+
+      // A closed account and an ended sign-in each refuse on their own.
+      it("refuses when the member is gone, even though the sign-in is live", async () => {
+        usersRepository.findById.mockResolvedValue(null);
+
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBeNull();
+      });
     });
 
     describe("after a password change", () => {
@@ -88,7 +187,7 @@ describe("JwtAuth", () => {
       });
 
       it("accepts a token signed after the change", async () => {
-        await expect(provider.validate({ sub: "25", iat: changedSecond + 60 })).resolves.toBe(
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond + 60 })).resolves.toBe(
           changed,
         );
       });
@@ -97,17 +196,21 @@ describe("JwtAuth", () => {
       // as the change is far more often the member signing in straight
       // after a reset than an old token.
       it("accepts a token signed in the same second as the change", async () => {
-        await expect(provider.validate({ sub: "25", iat: changedSecond })).resolves.toBe(changed);
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBe(
+          changed,
+        );
       });
 
       // Whoever holds it signed in with the old password.
       it("refuses a token signed in the second before the change", async () => {
-        await expect(provider.validate({ sub: "25", iat: changedSecond - 1 })).resolves.toBeNull();
+        await expect(
+          provider.validate({ sub: "25", sid, iat: changedSecond - 1 }),
+        ).resolves.toBeNull();
       });
 
       it("refuses a token signed long before the change", async () => {
         await expect(
-          provider.validate({ sub: "25", iat: changedSecond - 86_400 }),
+          provider.validate({ sub: "25", sid, iat: changedSecond - 86_400 }),
         ).resolves.toBeNull();
       });
 
@@ -117,8 +220,10 @@ describe("JwtAuth", () => {
         const onTheSecond = { ...walter, passwordChangedAt: "2026-10-14T09:00:00.000Z" };
         usersRepository.findById.mockResolvedValue(onTheSecond);
 
-        await expect(provider.validate({ sub: "25", iat: changedSecond - 1 })).resolves.toBeNull();
-        await expect(provider.validate({ sub: "25", iat: changedSecond })).resolves.toBe(
+        await expect(
+          provider.validate({ sub: "25", sid, iat: changedSecond - 1 }),
+        ).resolves.toBeNull();
+        await expect(provider.validate({ sub: "25", sid, iat: changedSecond })).resolves.toBe(
           onTheSecond,
         );
       });
@@ -127,7 +232,9 @@ describe("JwtAuth", () => {
       it("refuses the token when passwordChangedAt cannot be read", async () => {
         usersRepository.findById.mockResolvedValue({ ...walter, passwordChangedAt: "not a time" });
 
-        await expect(provider.validate({ sub: "25", iat: changedSecond + 60 })).resolves.toBeNull();
+        await expect(
+          provider.validate({ sub: "25", sid, iat: changedSecond + 60 }),
+        ).resolves.toBeNull();
       });
     });
   });

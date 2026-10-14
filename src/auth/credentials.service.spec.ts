@@ -1,6 +1,7 @@
 import type { PasswordHasher } from "@nestjs/authentication";
 import * as bcrypt from "bcrypt";
 
+import type { User } from "../users/user.entity.js";
 import type { UsersRepository } from "../users/users.repository.js";
 import { CredentialsService } from "./credentials.service.js";
 
@@ -8,7 +9,11 @@ import { CredentialsService } from "./credentials.service.js";
 // real, at its lowest cost, so the old hashes are checked the way they are
 // in the app.
 describe("CredentialsService", () => {
-  const usersRepository = { findCredentials: vi.fn(), replacePasswordHash: vi.fn() };
+  const usersRepository = {
+    findCredentials: vi.fn(),
+    replacePasswordHash: vi.fn(),
+    signInStillValid: vi.fn(),
+  };
   const passwordHasher = { verify: vi.fn(), hash: vi.fn(), needsRehash: vi.fn() };
 
   const service = new CredentialsService(
@@ -150,6 +155,29 @@ describe("CredentialsService", () => {
 
       await expect(service.verify("walter", long)).resolves.toBe(walter);
       await expect(service.verify("walter", `${long}b`)).resolves.toBeNull();
+    });
+  });
+
+  describe("stillValid", () => {
+    // The stamp that verify read goes along, so a password change since then
+    // is caught.
+    it("asks the repository with the member's id and password stamp", async () => {
+      usersRepository.signInStillValid.mockResolvedValue(true);
+      const changed = { ...walter, passwordChangedAt: "2026-10-14T09:00:00.500Z" };
+
+      await expect(service.stillValid(changed as unknown as User)).resolves.toBe(true);
+
+      expect(usersRepository.signInStillValid).toHaveBeenCalledWith(25, "2026-10-14T09:00:00.500Z");
+    });
+
+    it("passes a stamp of null through, for a password never changed", async () => {
+      usersRepository.signInStillValid.mockResolvedValue(false);
+
+      await expect(
+        service.stillValid({ ...walter, passwordChangedAt: null } as unknown as User),
+      ).resolves.toBe(false);
+
+      expect(usersRepository.signInStillValid).toHaveBeenCalledWith(25, null);
     });
   });
 });

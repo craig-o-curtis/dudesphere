@@ -15,7 +15,7 @@ import { configureApp } from "./../src/app-setup.js";
 import { AppModule } from "./../src/app.module.js";
 import authConfig from "./../src/auth/config/auth.config.js";
 import { UserRole } from "./../src/users/user.entity.js";
-import { bearer, setRole, signedInAs, tokenFor } from "./auth-helpers.js";
+import { bearer, claimsOf, setRole, signedInAs, tokenFor } from "./auth-helpers.js";
 import { listenOnLoopback } from "./listen-on-loopback.js";
 import { signUp, signUpBody } from "./sign-up.js";
 
@@ -323,7 +323,8 @@ describe("Authorization (e2e)", () => {
     // Signed by this app, so the signature is good, but no user has this id.
     // The guard looks the user up and finds nobody.
     it("401 when the token's user does not exist", async () => {
-      const token = signer.sign({ sub: "2000000000" });
+      // A live sign-in of a real member, so only the user is wrong.
+      const token = signer.sign({ sub: "2000000000", sid: claimsOf(owner.token).sid });
 
       const response = await request(app.getHttpServer())
         .post("/abidings")
@@ -417,7 +418,9 @@ describe("Authorization (e2e)", () => {
     // Signed by the app itself, as a leaked key or an old token would be.
     // The claim is simply not read.
     it("403 on an admin route for a signed token that claims admin for a plain user", async () => {
-      const token = signer.sign({ sub: String(owner.userId), role: UserRole.ADMIN });
+      // The owner's own sign-in, so only the role claim is made up.
+      const { sid } = claimsOf(owner.token);
+      const token = signer.sign({ sub: String(owner.userId), sid, role: UserRole.ADMIN });
 
       const response = await request(app.getHttpServer())
         .get("/users")

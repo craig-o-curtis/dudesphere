@@ -1,4 +1,4 @@
-import { PasswordHasher, SessionService, TokenService } from "@nestjs/authentication";
+import { PasswordHasher } from "@nestjs/authentication";
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
@@ -10,6 +10,7 @@ import { ProfilesService } from "../profiles/profiles.service.js";
 import { NotOwnerException } from "../shared/exceptions/not-owner.exception.js";
 import { ValueTakenException } from "../shared/exceptions/value-taken.exception.js";
 import { PaginationProvider } from "../shared/pagination/pagination.provider.js";
+import { SignInsRepository } from "../typeorm/sign-ins.repository.js";
 import { User, UserRole } from "./user.entity.js";
 import { UsersService } from "./users.service.js";
 
@@ -21,6 +22,7 @@ describe("UsersService", () => {
     findOne: vi.fn(),
     create: vi.fn(),
     save: vi.fn(),
+    update: vi.fn(),
     softDelete: vi.fn(),
     restore: vi.fn(),
   };
@@ -49,10 +51,10 @@ describe("UsersService", () => {
     restoreForUser: vi.fn(),
   };
 
-  // The package's sessions and refresh tokens. UsersService ends both when a
-  // password is set and when an account is closed or restored.
-  const sessionService = { revokeAll: vi.fn() };
-  const tokenService = { revokeAll: vi.fn() };
+  // Ends a member's sessions and refresh tokens, through the manager it is
+  // given. UsersService calls it when a password is set and when an account
+  // is closed or restored, each time inside the transaction.
+  const signIns = { endAllForUser: vi.fn() };
 
   // A fake hasher, so no test here runs scrypt. hash() wraps its input,
   // which makes a stored hash easy to tell from the password it came from.
@@ -79,8 +81,7 @@ describe("UsersService", () => {
         { provide: PasswordHasher, useValue: passwordHasher },
         // The real one. It has no dependencies, and getUsers is tested through it.
         PaginationProvider,
-        { provide: SessionService, useValue: sessionService },
-        { provide: TokenService, useValue: tokenService },
+        { provide: SignInsRepository, useValue: signIns },
       ],
     }).compile();
 
@@ -368,7 +369,7 @@ describe("UsersService", () => {
 
     it("sets a new password when the current one is right", async () => {
       usersRepository.findOne.mockResolvedValue(storedUser);
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       passwordHasher.verify.mockResolvedValue(true);
 
       await service.updateMyUser(3, { password: "secret2", currentPassword: "secret1" });
@@ -376,7 +377,8 @@ describe("UsersService", () => {
       // The typed password first, the stored hash second.
       expect(passwordHasher.verify).toHaveBeenCalledWith("secret1", "hashed(secret1)");
       // currentPassword is not a column, so it must not reach the update.
-      expect(usersRepository.update).toHaveBeenCalledWith(
+      expect(manager.update).toHaveBeenCalledWith(
+        User,
         { id: 3, deletedAt: IsNull() },
         { password: "hashed(secret2)", passwordChangedAt: expect.any(String) },
       );
@@ -386,7 +388,7 @@ describe("UsersService", () => {
       await expect(service.updateMyUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(usersRepository.update).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
     });
 
     it("throws 403 and changes nothing when the current password is wrong", async () => {
@@ -398,8 +400,8 @@ describe("UsersService", () => {
       await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
       await expect(attempt).rejects.toMatchObject({ errorCode: "WRONG_PASSWORD" });
       expect(passwordHasher.hash).not.toHaveBeenCalled();
-      expect(usersRepository.update).not.toHaveBeenCalled();
-      expect(sessionService.revokeAll).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(signIns.endAllForUser).not.toHaveBeenCalled();
     });
 
     // The check still runs, against no hash, before the 404. A closed
@@ -413,7 +415,7 @@ describe("UsersService", () => {
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(passwordHasher.verify).toHaveBeenCalledWith("secret1", undefined);
-      expect(usersRepository.update).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
     });
 
     it("does not ask for the current password when no new one is set", async () => {
@@ -433,7 +435,7 @@ describe("UsersService", () => {
     // update() does not apply the soft-delete filter that find() does, so the
     // criteria has to carry it or a deleted row gets mutated behind a 404.
     it("scopes the update to rows that are not soft-deleted", async () => {
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue({
         id: 3,
         username: "dude",
@@ -443,7 +445,8 @@ describe("UsersService", () => {
 
       await service.updateUser(3, { password: "secret2" });
 
-      expect(usersRepository.update).toHaveBeenCalledWith(
+      expect(manager.update).toHaveBeenCalledWith(
+        User,
         { id: 3, deletedAt: IsNull() },
         {
           password: "hashed(secret2)",
@@ -453,13 +456,13 @@ describe("UsersService", () => {
     });
 
     it("stores a new password as a hash", async () => {
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
 
       await service.updateUser(3, { password: "secret2" });
 
       expect(passwordHasher.hash).toHaveBeenCalledWith("secret2");
-      expect(usersRepository.update).toHaveBeenCalledWith(expect.anything(), {
+      expect(manager.update).toHaveBeenCalledWith(User, expect.anything(), {
         password: "hashed(secret2)",
         passwordChangedAt: expect.any(String),
       });
@@ -468,12 +471,16 @@ describe("UsersService", () => {
     // The stamp is what ends the access tokens signed with the old password.
     // See JwtAuth.
     it("stamps passwordChangedAt with the current UTC time when a password is set", async () => {
-      usersRepository.update.mockResolvedValue({ affected: 1 });
+      manager.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
 
       await service.updateUser(3, { password: "secret2" });
 
-      const [, written] = usersRepository.update.mock.calls[0] as [unknown, Record<string, string>];
+      const [, , written] = manager.update.mock.calls[0] as [
+        unknown,
+        unknown,
+        Record<string, string>,
+      ];
       expect(isValidUtc(written.passwordChangedAt)).toBe(true);
     });
 
@@ -485,58 +492,59 @@ describe("UsersService", () => {
         usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
       });
 
-      // Both kinds: a session and a refresh token each keep a member signed
-      // in. The package keys a member by a string, so the id goes as "3".
-      it("revokes every session and every refresh token of the member", async () => {
-        usersRepository.update.mockResolvedValue({ affected: 1 });
+      // Both kinds, a session and a refresh token, each keep a member signed
+      // in. endAllForUser ends the two, through the manager it is handed.
+      it("ends every sign-in of the member through the transaction's manager", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
 
         await service.updateUser(3, { password: "secret2" });
 
-        expect(sessionService.revokeAll).toHaveBeenCalledWith("3");
-        expect(tokenService.revokeAll).toHaveBeenCalledWith("3");
+        expect(signIns.endAllForUser).toHaveBeenCalledWith(3, manager);
       });
 
-      // The package's services write through their own store, so there is
-      // no transaction to share. The password is stored first, then the
-      // sign-ins end.
-      it("stores the password first, outside any transaction", async () => {
-        usersRepository.update.mockResolvedValue({ affected: 1 });
+      // One transaction for both writes, so they are saved together or not
+      // at all. The user row goes first: its lock is what
+      // UsersRepository.signInStillValid waits on.
+      it("stores the password first, then ends the sign-ins, in one transaction", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
 
         await service.updateUser(3, { password: "secret2" });
 
-        expect(dataSource.transaction).not.toHaveBeenCalled();
-        expect(usersRepository.update.mock.invocationCallOrder[0]).toBeLessThan(
-          sessionService.revokeAll.mock.invocationCallOrder[0],
-        );
-        expect(sessionService.revokeAll.mock.invocationCallOrder[0]).toBeLessThan(
-          tokenService.revokeAll.mock.invocationCallOrder[0],
+        expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+        expect(usersRepository.update).not.toHaveBeenCalled();
+        expect(manager.update.mock.invocationCallOrder[0]).toBeLessThan(
+          signIns.endAllForUser.mock.invocationCallOrder[0],
         );
       });
 
-      // Nothing rolls the password back. The caller gets the failure and
-      // tries again, which ends the sign-ins that are left.
-      it("rejects when ending the sign-ins fails, with the password already stored", async () => {
-        usersRepository.update.mockResolvedValue({ affected: 1 });
+      // The error escapes the transaction callback, which tells TypeORM to
+      // undo the new password. The old one still works, and so do the
+      // sign-ins, and the caller can try again.
+      it("rejects when ending the sign-ins fails, so the password change rolls back", async () => {
+        manager.update.mockResolvedValue({ affected: 1 });
         const failure = new Error("connection lost");
-        sessionService.revokeAll.mockRejectedValueOnce(failure);
+        signIns.endAllForUser.mockRejectedValueOnce(failure);
 
         await expect(service.updateUser(3, { password: "secret2" })).rejects.toBe(failure);
 
-        expect(usersRepository.update).toHaveBeenCalledTimes(1);
+        // The user is not read back for an answer.
+        expect(usersRepository.findOne).not.toHaveBeenCalled();
       });
 
+      // The 404 is thrown inside the transaction, so it rolls back too.
       it("ends no sign-in when the user is not found", async () => {
-        usersRepository.update.mockResolvedValue({ affected: 0 });
+        manager.update.mockResolvedValue({ affected: 0 });
 
         await expect(service.updateUser(3, { password: "secret2" })).rejects.toBeInstanceOf(
           NotFoundException,
         );
 
-        expect(sessionService.revokeAll).not.toHaveBeenCalled();
-        expect(tokenService.revokeAll).not.toHaveBeenCalled();
+        expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+        expect(signIns.endAllForUser).not.toHaveBeenCalled();
       });
     });
 
+    // A plain update, with no transaction: there is only one write.
     it("ends no sign-in when the body has no password", async () => {
       usersRepository.update.mockResolvedValue({ affected: 1 });
       usersRepository.findOne
@@ -545,8 +553,8 @@ describe("UsersService", () => {
 
       await service.updateUser(3, { username: "donny" });
 
-      expect(sessionService.revokeAll).not.toHaveBeenCalled();
-      expect(tokenService.revokeAll).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(signIns.endAllForUser).not.toHaveBeenCalled();
     });
 
     // Changing a username must not sign anybody out.
@@ -673,48 +681,46 @@ describe("UsersService", () => {
 
       expect(profilesService.softDeleteForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
-      expect(sessionService.revokeAll).not.toHaveBeenCalled();
-      expect(tokenService.revokeAll).not.toHaveBeenCalled();
+      expect(signIns.endAllForUser).not.toHaveBeenCalled();
     });
 
     // A closed account has no sign-ins. Its sessions and refresh tokens end
     // too, so they stay ended if the account is restored.
-    it("revokes every session and every refresh token of the member", async () => {
+    it("ends every sign-in of the member through the transaction's manager", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
 
       await service.deleteUser(3);
 
-      expect(sessionService.revokeAll).toHaveBeenCalledWith("3");
-      expect(tokenService.revokeAll).toHaveBeenCalledWith("3");
+      expect(signIns.endAllForUser).toHaveBeenCalledWith(3, manager);
     });
 
-    // The package's services write through their own store, not through the
-    // transaction's manager. So they run once the transaction has committed:
-    // after the abidings, the last step inside it.
-    it("ends the sign-ins after the transaction, not inside it", async () => {
+    // Inside the transaction, so the account cannot close with its sign-ins
+    // left going. Before the abidings, because Mongo is outside the
+    // transaction and has to run last.
+    it("ends the sign-ins after the profile and before the abidings", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
 
       await service.deleteUser(3);
 
-      expect(sessionService.revokeAll.mock.invocationCallOrder[0]).toBeGreaterThan(
-        userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0],
+      expect(signIns.endAllForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        profilesService.softDeleteForUser.mock.invocationCallOrder[0],
       );
-      expect(tokenService.revokeAll.mock.invocationCallOrder[0]).toBeGreaterThan(
+      expect(signIns.endAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
         userAbidingsService.softDeleteForUser.mock.invocationCallOrder[0],
       );
     });
 
-    // The account is already closed by then, and stays closed. Its access
-    // tokens stop anyway, because JwtAuth finds no live member. The caller
-    // gets the failure and can try again.
-    it("rejects when ending the sign-ins fails, with the account already closed", async () => {
+    // The error escapes the transaction callback, so the user and the
+    // profile roll back and the account stays open. Mongo is never touched.
+    // The caller gets the failure and can try again.
+    it("rejects when ending the sign-ins fails, so the account stays open", async () => {
       manager.softDelete.mockResolvedValue({ affected: 1 });
       const failure = new Error("connection lost");
-      sessionService.revokeAll.mockRejectedValueOnce(failure);
+      signIns.endAllForUser.mockRejectedValueOnce(failure);
 
       await expect(service.deleteUser(3)).rejects.toBe(failure);
 
-      expect(userAbidingsService.softDeleteForUser).toHaveBeenCalledWith(3);
+      expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
     });
 
     // As with createUser: the error has to escape the transaction callback,
@@ -727,7 +733,7 @@ describe("UsersService", () => {
 
       expect(userAbidingsService.softDeleteForUser).not.toHaveBeenCalled();
       // The account is still open, so its sign-ins stay.
-      expect(sessionService.revokeAll).not.toHaveBeenCalled();
+      expect(signIns.endAllForUser).not.toHaveBeenCalled();
     });
 
     it("rejects when the abidings soft delete fails, so the user soft delete rolls back", async () => {
@@ -760,22 +766,34 @@ describe("UsersService", () => {
     });
 
     // Nobody is signed in to a restored account until they sign in to it.
-    // As in deleteUser, the sign-ins end once the transaction has committed,
-    // and before the user is read back for the answer.
-    it("revokes every session and refresh token after the transaction", async () => {
+    // As in deleteUser, the sign-ins end inside the transaction, after the
+    // profile and before the abidings.
+    it("ends every sign-in inside the transaction, before the abidings", async () => {
       manager.restore.mockResolvedValue({ affected: 1 });
       usersRepository.findOne.mockResolvedValue({ id: 3, username: "dude" });
 
       await service.restoreUser(3);
 
-      expect(sessionService.revokeAll).toHaveBeenCalledWith("3");
-      expect(tokenService.revokeAll).toHaveBeenCalledWith("3");
-      expect(sessionService.revokeAll.mock.invocationCallOrder[0]).toBeGreaterThan(
+      expect(signIns.endAllForUser).toHaveBeenCalledWith(3, manager);
+      expect(signIns.endAllForUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        profilesService.restoreForUser.mock.invocationCallOrder[0],
+      );
+      expect(signIns.endAllForUser.mock.invocationCallOrder[0]).toBeLessThan(
         userAbidingsService.restoreForUser.mock.invocationCallOrder[0],
       );
-      expect(tokenService.revokeAll.mock.invocationCallOrder[0]).toBeLessThan(
-        usersRepository.findOne.mock.invocationCallOrder[0],
-      );
+    });
+
+    // The error escapes the transaction callback, so the account stays
+    // closed and Mongo is never touched.
+    it("rejects when ending the sign-ins fails, so the user restore rolls back", async () => {
+      manager.restore.mockResolvedValue({ affected: 1 });
+      const failure = new Error("connection lost");
+      signIns.endAllForUser.mockRejectedValueOnce(failure);
+
+      await expect(service.restoreUser(3)).rejects.toBe(failure);
+
+      expect(userAbidingsService.restoreForUser).not.toHaveBeenCalled();
+      expect(usersRepository.findOne).not.toHaveBeenCalled();
     });
 
     it("throws 404 and leaves the profile alone when the user is not soft-deleted", async () => {
@@ -786,7 +804,7 @@ describe("UsersService", () => {
       expect(profilesService.restoreForUser).not.toHaveBeenCalled();
       expect(userAbidingsService.restoreForUser).not.toHaveBeenCalled();
       expect(usersRepository.findOne).not.toHaveBeenCalled();
-      expect(sessionService.revokeAll).not.toHaveBeenCalled();
+      expect(signIns.endAllForUser).not.toHaveBeenCalled();
     });
 
     // As with deleteUser: the error has to escape the transaction callback,
