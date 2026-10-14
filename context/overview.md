@@ -219,8 +219,8 @@ A member holds two tokens:
 
 - **The access token** is a JWT. It goes with every request as
   `Authorization: Bearer <accessToken>` and lasts 15 minutes. `expiresIn` is
-  that lifetime in seconds. It holds the member's id, their username and the
-  id of their session, and nothing else.
+  that lifetime in seconds. It holds the member's id and the id of their
+  session, and nothing else.
 - **The refresh token** is 43 random characters, not a JWT. It goes to two
   routes only, `POST /auth/refresh` and `POST /auth/logout`, and
   lasts 7 days. The database keeps a hash

@@ -889,9 +889,9 @@ describe("Tokens (e2e)", () => {
   // through with the user check alone.
   describe("a token that belongs to no session", () => {
     it("still works, as the dev token command needs", async () => {
-      const { sent, userId } = await newSession();
+      const { userId } = await newSession();
 
-      const token = await app.get(JwtService).signAsync({ sub: userId, username: sent.username });
+      const token = await app.get(JwtService).signAsync({ sub: userId });
 
       const me = await whoAmI(token).expect(200);
       expect(me.body).toMatchObject({ id: userId });

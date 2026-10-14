@@ -11,12 +11,12 @@ export type NewSession = Pick<Session, "id" | "userId" | "expiresAt">;
 /** What a new refresh token row needs. The rest of the columns have defaults. */
 export type NewRefreshToken = Pick<RefreshToken, "id" | "sessionId" | "expiresAt">;
 
-/** What findToken returns: the token's row, its session's row, and the member. */
+/** What findToken returns: the token's row, and its session's row. */
 export interface FoundToken {
   token: RefreshToken;
   session: Session;
-  /** Null when the member's account is closed or gone. */
-  member: { id: number; username: string } | null;
+  /** False when the session's member has closed their account, or it is gone. */
+  accountOpen: boolean;
 }
 
 /**
@@ -69,12 +69,13 @@ export class SessionsRepository {
   }
 
   /**
-   * The row for a token's hash, with its session and the session's member,
-   * or null when no row has that hash. Used and expired tokens, and tokens
-   * of sessions that are over, come back too: the caller tells them apart.
+   * The row for a token's hash, with its session, or null when no row has
+   * that hash. Used and expired tokens, and tokens of sessions that are
+   * over, come back too: the caller tells them apart.
    *
-   * One query with two joins. TypeORM leaves a soft-deleted user out of a
-   * join, so `member` is null for a closed account.
+   * One query with two joins. The second, to the user, is only there to
+   * answer `accountOpen`. TypeORM leaves a soft-deleted user out of a join,
+   * so the session comes back with no user when the account is closed.
    */
   async findToken(id: string): Promise<FoundToken | null> {
     const [token] = await this.refreshTokens.find({
@@ -89,11 +90,7 @@ export class SessionsRepository {
     // `user` is typed as always present, but the join leaves it null for a
     // closed account.
     const user = session.user as Session["user"] | null;
-    return {
-      token,
-      session,
-      member: user ? { id: user.id, username: user.username } : null,
-    };
+    return { token, session, accountOpen: user !== null };
   }
 
   /**

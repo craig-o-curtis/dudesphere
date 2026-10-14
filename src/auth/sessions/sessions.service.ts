@@ -27,12 +27,6 @@ export interface TokenPair {
   expiresIn: number;
 }
 
-/** The member a pair of tokens is for. */
-interface TokenOwner {
-  id: number;
-  username: string;
-}
-
 /**
  * Everything the rest of the app does with a session goes through here:
  * start one at login, renew it, end it, and ask whether it is still going.
@@ -87,17 +81,17 @@ export class SessionsService {
    * At login, once the password has been checked: starts a session and
    * returns its first pair of tokens.
    */
-  async start(user: TokenOwner): Promise<TokenPair> {
+  async start(userId: number): Promise<TokenPair> {
     const now = this.now();
     const session = {
       id: randomUUID(),
-      userId: user.id,
+      userId,
       // Fixed here, and no refresh moves it.
       expiresAt: this.after(now, this.auth.sessionExpiresIn),
     };
     await this.sessionsRepository.createSession(session);
 
-    return this.pair(user, session, now);
+    return this.pair(session, now);
   }
 
   /**
@@ -123,7 +117,7 @@ export class SessionsService {
     if (!found || this.isOver(found.session, now)) {
       throw new RefreshTokenInvalidException();
     }
-    const { token, session, member } = found;
+    const { token, session, accountOpen } = found;
 
     // 3. Used before. Two parties hold this token, so the session ends.
     if (token.usedAt) {
@@ -139,7 +133,7 @@ export class SessionsService {
     // 5. The account was closed since. Closing an account ends its sessions,
     //    so step 2 should already have refused this. If one slipped through,
     //    it ends here.
-    if (!member) {
+    if (!accountOpen) {
       await this.sessionsRepository.revokeSession(session.id, now);
       throw new RefreshTokenInvalidException();
     }
@@ -147,7 +141,7 @@ export class SessionsService {
     // 6. Hand out the successor, then spend this token. In that order: if the
     //    app stops between the two, the member still holds a token that
     //    works, and can try again.
-    const pair = await this.pair(member, session, now);
+    const pair = await this.pair(session, now);
 
     // The mark is one conditional statement. If it changed nothing, another
     // request spent this same token in the moment since step 3. That is a
@@ -212,8 +206,7 @@ export class SessionsService {
   // housekeeping the two tables get. There is no scheduler, and each login
   // and each refresh passes through here.
   private async pair(
-    user: TokenOwner,
-    session: Pick<Session, "id" | "expiresAt">,
+    session: Pick<Session, "id" | "userId" | "expiresAt">,
     now: string,
   ): Promise<TokenPair> {
     const refreshToken = newOneTimeToken();
@@ -229,7 +222,7 @@ export class SessionsService {
     );
 
     return {
-      accessToken: await this.signToken(user, session.id),
+      accessToken: await this.signToken(session.userId, session.id),
       refreshToken,
       expiresIn: this.auth.expiresIn,
     };
@@ -238,8 +231,8 @@ export class SessionsService {
   // Signs the access token. The secret, the lifetime, the audience, the
   // issuer and the algorithm are all set once, on JwtModule in AuthModule, so
   // nothing but the payload is passed here.
-  private signToken(user: TokenOwner, sessionId: string): Promise<string> {
-    return this.jwtService.signAsync(jwtPayloadFor(user, sessionId));
+  private signToken(userId: number, sessionId: string): Promise<string> {
+    return this.jwtService.signAsync(jwtPayloadFor(userId, sessionId));
   }
 
   // Over means the session cannot be used any more, for either reason: it

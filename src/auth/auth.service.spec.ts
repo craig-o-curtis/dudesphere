@@ -92,7 +92,7 @@ describe("AuthService", () => {
         "walter@example.com",
         "secret1",
       );
-      expect(sessionsService.start).toHaveBeenCalledWith(walter);
+      expect(sessionsService.start).toHaveBeenCalledWith(walter.id);
       expect(result).toBe(pair);
     });
 

@@ -29,7 +29,7 @@ describe("JwtAuthGuard", () => {
 
   // What a verified token holds, and the user the database has for it.
   const sid = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
-  const payload = { sub: 25, username: "walter", iat: 1_800_000_000, sid };
+  const payload = { sub: 25, iat: 1_800_000_000, sid };
   const walter = { userId: 25, username: "walter", role: UserRole.USER };
 
   // A fake ExecutionContext that hands the guard our request object. The two
@@ -120,7 +120,7 @@ describe("JwtAuthGuard", () => {
     // A token from `pnpm dev:token` belongs to no session. Only the app can
     // sign one, so there is nothing to check.
     it("lets a token with no session id through without asking", async () => {
-      verifyAsync.mockResolvedValue({ sub: 25, username: "walter", iat: 1_800_000_000 });
+      verifyAsync.mockResolvedValue({ sub: 25, iat: 1_800_000_000 });
       const request: { headers: object; user?: unknown } = {
         headers: { authorization: "Bearer signed.jwt.token" },
       };

@@ -65,13 +65,11 @@ describe("createDevToken", () => {
       await createDevToken(jwtService, usersService, { ...development, identifier: "walter" });
 
       expect(signAsync).toHaveBeenCalledTimes(1);
-      expect(signAsync.mock.calls[0][0]).toEqual(jwtPayloadFor(walter));
-      // No role. JwtAuthGuard reads it from the database on each request,
-      // so a 30-day token cannot keep a role its member has lost.
-      expect(signAsync.mock.calls[0][0]).toEqual({
-        sub: 25,
-        username: "walter",
-      });
+      expect(signAsync.mock.calls[0][0]).toEqual(jwtPayloadFor(walter.id));
+      // No role and no username. JwtAuthGuard reads both from the database
+      // on each request, so a 30-day token cannot keep a role its member has
+      // lost.
+      expect(signAsync.mock.calls[0][0]).toEqual({ sub: 25 });
     });
 
     // Only the lifetime is passed. The secret, the audience and the issuer

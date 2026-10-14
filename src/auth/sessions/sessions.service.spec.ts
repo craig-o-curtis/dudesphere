@@ -36,7 +36,8 @@ describe("SessionsService", () => {
     sessionRetention: 15552000,
   };
 
-  const walter = { id: 25, username: "walter", email: "walter@example.com", role: "user" };
+  // The member the sessions below belong to.
+  const walterId = 25;
   const sessionId = "0b9f6d1e-6f0c-4a3e-9d55-2f1f6f0f7a10";
 
   /** The session row createSession() was last called with. */
@@ -83,7 +84,7 @@ describe("SessionsService", () => {
 
   describe("start", () => {
     it("returns an access token, a refresh token and the access token's lifetime", async () => {
-      const pair = await service.start(walter);
+      const pair = await service.start(walterId);
 
       expect(pair).toEqual({
         accessToken: "signed.jwt.token",
@@ -93,9 +94,9 @@ describe("SessionsService", () => {
     });
 
     it("saves a session row for that member, with a new id each time", async () => {
-      await service.start(walter);
+      await service.start(walterId);
       const first = createdSession();
-      await service.start(walter);
+      await service.start(walterId);
 
       expect(first.userId).toBe(25);
       expect(first.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -105,7 +106,7 @@ describe("SessionsService", () => {
     // The token row points at the session row, so the session has to be
     // there first.
     it("saves the session, then its first refresh token, pointing at it", async () => {
-      await service.start(walter);
+      await service.start(walterId);
 
       expect(savedToken().sessionId).toBe(createdSession().id);
       expect(sessionsRepository.createSession.mock.invocationCallOrder[0]).toBeLessThan(
@@ -115,7 +116,7 @@ describe("SessionsService", () => {
 
     // The table must never hold something a reader could use.
     it("stores a hash of the refresh token, and not the token", async () => {
-      const { refreshToken } = await service.start(walter);
+      const { refreshToken } = await service.start(walterId);
 
       expect(savedToken().id).toBe(hashOf(refreshToken));
       expect(JSON.stringify(sessionsRepository.saveToken.mock.calls)).not.toContain(refreshToken);
@@ -124,7 +125,7 @@ describe("SessionsService", () => {
     it("gives the refresh token 7 days and the session 30", async () => {
       const before = getUtcNow();
 
-      await service.start(walter);
+      await service.start(walterId);
 
       expect(isAbout(savedToken().expiresAt, addUtc(before, { seconds: 604800 }))).toBe(true);
       expect(isAbout(createdSession().expiresAt, addUtc(before, { seconds: 2592000 }))).toBe(true);
@@ -135,25 +136,21 @@ describe("SessionsService", () => {
     it("has the sessions that ended 180 days ago deleted, and none newer", async () => {
       const before = getUtcNow();
 
-      await service.start(walter);
+      await service.start(walterId);
 
       const [cutoff] = sessionsRepository.deleteSessionsEndedBy.mock.calls.at(-1) as [string];
       expect(isAbout(cutoff, subtractUtc(before, { seconds: 15552000 }))).toBe(true);
     });
 
     // `sub` is what JwtAuthGuard reads back as the logged-in member, and
-    // `sid` is how it finds the session row. No role and no email: the guard
-    // reads the member from the database on every request, so anything else
-    // in the token would only go stale.
-    it("signs the member's id and username and the session id, and nothing else", async () => {
-      await service.start(walter);
+    // `sid` is how it finds the session row. No role, no username and no
+    // email: the guard reads the member from the database on every request,
+    // so anything else in the token would only go stale.
+    it("signs the member's id and the session's id, and nothing else", async () => {
+      await service.start(walterId);
 
       expect(jwtService.signAsync).toHaveBeenCalledTimes(1);
-      expect(jwtService.signAsync).toHaveBeenCalledWith({
-        sub: 25,
-        username: "walter",
-        sid: createdSession().id,
-      });
+      expect(jwtService.signAsync).toHaveBeenCalledWith({ sub: 25, sid: createdSession().id });
     });
   });
 
@@ -162,9 +159,9 @@ describe("SessionsService", () => {
 
     /**
      * What the repository finds for a token that is good to swap: its row,
-     * its session's row, and the member. Each part takes overrides.
+     * its session's row, and an account that is open. Each part takes overrides.
      */
-    function found(overrides: { token?: object; session?: object; member?: object | null } = {}) {
+    function found(overrides: { token?: object; session?: object; accountOpen?: boolean } = {}) {
       const now = getUtcNow();
       return {
         token: {
@@ -181,7 +178,7 @@ describe("SessionsService", () => {
           revokedAt: null,
           ...overrides.session,
         },
-        member: overrides.member === undefined ? { id: 25, username: "walter" } : overrides.member,
+        accountOpen: overrides.accountOpen ?? true,
       };
     }
 
@@ -213,11 +210,7 @@ describe("SessionsService", () => {
 
         expect(savedToken()).toMatchObject({ id: hashOf(refreshToken), sessionId });
         expect(sessionsRepository.createSession).not.toHaveBeenCalled();
-        expect(jwtService.signAsync).toHaveBeenCalledWith({
-          sub: 25,
-          username: "walter",
-          sid: sessionId,
-        });
+        expect(jwtService.signAsync).toHaveBeenCalledWith({ sub: 25, sid: sessionId });
       });
 
       // The session's end is fixed at login. A refresh near the end must not
@@ -254,19 +247,6 @@ describe("SessionsService", () => {
         const saved = sessionsRepository.saveToken.mock.invocationCallOrder[0];
         const spent = sessionsRepository.markTokenUsed.mock.invocationCallOrder[0];
         expect(saved).toBeLessThan(spent);
-      });
-
-      // The username may have changed since login.
-      it("signs the new access token for the member as they are now", async () => {
-        sessionsRepository.findToken.mockResolvedValue(
-          found({ member: { id: 25, username: "sobchak" } }),
-        );
-
-        await service.refresh(presented);
-
-        expect(jwtService.signAsync).toHaveBeenCalledWith(
-          expect.objectContaining({ sub: 25, username: "sobchak" }),
-        );
       });
     });
 
@@ -377,7 +357,7 @@ describe("SessionsService", () => {
       // Closing an account ends its sessions, so this should not be
       // reachable. It is the backstop if a session ever slips through.
       it("a token whose member has closed their account", async () => {
-        sessionsRepository.findToken.mockResolvedValue(found({ member: null }));
+        sessionsRepository.findToken.mockResolvedValue(found({ accountOpen: false }));
 
         await expectRefused(service.refresh(presented));
 
@@ -404,7 +384,7 @@ describe("SessionsService", () => {
       sessionsRepository.findToken.mockResolvedValue({
         token: { id: hashOf(presented), sessionId },
         session,
-        member: { id: 25, username: "walter" },
+        accountOpen: true,
       });
 
       await service.end(presented);
@@ -418,7 +398,7 @@ describe("SessionsService", () => {
       sessionsRepository.findToken.mockResolvedValue({
         token: { id: hashOf(presented), sessionId, usedAt: getUtcNow() },
         session,
-        member: { id: 25, username: "walter" },
+        accountOpen: true,
       });
 
       await service.end(presented);

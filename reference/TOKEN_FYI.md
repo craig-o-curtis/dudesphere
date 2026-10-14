@@ -44,17 +44,17 @@ up in different ways.
 
 ## The three tokens, side by side
 
-|                          | Access token                    | Refresh token                              | Password reset token                      |
-| ------------------------ | ------------------------------- | ------------------------------------------ | ----------------------------------------- |
-| What it is               | A JWT, signed with `JWT_SECRET` | 43 random characters. Not a JWT            | 43 random characters. Not a JWT           |
-| What is in it            | User id, username, session id   | Nothing. It is a key to a row              | Nothing. It is a key to a row             |
-| How the member gets it   | In the answer to a login        | In the same answer                         | By email, inside a link                   |
-| Where it is sent back    | `Authorization: Bearer` header  | Body of `/auth/refresh` and `/auth/logout` | Body of `/auth/reset-password`            |
-| How long it lasts        | 15 minutes                      | 7 days                                     | 30 minutes                                |
-| How many times it works  | Any number, until it expires    | Once                                       | Once                                      |
-| What the server keeps    | Nothing                         | A SHA-256 hash, in `refresh_token`         | A SHA-256 hash, in `password_reset_token` |
-| Its row after it is used | There is no row                 | Kept for the record, then deleted          | Deleted at once                           |
-| Does it log anyone in?   | It is the proof of login        | It renews a login                          | No. It only changes the password          |
+|                          | Access token                       | Refresh token                              | Password reset token                      |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------- |
+| What it is               | A JWT, signed with `JWT_SECRET`    | 43 random characters. Not a JWT            | 43 random characters. Not a JWT           |
+| What is in it            | The user's id and the session's id | Nothing. It is a key to a row              | Nothing. It is a key to a row             |
+| How the member gets it   | In the answer to a login           | In the same answer                         | By email, inside a link                   |
+| Where it is sent back    | `Authorization: Bearer` header     | Body of `/auth/refresh` and `/auth/logout` | Body of `/auth/reset-password`            |
+| How long it lasts        | 15 minutes                         | 7 days                                     | 30 minutes                                |
+| How many times it works  | Any number, until it expires       | Once                                       | Once                                      |
+| What the server keeps    | Nothing                            | A SHA-256 hash, in `refresh_token`         | A SHA-256 hash, in `password_reset_token` |
+| Its row after it is used | There is no row                    | Kept for the record, then deleted          | Deleted at once                           |
+| Does it log anyone in?   | It is the proof of login           | It renews a login                          | No. It only changes the password          |
 
 There are no cookies. The API reads the header and the body, and nothing
 else.

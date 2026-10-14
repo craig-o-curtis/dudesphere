@@ -87,7 +87,7 @@ export async function setRole(
  * The same member's token, as if they had logged in a minute earlier. It is
  * signed by the app's own JwtService, so it is as real as the one passed in.
  *
- * It carries the member's id and username and no session id. That is on
+ * It carries the member's id and no session id. That is on
  * purpose: the guard then skips its session check, and what refuses this
  * token is the password check alone, which is what the suites that use it
  * are testing. A password change also ends every session, so with a session
@@ -101,8 +101,8 @@ export async function setRole(
  */
 export function signedAMinuteEarlier(app: INestApplication<App>, token: string): Promise<string> {
   const jwt = app.get(JwtService);
-  const { sub, username, iat } = jwt.decode<{ sub: number; username: string; iat: number }>(token);
-  return jwt.signAsync({ sub, username, iat: iat - 60 });
+  const { sub, iat } = jwt.decode<{ sub: number; iat: number }>(token);
+  return jwt.signAsync({ sub, iat: iat - 60 });
 }
 
 // One member for each role, for each app. A suite calls tokenFor many times,

@@ -265,7 +265,7 @@ describe("Passwords (e2e)", () => {
       const { email, userId } = await register("secret123");
       const { body } = await login(email, "secret123").expect(200);
       const forged = await jwt.signAsync(
-        { sub: userId, username: "e2e-forged", role: "user" },
+        { sub: userId, role: "user" },
         { audience: "some-other-app" },
       );
 
