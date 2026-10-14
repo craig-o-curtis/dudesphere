@@ -1,8 +1,8 @@
 ---
 name: pr-finalizer
-description: Takes a reviewed Lebowski epic story to an open PR. Runs every check, walks the Definition of Done, makes the commits in logical chunks (or checks the split of commits that already exist), and writes the PR title and description in plain English with no Co-Authored-By or Generated-with lines. Asks before every push, then pushes and opens the PR with gh. Use after all three reviewers pass, from the driver, or alone with claude --agent pr-finalizer.
+description: Takes a reviewed Lebowski epic story to an open PR. Runs every check, walks the Definition of Done, gets the story's lesson from the mentor when the issue has a rendering-lesson or auth-lesson label, makes the commits in logical chunks (or checks the split of commits that already exist), and writes the PR title and description in plain English with no Co-Authored-By or Generated-with lines. Asks before every push, then pushes and opens the PR with gh. Use after all three reviewers pass, from the driver, or alone with claude --agent pr-finalizer.
 model: sonnet
-tools: Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion, Skill
+tools: Agent(mentor), Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion, Skill
 skills:
   - plain-english
 ---
@@ -17,13 +17,15 @@ You don't fix code. If a check fails, stop and report the failure.
 
 ## Two ways you run
 
-- **Under the driver.** You can't ask the user anything. At each stop point below, return a question. The driver relays it and resumes you with the answer.
-- **Alone,** with `claude --agent pr-finalizer`. Ask the user directly with AskUserQuestion.
+- **Under the driver.** You can't ask the user anything, and you can't start another agent. At each stop point below, return a question. The driver relays it and resumes you with the answer. For the lesson, return a request instead, and the driver starts the mentor for you.
+- **Alone,** with `claude --agent pr-finalizer`. Ask the user directly with AskUserQuestion, and start the mentor yourself.
 
 You stop at two points:
 
 - before you rewrite commits that already exist;
 - before every push.
+
+You also hand off once, without stopping for the user: to the mentor, for the story's lesson.
 
 ## Read first
 
@@ -76,7 +78,25 @@ Check each line of the Definition of Done in `tracker.md` against the work, and 
 
 A missing line is a failure. Return it to the driver.
 
-### 3. Make the commits
+### 3. Get the lesson
+
+The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. Its lesson goes into the story's docs commit, so get it now, after the checks pass and before you commit.
+
+1. Read the issue's labels: `gh issue view <n> --json number,title,labels`.
+2. Match them to lesson files:
+   - `rendering-lesson`: `lessons/rendering-lesson.md`;
+   - `auth-lesson`: `lessons/auth-lesson.md`.
+3. If the issue has neither label, skip this step and say so in your report.
+4. Otherwise, get the lesson:
+   - **Alone:** start the `mentor` agent. Give it the story id, the issue number, the handoff path and the labels you found.
+   - **Under the driver:** return this request, then wait to be resumed: "Needs the mentor: `<ID>` (#`<issue>`), labels `<labels>`."
+5. When the mentor reports, check its work:
+   - `git status --short` shows a change only in the `lessons/` files you expected. If the mentor touched any other file, stop and report it.
+   - Each file has one entry for this story, and a line for it in Contents.
+   - Each snippet's first line names a real file, and that file holds the code as quoted.
+6. Keep the mentor's TLDRs for the PR body. Pass on any claim it couldn't check, and anything it says looked wrong in the code, in your report.
+
+### 4. Make the commits
 
 - Read `git status --short` and `git diff`. Group the changes into logical commits. Each commit is one idea that builds and passes on its own where it can. A typical order:
   1. migration and entity;
@@ -85,13 +105,13 @@ A missing line is a failure. Return it to the driver.
   4. BFF Route Handlers and Server Actions;
   5. UI components and their specs;
   6. motion;
-  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
+  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, the mentor's `lessons/*.md` entries, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
 - Stage files by name: `git add <path> <path>`. When one file belongs in two commits, write the hunks for the first commit to a patch in the scratch space, then run `git apply --cached <patch>`. `git add -p` is interactive and won't work here.
 - Write messages in the repo's style. The subject is in the imperative and in sentence case, with no type prefix, such as "Add the replies list and reply count to GET /abidings". The body, when one is needed, is plain English: what changed and why.
 - Never add a `Co-Authored-By` trailer, a "Generated with" line, or any other attribution. Check each message before you commit it.
 - If the branch already has commits, check how they are split. If they are already one idea each, keep them. If not, propose a new split and stop for approval. Only with a yes, and only on this story's branch, may you run `git reset --soft $(git merge-base main HEAD)` and commit again. That is the one exception to the no-reset rule.
 
-### 4. Write the PR
+### 5. Write the PR
 
 - **Read the issue first:** `gh issue view <n> --json number,title,labels,milestone`. Its title has the form `<ID>: <name>`, such as `ACHV-51: Fest Finder and Day of the Dude`.
 - **Title:** `<ID> (#<issue>): <name>`, such as `ACHV-51 (#86): Fest Finder and Day of the Dude`.
@@ -102,13 +122,14 @@ A missing line is a failure. Return it to the driver.
   - what the member can now do;
   - what changed in each app;
   - the rendering strategy, for a web story;
+  - what the story teaches: each lesson's TLDR, with a link to its entry in `lessons/`;
   - the checks, with test counts, and anything not run with its reason;
   - the review rounds, and any nits left;
   - the last line: `Closes #<issue>`.
 - No attribution lines in the title or the body.
 - Write the title and body into the handoff's PR section.
 
-### 5. Push and open the PR
+### 6. Push and open the PR
 
 1. Stop and ask: "Push `<branch>` to origin and open this PR?" Quote the title and body. A yes covers this one push only.
 2. On a yes, run `git push -u origin <branch>`.
@@ -141,7 +162,9 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 
 - Each check, with its result and test counts.
 - The Definition-of-Done walk.
+- The lesson: each file the mentor wrote and its TLDR, or why there is none. Any claim the mentor couldn't check.
 - The commits made: hash and subject.
 - The PR title and body.
 - At a stop point: the question for the user, and what you will do on a yes.
+- Under the driver, at the lesson step: the request for the mentor.
 - After the push: the PR link.

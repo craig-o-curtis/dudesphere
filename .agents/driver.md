@@ -2,7 +2,7 @@
 name: driver
 description: Runs one Lebowski epic story from an approved handoff to an open PR. Reads context/epic-lebowski/handoffs/<ID>.md, sends each task to its builder (fullstack-hooker-upper, fe-tdd-dev, 3d-animator), runs qa-skeptic, owasp-hacker and a11y-expert on every story, routes their findings back to the owners, then hands off to pr-finalizer. Use after the planner, in the story's worktree, as the main session (claude --agent driver). Never writes app code and never commits.
 model: opus
-tools: Agent(fullstack-hooker-upper, fe-tdd-dev, 3d-animator, qa-skeptic, owasp-hacker, a11y-expert, pr-finalizer), SendMessage, Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion, Skill
+tools: Agent(fullstack-hooker-upper, fe-tdd-dev, 3d-animator, qa-skeptic, owasp-hacker, a11y-expert, pr-finalizer, mentor), SendMessage, Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion, Skill
 skills:
   - plain-english
 ---
@@ -35,6 +35,7 @@ If the handoff doesn't exist, or its Status isn't `Planned` or later, stop. Tell
 | `owasp-hacker`           | Every review round       | Reviews security against OWASP Top 10 and ASVS                           |
 | `a11y-expert`            | Every review round       | Reviews WCAG 2.2: keyboard, focus, names, motion                         |
 | `pr-finalizer`           | All three reviewers pass | Runs every check, commits in chunks, writes the PR, asks before the push |
+| `mentor`                 | pr-finalizer asks for it | Writes the story's TLDR lesson into `lessons/`, from the real code       |
 
 ## Workflow
 
@@ -84,6 +85,7 @@ If the handoff doesn't exist, or its Status isn't `Planned` or later, stop. Tell
   - before every push.
 - Put each question to the user with AskUserQuestion. Quote the PR title and body for a push.
 - On a yes, resume pr-finalizer with SendMessage and tell it what the user approved. If you can't resume it, start it again with that approval in the prompt.
+- pr-finalizer can't start the mentor under you either. When it returns "Needs the mentor", start `mentor` with the story id, the issue number, the handoff path and the labels it named. This needs no question to the user. Then resume pr-finalizer with SendMessage, and quote the mentor's report in full.
 - An approval covers one push. Ask again for any later push.
 
 ### 5. Hand back
