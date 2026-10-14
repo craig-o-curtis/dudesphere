@@ -297,15 +297,17 @@ pnpm dev:token walter@example.com     # or by email
 pnpm dev:token | pbcopy               # straight to the clipboard, on macOS
 ```
 
-The token is printed on a line of its own. It lasts 30 days. The command asks
+The token is the only thing on standard output. pnpm's own line naming the
+script, and everything else, goes to standard error, so a pipe or a `$( )`
+gets the token alone. It lasts 30 days. The command asks
 for no password, does not need the app to be running, and is not counted by
 the login rate limit. It refuses to run when `NODE_ENV` is `production`.
 
 A token belongs to one user. An admin's token opens the admin routes. A
 member's token is that member: `GET /users/me` shows who.
 
-The other way to get one is to log in. See "Two bodies" below. That token
-lasts one hour.
+The other way to get one is to log in. See "Two bodies" below. That access
+token lasts 15 minutes.
 
 ### 3. Send it
 
@@ -340,11 +342,11 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/users/me
 
 ### Which routes need what
 
-| Needs          | Routes                                                                                       |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| Nothing        | `GET /`, the four `/auth` routes, `GET /abidings`, `GET /abidings/:id`, both `GET /hashtags` |
-| Any token      | Everything under `/profiles`, the `me` routes, and posting or editing an abiding             |
-| An admin token | `GET /users`, `POST /users`, the `/users/:id` writes, hiding and restoring a hashtag         |
+| Needs          | Routes                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Nothing        | `GET /`, every `/auth` route but `POST /auth/sign-out-everywhere`, `GET /abidings`, `GET /abidings/:id`, both `GET /hashtags` |
+| Any token      | Everything under `/profiles`, the `me` routes, `POST /auth/sign-out-everywhere`, and posting, editing or deleting an abiding  |
+| An admin token | `GET /users`, `POST /users`, the `/users/:id` writes, hiding and restoring a hashtag                                          |
 
 `GET /users/:id` answers only that user or an admin.
 [context/overview.md](context/overview.md) lists every route.
@@ -360,7 +362,7 @@ Sign up, `POST /auth/sign-up`:
 {
   "username": "walter",
   "email": "walter@example.com",
-  "password": "secret123",
+  "password": "a-long-secret-123",
   "profile": { "displayName": "Walter" }
 }
 ```
@@ -368,7 +370,7 @@ Sign up, `POST /auth/sign-up`:
 Sign in, `POST /auth/token`. `identifier` is a username or an email:
 
 ```json
-{ "identifier": "walter", "password": "secret123" }
+{ "identifier": "walter", "password": "a-long-secret-123" }
 ```
 
 The answer holds `accessToken`, `refreshToken` and `expiresIn`. Send
@@ -381,13 +383,13 @@ and comes with no refresh token, so there is nothing to refresh.
 
 ### When a request is refused
 
-| Answer                                       | What it means                                                      | What to do                                       |
-| -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
-| 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                   | Set the Auth tab to Bearer and paste a token     |
-| 401 with a `message` such as "token expired" | Expired, forged, or its account was closed or its password changed | Run `pnpm dev:token` again                       |
-| 403 "Forbidden"                              | The route is for admins and the token is a member's                | Use `pnpm dev:token` with no name, for the admin |
-| 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                       | Use that member's token, or the admin's          |
-| 429 `RATE_LIMITED`                           | Over 100 requests a minute, or 5 sign-ins in 15 minutes            | Wait for the time in the `Retry-After` header    |
+| Answer                                       | What it means                                                                         | What to do                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 401 `missing_credentials`                    | No `Authorization` header, or not a `Bearer` one                                      | Set the Auth tab to Bearer and paste a token     |
+| 401 with a `message` such as "token expired" | Expired, forged, or its account was closed or its password changed                    | Run `pnpm dev:token` again                       |
+| 403 "Forbidden"                              | The route is for admins and the token is a member's                                   | Use `pnpm dev:token` with no name, for the admin |
+| 403 `NOT_OWNER`                              | The thing exists and belongs to someone else                                          | Use that member's token, or the admin's          |
+| 429 `RATE_LIMITED`                           | Over 100 requests a minute, 5 sign-ins in 15 minutes, or 3 reset emails in 15 minutes | Wait for the time in the `Retry-After` header    |
 
 A 401 for a bad token also has a `WWW-Authenticate` header that says why.
 

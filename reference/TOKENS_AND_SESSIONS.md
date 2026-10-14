@@ -374,12 +374,12 @@ whose `message` says why, such as `"token expired"` or `"unknown subject"`.
 
 The authorization guard reads what the route declares:
 
-| The route declares            | The guard                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `@Public()`                   | Lets anyone through, signed in or not                                       |
-| `@Can.Anyone()`               | Lets through any signed-in member                                           |
-| `@Can(UserPolicy, "viewAll")` | Calls `UserPolicy.before`, then `UserPolicy.viewAll`. 403 if they say no    |
-| Nothing                       | Refuses: 403 for a member, 401 for a guest. The startup log names the route |
+| The route declares            | The guard                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `@Public()`                   | Lets anyone through, signed in or not                                                                   |
+| `@Can.Anyone()`               | Lets through any signed-in member                                                                       |
+| `@Can(UserPolicy, "viewAll")` | Calls `UserPolicy.before`. If that decides nothing, calls `UserPolicy.viewAll`. 403 if the answer is no |
+| Nothing                       | Refuses: 403 for a member, 401 for a guest. The startup log names the route                             |
 
 A route that forgot its declaration is closed, not open.
 [src/users/user.policy.ts](../src/users/user.policy.ts) and
@@ -388,8 +388,11 @@ two policies. Both let admins through and nobody else. The role is read from
 the member that `JwtAuth.validate` loaded, so a demoted admin loses admin on
 their next request, with the same token.
 
-On a `@Public()` route the token is optional. A good one sets
-`request.user`. A bad one is ignored, and the caller goes through as nobody.
+On a `@Public()` route the authentication guard does not read the token at
+all. A good one and a bad one are both ignored, and the caller goes through
+as nobody: `@CurrentUser()` is `null`. A route that wants the caller when
+there is one, and lets guests in too, uses `@Authenticate({ optional: true })`
+instead. No route in this app does.
 
 **The cost is one small query for each signed-in request**:
 `UsersRepository.findById`. The old guard ran two, the member and the
@@ -402,14 +405,14 @@ session.
 `TokensController.refresh` passes the token to `TokenService.refresh`, which
 runs these checks in order. The first one that fails ends the request with a 401.
 
-| #   | The check                                              | If it fails                                              |
-| --- | ------------------------------------------------------ | -------------------------------------------------------- |
-| 1   | Is it 43 characters of the right kind?                 | `"Refresh token invalid"`, with no query                 |
-| 2   | Is there a row for its hash, in a family not revoked?  | `"Refresh token invalid"`                                |
-| 3   | Is it unspent and past its 7 days, or its family's 30? | `"Refresh token expired"`. Nothing is spent or ended     |
-| 4   | Is the row unused?                                     | **The family is revoked**, then `"Refresh token reused"` |
-| 5   | Save the successor, then mark this token used          | If the mark changes no row: family revoked, `"reused"`   |
-| 6   | Sign a new access token with the family's claims       |                                                          |
+| #   | The check                                                      | If it fails                                              |
+| --- | -------------------------------------------------------------- | -------------------------------------------------------- |
+| 1   | Is it 43 characters of the right kind?                         | `"Refresh token invalid"`, with no query                 |
+| 2   | Is there a row for its hash, in a family not revoked?          | `"Refresh token invalid"`                                |
+| 3   | If it is unspent: is it inside its 7 days and its family's 30? | `"Refresh token expired"`. Nothing is spent or ended     |
+| 4   | Is the row unused?                                             | **The family is revoked**, then `"Refresh token reused"` |
+| 5   | Save the successor, then mark this token used                  | If the mark changes no row: family revoked, `"reused"`   |
+| 6   | Sign a new access token with the family's claims               |                                                          |
 
 The answer is a new pair, in the same shape as signing in. The client throws
 the old refresh token away and keeps the new one.
@@ -635,28 +638,97 @@ refusal above carries the package's own body.
 for every failed refresh. The package says `invalid`, `expired` or `reused`.
 A client does the same thing for all three: it sends the member to sign in.
 
+## Passwords
+
+**The rules for a new password.** 12 characters at least and 128 at most, as
+in the docs. They apply wherever a password is set: sign-up
+(`CreateUserDto`), a change at `PATCH /users/me` or an admin's
+`PATCH /users/:id` (`UpdateUserDto`, built from `CreateUserDto`), and a reset
+(`ResetPasswordDto`).
+
+| Where                       | DTO                                                  | Rule            |
+| --------------------------- | ---------------------------------------------------- | --------------- |
+| `POST /auth/sign-up`        | [CreateUserDto](../src/users/dto/create-user.dto.ts) | 12 to 128       |
+| `PATCH /users/me`, `/:id`   | [UpdateUserDto](../src/users/dto/update-user.dto.ts) | 12 to 128       |
+| `POST /auth/password/reset` | [ResetPasswordDto](../src/auth/auth.dto.ts)          | 12 to 128       |
+| `POST /auth/token`          | [SignInDto](../src/auth/auth.dto.ts)                 | none, not empty |
+
+**Sign-in checks no length.** A member whose password was set when 6
+characters were enough still signs in with it. The rules only stop a new
+short password from being set.
+
+**How a password is stored.** As a scrypt hash, made by the package's
+`PasswordHasher`. scrypt is slow on purpose and uses a lot of memory, so a
+stolen table is expensive to guess against. The hash records its own
+settings, such as `$scrypt$ln=17,r=8,p=1$...`.
+
+**Old hashes.** Before 2026-10-14 hashes were bcrypt. They still work:
+
+1. [verifyPassword](../src/users/password-hashes.ts) checks a hash that
+   starts with `$2` with bcrypt, and any other with `PasswordHasher.verify`.
+2. On a right password, [CredentialsService.verify](../src/auth/credentials.service.ts)
+   sees that the hash is bcrypt (`needsRehash`) and makes a scrypt hash of
+   the same password.
+3. [UsersRepository.replacePasswordHash](../src/users/users.repository.ts)
+   stores it, but only while the stored hash is still the bcrypt one it
+   checked. If the member changed their password in that tenth of a second,
+   the change wins and the old password is not put back.
+
+The password did not change, so `passwordChangedAt` stays as it was and no
+token ends.
+
+**Changing your own password** at `PATCH /users/me` needs `currentPassword`
+as well. Without it a stolen access token would be enough to lock the owner
+out. A wrong one is 403 `WRONG_PASSWORD`, not 401, so a client does not
+treat it as a lost sign-in.
+
 ## Rate limits
 
-`AuthThrottlerGuard` is the docs' guard, with two changes: it reads
-`identifier` as well as `email`, and it answers with `RATE_LIMITED`.
+[`AuthThrottlerGuard`](../src/auth/auth-throttler.guard.ts) is the docs'
+guard, with three changes: it reads `identifier` as well as `email`, it adds
+a second count by IP address alone, and it answers with `RATE_LIMITED`.
 
-| Route                        | Limit           | Counted by                        |
-| ---------------------------- | --------------- | --------------------------------- |
-| `POST /auth/token`           | 5 in 15 minutes | The identifier and the IP address |
-| `POST /auth/password/forgot` | 3 in 15 minutes | The email and the IP address      |
-| `POST /auth/sign-up`         | 100 a minute    | The email and the IP address      |
-| Every other route            | 100 a minute    | The IP address                    |
+There are two counts, registered in
+[src/app.module.ts](../src/app.module.ts):
+
+| Count     | From          | Limit        | Counted by                                                                   |
+| --------- | ------------- | ------------ | ---------------------------------------------------------------------------- |
+| `default` | The docs      | 100 a minute | The account and the IP address where the body names one; else the IP address |
+| `ip`      | This app only | 100 a minute | The IP address alone, and only where the body names an account               |
+
+Two routes set a tighter `default` limit with `@Throttle()`:
+
+| Route                                                                     | `default` limit | `ip` limit   |
+| ------------------------------------------------------------------------- | --------------- | ------------ |
+| `POST /auth/token`                                                        | 5 in 15 minutes | 100 a minute |
+| `POST /auth/password/forgot`                                              | 3 in 15 minutes | 100 a minute |
+| Any other route whose body names an account, such as `POST /auth/sign-up` | 100 a minute    | 100 a minute |
+| A route whose body names no account                                       | 100 a minute    | not counted  |
+
+A body names an account when it holds an `identifier` or an `email` that is
+a string. The guard checks the body, not the route. So `PATCH /users/me` and
+`PATCH /users/:id` with a new email, and an admin's `POST /users`, are counted
+by the `ip` count too, and their `default` count is by account and IP.
+
+A request must pass both counts. `AuthThrottlerGuard.handleRequest` runs once
+for each count. For `default` it hands over to the docs' tracker,
+`getTracker`. For `ip` it skips a request whose body names no account, and
+otherwise counts it by the IP address alone.
 
 The identifier and the email are trimmed and lowercased first, so
 `Ada@Example.com ` and `ada@example.com` share one count.
 
-**This is weaker than before in one way.** On a route whose body names an
-account, the guard counts by account and address together, and nothing
-counts the address alone. So one IP address that names a new email on each
-request is never held back on `POST /auth/token` or
-`POST /auth/password/forgot`. It can try one password against many accounts,
-or ask for reset emails to many addresses. The docs' guard works the same
-way.
+**Why the second count.** The docs' guard counts a request that names an
+account by that account and the address together, and nothing else. So one
+IP address that named a new email on each request would never be refused. It
+could try one password against every account, or send reset emails to every
+address. The `ip` count stops that at 100 a minute, however many accounts
+the address names.
+
+Each count sends its own headers on a request it lets through. The `ip`
+count's end in `-ip`, such as `X-RateLimit-Remaining-ip`. A request the `ip`
+count refuses gets `Retry-After-ip` from `@nestjs/throttler`, as well as the
+`Retry-After` that `AuthThrottlerGuard` sets on every refusal.
 
 **A username and an email are counted apart.** The guard sees only what was
 typed. So one account gets 5 tries by username and 5 more by email.
@@ -843,7 +915,7 @@ Sign in and keep the pair:
 ```bash
 PAIR=$(curl -s -X POST http://localhost:3000/auth/token \
   -H "Content-Type: application/json" \
-  -d '{"identifier":"walter","password":"secret123"}')
+  -d '{"identifier":"walter","password":"a-long-secret-123"}')
 
 ACCESS=$(echo "$PAIR" | jq -r .accessToken)
 REFRESH=$(echo "$PAIR" | jq -r .refreshToken)
@@ -887,7 +959,9 @@ curl -s http://localhost:3000/users/me -H "Authorization: Bearer $NEW_ACCESS"
 # 200: the family is over, and the access token runs out by itself
 ```
 
-What each step answers. `test/tokens.e2e-spec.ts` checks every row:
+What each step answers. `test/tokens.e2e-spec.ts` checks every row but
+"The first access token, after that refresh". No test sends that token again
+after a refresh:
 
 | Step                                          | Answer                                     |
 | --------------------------------------------- | ------------------------------------------ |
@@ -954,8 +1028,6 @@ belongs to no family. Only the app's key can sign one.
   `sessions` first.
 - **No cleanup without traffic.** Old rows are deleted when someone signs in
   or refreshes. There is no scheduled job.
-- **The rate limit does not hold one address that names many accounts.** See
-  "Rate limits".
 
 ## Further reading
 

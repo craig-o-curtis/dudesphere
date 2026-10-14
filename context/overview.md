@@ -54,17 +54,17 @@ of a user must delete that user's rows here first.
 **`refresh_tokens`**: one row for each refresh token handed out. The tokens of
 one sign-in share a `family_id`.
 
-| Column              | Type                  | Description                                                                      |
-| ------------------- | --------------------- | -------------------------------------------------------------------------------- |
-| `id`                | text PK               | SHA-256 of the refresh token, in base64url. The token is not stored              |
-| `family_id`         | text                  | The sign-in this token belongs to. Indexed                                       |
-| `user_id`           | text                  | Indexed                                                                          |
-| `created_at`        | timestamptz           |                                                                                  |
-| `expires_at`        | timestamptz           | This one token stops working at this instant, 7 days after it was made           |
-| `family_expires_at` | timestamptz           | Every token of the sign-in stops at this instant, 30 days after sign-in. Indexed |
-| `used_at`           | timestamptz, nullable | When the token was swapped for its successor                                     |
-| `revoked`           | boolean               | True once the family was ended: a sign-out, a reset, a reuse                     |
-| `claims`            | jsonb, nullable       | What goes into every access token of the family: `amr`                           |
+| Column              | Type                  | Description                                                                                                           |
+| ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `id`                | text PK               | SHA-256 of the refresh token, in base64url. The token is not stored                                                   |
+| `family_id`         | text                  | The sign-in this token belongs to. Indexed                                                                            |
+| `user_id`           | text                  | Indexed                                                                                                               |
+| `created_at`        | timestamptz           |                                                                                                                       |
+| `expires_at`        | timestamptz           | This one token stops working at this instant: 7 days after it was made, or at `family_expires_at` if that comes first |
+| `family_expires_at` | timestamptz           | Every token of the sign-in stops at this instant, 30 days after sign-in. Indexed                                      |
+| `used_at`           | timestamptz, nullable | When the token was swapped for its successor                                                                          |
+| `revoked`           | boolean               | True once the family was ended, such as by a sign-out, a password change or reset, or a reuse                         |
+| `claims`            | jsonb, nullable       | What goes into every access token of the family: `amr`                                                                |
 
 A family's rows are deleted once `family_expires_at` has passed, whenever
 anyone signs in or refreshes.
@@ -187,11 +187,11 @@ full shape.
 
 ### Auth
 
-| Method | Endpoint                | Access | Description                             |
-| ------ | ----------------------- | ------ | --------------------------------------- |
-| POST   | `/auth/sign-up`         | Public | Sign up. Creates the user and a profile |
-| POST   | `/auth/password/forgot` | Public | Email a password reset link. Always 202 |
-| POST   | `/auth/password/reset`  | Public | Set a new password with the link. 204   |
+| Method | Endpoint                | Access | Description                                                |
+| ------ | ----------------------- | ------ | ---------------------------------------------------------- |
+| POST   | `/auth/sign-up`         | Public | Sign up. Creates the user and a profile                    |
+| POST   | `/auth/password/forgot` | Public | Email a password reset link. 202 for any well-formed email |
+| POST   | `/auth/password/reset`  | Public | Set a new password with the link. 204                      |
 
 ### Tokens
 
@@ -258,8 +258,9 @@ The sign-up body is
 `{ "username": "...", "email": "...", "password": "...", "profile": { "displayName": "..." } }`.
 `profile` may also carry `bio`, `profileImageUrl`, `isDude` and `ordainedDate`.
 A display name in use answers 409 `DISPLAY_NAME_TAKEN`, as a taken email or
-username answers `EMAIL_TAKEN` or `USERNAME_TAKEN`. A password is 6 to 128
-characters.
+username answers `EMAIL_TAKEN` or `USERNAME_TAKEN`. A new password is 12 to
+128 characters, as in the docs. Sign-in sets no minimum, so a password set
+when 6 was enough still works.
 
 The sign-in body is `{ "identifier": "...", "password": "..." }`. The docs sign
 in with an email; here `identifier` is a username or an email. A value with `@`
@@ -281,8 +282,9 @@ replaces each with a scrypt hash at that sign-in.
 ### Forgot password
 
 1. `POST /auth/password/forgot` with `{ "email": "..." }` answers 202 with no
-   body, every time. It starts the work and does not wait for it, so the answer
-   is the same, and as fast, whether or not the address has an account.
+   body, for any well-formed email. It starts the work and does not wait for
+   it, so the answer is the same, and as fast, whether or not the address has
+   an account.
 2. If a live user has that email, they are sent a link to
    `<FRONTEND_URL>/reset-password?token=<token>`. It works once, for
    `PASSWORD_RESET_EXPIRES_IN` seconds, 30 minutes by default, and only while
@@ -304,11 +306,12 @@ A reset ends every refresh token of the member, and stamps
 
 ### Rate limits
 
-| Route                        | Limit           | Counted per                                                   |
-| ---------------------------- | --------------- | ------------------------------------------------------------- |
-| Every route                  | 100 a minute    | IP address, or account and IP where the body names an account |
-| `POST /auth/token`           | 5 in 15 minutes | identifier and IP together                                    |
-| `POST /auth/password/forgot` | 3 in 15 minutes | email and IP together                                         |
+| Route                               | Limit           | Counted per                                                   |
+| ----------------------------------- | --------------- | ------------------------------------------------------------- |
+| Every route                         | 100 a minute    | IP address, or account and IP where the body names an account |
+| A route whose body names an account | 100 a minute    | IP address alone, as well                                     |
+| `POST /auth/token`                  | 5 in 15 minutes | identifier and IP together                                    |
+| `POST /auth/password/forgot`        | 3 in 15 minutes | email and IP together                                         |
 
 A request over a limit gets 429 `RATE_LIMITED` and a `Retry-After` header with
 the seconds to wait. Sign-in counts every try, right or wrong. The identifier
@@ -316,9 +319,12 @@ is counted as sign-in reads it, so `Walter` and `walter` share one count. A
 username and an email are counted apart, because the limiter sees only what
 was typed.
 
-The count is the docs' design: where the body names an account, it is kept
-for that account and IP together. So an address that names a new account on
-every try is not held by a count of its own on those two routes.
+Where the body names an account, the docs' count is kept for that account
+and IP together. On its own, that would let an address that names a new
+account on every try go on for ever. So a second count, `ip`, which the docs
+do not have, holds each address to 100 a minute on those routes, however
+many accounts it names. It sends its own headers, such as
+`X-RateLimit-Remaining-ip`.
 
 The limiter counts the caller's IP address as Express reports it. `main.ts`
 sets `trust proxy` to `loopback`, so behind a proxy on the same machine each

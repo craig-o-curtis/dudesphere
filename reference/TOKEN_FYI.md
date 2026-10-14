@@ -18,6 +18,10 @@ the reasons and a table of old names and new ones.
   working until it expires, up to 15 minutes. Before, it stopped on the next
   request. The docs accept this. A password change, a password reset and a
   closed account still stop it at once.
+- **A new password is 12 characters at least**, as in the docs. It was 6.
+  Sign-in still takes a shorter one that was set before.
+- **Passwords are hashed with scrypt** now. An old bcrypt hash still signs
+  in, and is replaced with a scrypt one at that sign-in.
 
 ## The picture in one minute
 
@@ -81,16 +85,16 @@ else.
 The access token has no table: the server stores nothing for it. The package
 keeps three tables. Only two of them ever get rows.
 
-|                       | `refresh_tokens`                      | `email_tokens`                            | `sessions`                               |
-| --------------------- | ------------------------------------- | ----------------------------------------- | ---------------------------------------- |
-| What one row is       | One refresh token that was handed out | One reset link that can still be used     | One browser signed in with a cookie      |
-| Rows in this app      | One for each sign-in and each refresh | Normally none, or one while a link is out | **None, ever.** This API uses no cookies |
-| Its key               | `id`, the hash of the token           | `id`, the hash of the token               | `id`, the hash of the cookie             |
-| How rows group        | By `family_id`: one sign-in           | By `user_id` and `purpose`                | By `user_id`                             |
-| How it is "used up"   | `used_at` is set. The row stays       | The row is deleted                        | Not used here                            |
-| How it is ended early | `revoked` is set on the whole family  | A new email or password on the account    | Not used here                            |
-| When a row is deleted | After the family's 30-day end         | When used, or soon after it expires       | Not used here                            |
-| Link to `user`        | `user_id`, text, no foreign key       | `user_id`, text, no foreign key           | `user_id`, text, no foreign key          |
+|                       | `refresh_tokens`                      | `email_tokens`                                  | `sessions`                               |
+| --------------------- | ------------------------------------- | ----------------------------------------------- | ---------------------------------------- |
+| What one row is       | One refresh token that was handed out | One reset link that can still be used           | One browser signed in with a cookie      |
+| Rows in this app      | One for each sign-in and each refresh | Normally none, or one for each link that is out | **None, ever.** This API uses no cookies |
+| Its key               | `id`, the hash of the token           | `id`, the hash of the token                     | `id`, the hash of the cookie             |
+| How rows group        | By `family_id`: one sign-in           | By `user_id` and `purpose`                      | By `user_id`                             |
+| How it is "used up"   | `used_at` is set. The row stays       | The row is deleted                              | Not used here                            |
+| How it is ended early | `revoked` is set on the whole family  | A new email or password on the account          | Not used here                            |
+| When a row is deleted | After the family's 30-day end         | When used, or soon after it expires             | Not used here                            |
+| Link to `user`        | `user_id`, text, no foreign key       | `user_id`, text, no foreign key                 | `user_id`, text, no foreign key          |
 
 All three are in
 [authentication.entities.ts](../src/typeorm/authentication.entities.ts), and
@@ -164,9 +168,10 @@ Each route, its request body, and the method it ends up in:
 
 ### 1. Sign in: `POST /auth/token`
 
-1. `AuthThrottlerGuard` counts the try. Five in 15 minutes are allowed for
-   one identifier from one IP address
-   ([auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)).
+1. `AuthThrottlerGuard` counts the try twice
+   ([auth-throttler.guard.ts](../src/auth/auth-throttler.guard.ts)). Five in
+   15 minutes are allowed for one identifier from one IP address, and 100 a
+   minute from one IP address whatever identifier it sends.
 2. `TokensController.issue` takes `{ identifier, password }`
    ([tokens.controller.ts](../src/auth/tokens.controller.ts)).
 3. `CredentialsService.verify` finds the member with
@@ -188,7 +193,9 @@ Each route, its request body, and the method it ends up in:
 Three global guards run first, in this order:
 
 1. **`AuthThrottlerGuard`**: 100 requests a minute from one IP address.
-   Over that is 429.
+   Where the body names an account, it counts that account and IP address
+   together instead, and also keeps a count of the IP address alone. Over
+   either is 429.
 2. **The authentication guard** (from `AuthenticationModule`, in
    `app.module.ts`): who is calling?
    - No `Authorization: Bearer` header on a route that is not `@Public()`:
@@ -235,7 +242,8 @@ family is made: a refresh renews a sign-in, it never starts one.
 
 - **This device:** `POST /auth/token/revoke` → `TokensController.revoke` →
   `TokenService.revoke` → `TypeOrmAuthenticationStore.revokeRefreshTokenFamily`.
-  It sets `revoked` on every row of that one family. Always 204.
+  It sets `revoked` on every row of that one family. It answers 204 for any
+  token, real or made up. Only a body the DTO refuses gets a 400.
 - **Every device:** `POST /auth/sign-out-everywhere` →
   `SessionsController.signOutEverywhere` →
   `SignInService.signOutEverywhere` → `TokenService.revokeAll` →
@@ -273,12 +281,12 @@ The table is `email_tokens`. Its key columns:
 **Asking for the link:** `POST /auth/password/forgot` with `{ email }`.
 
 1. `AuthThrottlerGuard` allows 3 in 15 minutes for one email from one IP
-   address.
+   address, and 100 a minute from one IP address whatever email it sends.
 2. `PasswordResetController.forgot` calls `PasswordResetService.request` and
    does not wait for it
    ([password-reset.controller.ts](../src/auth/password-reset.controller.ts)).
-   The answer is 202 every time, so it does not reveal whether the email has
-   an account.
+   The answer is 202 for any well-formed email, so it does not reveal whether
+   the email has an account.
 3. `PasswordResetMailer.findUser` looks the member up with
    `UsersRepository.findCredentials`. If there is none, it stops.
 4. The package makes a token and saves its hash, the email and the
