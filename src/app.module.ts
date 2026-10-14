@@ -11,7 +11,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AbidingsModule } from "./abidings/abidings.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
-import { AuthThrottlerGuard } from "./auth/auth-throttler.guard.js";
+import { AuthThrottlerGuard, IP_THROTTLER } from "./auth/auth-throttler.guard.js";
 import { AuthModule } from "./auth/auth.module.js";
 import authConfig from "./auth/config/auth.config.js";
 import appConfig from "./config/app.config.js";
@@ -40,11 +40,14 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       // itself, as AuthModule does with ConfigModule.forFeature.
       load: [appConfig, postgresConfig, mongoConfig, observeConfig, throttleConfig],
     }),
-    // The limit every route gets: 100 requests a minute from one IP address,
-    // as in the docs' "Rate-limit sign-in". AuthThrottlerGuard counts by
-    // account and IP address together where the body names an account, and
-    // the sign-in and forgot-password routes set tighter limits with
-    // @Throttle.
+    // Two counts. The first is the docs': 100 requests a minute on every
+    // route. AuthThrottlerGuard counts it by IP address, or by account and IP
+    // together where the body names an account, and the sign-in and
+    // forgot-password routes set tighter limits with @Throttle.
+    //
+    // The second, IP_THROTTLER, is not in the docs. It holds one IP address
+    // to 100 requests a minute on the routes that name an account, however
+    // many accounts it names. See AuthThrottlerGuard for why.
     //
     // The counts are kept in this process's memory, so they reset on a
     // restart and are not shared between two copies of the app.
@@ -52,7 +55,10 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [throttleConfig.KEY],
       useFactory: (throttle: ConfigType<typeof throttleConfig>) => ({
         skipIf: () => !throttle.enabled,
-        throttlers: [{ ttl: minutes(1), limit: 100 }],
+        throttlers: [
+          { ttl: minutes(1), limit: 100 },
+          { name: IP_THROTTLER, ttl: minutes(1), limit: 100 },
+        ],
       }),
     }),
     // Authentication first: its guard sets request.user, which authorization

@@ -2,7 +2,7 @@ import { ExecutionContext, HttpException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { ThrottlerStorage } from "@nestjs/throttler";
 
-import { AuthThrottlerGuard } from "./auth-throttler.guard.js";
+import { AuthThrottlerGuard, IP_THROTTLER } from "./auth-throttler.guard.js";
 
 // getTracker is protected, because only ThrottlerGuard calls it. This opens
 // it to the spec and adds nothing.
@@ -153,6 +153,57 @@ describe("AuthThrottlerGuard", () => {
 
       expect(walterAgain).toBe(walter);
       expect(donny).not.toBe(walter);
+    });
+  });
+
+  // AppModule registers two counts: the docs' default, and IP_THROTTLER, a
+  // cap by IP address alone on the routes that name an account.
+  describe("the IP count", () => {
+    const twoCounts = new GuardUnderTest(
+      [
+        { ttl: 60_000, limit: 100 },
+        { name: IP_THROTTLER, ttl: 60_000, limit: 100 },
+      ],
+      storage as unknown as ThrottlerStorage,
+      new Reflector(),
+    );
+
+    beforeAll(async () => {
+      await twoCounts.onModuleInit();
+    });
+
+    // Each count the store was asked for, as [key, count name].
+    async function countsFor(body: unknown): Promise<[string, string][]> {
+      await expect(twoCounts.canActivate(contextFor(body))).resolves.toBe(true);
+      const calls = (storage.increment.mock.calls as unknown[][]).map(
+        ([key, , , , name]) => [key, name] as [string, string],
+      );
+      vi.clearAllMocks();
+      return calls;
+    }
+
+    it("counts a request that names an account twice: by account, and by address", async () => {
+      const counts = await countsFor({ email: "walter@example.com" });
+
+      expect(counts.map(([, name]) => name)).toEqual(["default", IP_THROTTLER]);
+    });
+
+    // Without this, an address that named a new account each time would
+    // never be refused.
+    it("keeps one IP count for an address, whatever account it names", async () => {
+      const walter = await countsFor({ email: "walter@example.com" });
+      const donny = await countsFor({ email: "donny@example.com" });
+
+      expect(donny[1][0]).toBe(walter[1][0]);
+      expect(donny[0][0]).not.toBe(walter[0][0]);
+    });
+
+    // The default count is already by address there, so a second would
+    // count the same request twice.
+    it("skips a request that names no account", async () => {
+      const counts = await countsFor({ message: "hi" });
+
+      expect(counts.map(([, name]) => name)).toEqual(["default"]);
     });
   });
 
