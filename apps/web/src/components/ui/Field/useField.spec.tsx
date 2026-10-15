@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -194,7 +194,8 @@ describe("useField", () => {
           <Probe />
         </Form>,
       );
-      expect(input).toHaveFocus();
+      // Form moves focus in an effect, so wait for it.
+      await waitFor(() => expect(input).toHaveFocus());
     });
   });
 

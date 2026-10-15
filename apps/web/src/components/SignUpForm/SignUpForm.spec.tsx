@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AUTH_MESSAGES, initialAuthFormState, type AuthFormState } from "@/lib/actions/auth-state";
@@ -119,7 +119,8 @@ describe("SignUpForm", () => {
     const { user } = renderForm();
     expect(screen.getByLabelText("Email")).not.toHaveFocus();
     await submit(user);
-    expect(screen.getByLabelText("Username")).toHaveFocus();
+    // Form moves focus in an effect after the state arrives, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText("Username")).toHaveFocus());
   });
 
   it("leaves focus alone when only a form error comes back", async () => {
@@ -183,8 +184,11 @@ describe("SignUpForm", () => {
       ["Password", "password must be longer than or equal to 12 characters"],
     ];
     for (const [label, message] of expected) {
-      const input = await screen.findByLabelText(label);
-      expect(input).toHaveAttribute("aria-invalid", "true");
+      // The errors arrive after the action resolves, so wait for them.
+      await waitFor(() =>
+        expect(screen.getByLabelText(label)).toHaveAttribute("aria-invalid", "true"),
+      );
+      const input = screen.getByLabelText(label);
       const texts = input
         .getAttribute("aria-describedby")!
         .split(" ")
@@ -243,7 +247,7 @@ describe("SignUpForm", () => {
     signUp.mockReturnValue(new Promise<AuthFormState>((resolve) => (finish = resolve)));
     const { user } = renderForm();
     await submit(user);
-    const button = screen.getByRole("button", { name: "Signing up…" });
+    const button = await screen.findByRole("button", { name: "Signing up…" });
     expect(button).not.toBeDisabled();
     expect(button).toHaveAttribute("aria-disabled", "true");
     await act(async () => finish(initialAuthFormState));

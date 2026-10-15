@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { createRef, use } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -105,7 +105,7 @@ describe("Form", () => {
     expect(document.body).toHaveFocus();
   });
 
-  it("moves focus to the first invalid field in page order when new errors arrive", () => {
+  it("moves focus to the first invalid field in page order when new errors arrive", async () => {
     const { rerender } = render(
       <Form aria-label="Sign in" errors={{}}>
         <Inputs />
@@ -116,10 +116,11 @@ describe("Form", () => {
         <Inputs />
       </Form>,
     );
-    expect(screen.getByLabelText("email")).toHaveFocus();
+    // Form moves focus in an effect, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText("email")).toHaveFocus());
   });
 
-  it("moves focus again when a second set of errors arrives", () => {
+  it("moves focus again when a second set of errors arrives", async () => {
     const { rerender } = render(
       <Form aria-label="Sign in" errors={{ email: ["Bad."] }}>
         <Inputs />
@@ -131,7 +132,8 @@ describe("Form", () => {
         <Inputs />
       </Form>,
     );
-    expect(screen.getByLabelText("email")).toHaveFocus();
+    // Form moves focus in an effect, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText("email")).toHaveFocus());
   });
 
   it("leaves focus alone when the new errors hold no field errors", () => {

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { renderToString } from "react-dom/server";
@@ -58,7 +58,8 @@ describe("CheckboxField", () => {
     );
     const el = screen.getByRole("checkbox", { name: "Thing" });
     expect(screen.getByText("Bad.")).toBeInTheDocument();
-    expect(el).toHaveFocus();
+    // Form moves focus in an effect, so wait for it.
+    await waitFor(() => expect(el).toHaveFocus());
     await user.click(el);
     expect(screen.queryByText("Bad.")).not.toBeInTheDocument();
     expect(el).not.toHaveAttribute("aria-invalid");

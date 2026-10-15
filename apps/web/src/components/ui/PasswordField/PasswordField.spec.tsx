@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { renderToString } from "react-dom/server";
@@ -64,7 +64,8 @@ describe("PasswordField", () => {
         <PasswordField name="p" label="Password" />
       </Form>,
     );
-    expect(input()).toHaveFocus();
+    // Form moves focus in an effect, so wait for it.
+    await waitFor(() => expect(input()).toHaveFocus());
     await user.type(input(), "x");
     expect(screen.queryByText("Bad.")).not.toBeInTheDocument();
     expect(input()).not.toHaveAttribute("aria-invalid");
