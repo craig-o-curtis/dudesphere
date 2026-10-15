@@ -88,3 +88,11 @@ export function safeNextPath(value: unknown): string {
 
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+/**
+ * Builds the link to the sign-in page that keeps where the member was going.
+ * A missing `next`, or "/", gives the plain "/login".
+ */
+export function loginHref(next: string | null): string {
+  return next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login";
+}

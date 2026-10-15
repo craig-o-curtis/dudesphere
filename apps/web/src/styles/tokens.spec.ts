@@ -139,6 +139,30 @@ describe("scales and motion", () => {
     expect(light["--font-text"]).toBeDefined();
   });
 
+  it("defines the control, type, measure and layer tokens", () => {
+    expect(light["--control-min-height"]).toBe("44px");
+    expect(light["--target-min"]).toBe("24px");
+    expect(light["--border-width"]).toBe("1px");
+    expect(light["--glyph-width"]).toBe("1em");
+    expect(light["--font-weight-bold"]).toBe("700");
+    expect(light["--tracking-tight"]).toBe("-0.02em");
+    expect(light["--leading-tight"]).toBe("1.1");
+    expect(light["--leading-body"]).toBe("1.5");
+    expect(light["--measure-form"]).toBe("28rem");
+    expect(light["--measure-content"]).toBe("60ch");
+    expect(light["--measure-hint"]).toBe("28ch");
+    expect(light["--measure-status"]).toBe("40ch");
+    expect(light["--measure-narrow"]).toBe("20rem");
+    expect(light["--opacity-pending"]).toBe("0.8");
+    expect(light["--z-skip"]).toBe("100");
+  });
+
+  it("makes globals.css read the leading tokens", () => {
+    const globals = readFileSync(join(import.meta.dirname, "globals.css"), "utf8");
+    expect(globals).toContain("line-height: var(--leading-body)");
+    expect(globals).toContain("line-height: var(--leading-tight)");
+  });
+
   it("defines the motion tokens", () => {
     expect(light["--dur-fast"]).toBe("150ms");
     expect(light["--dur-base"]).toBe("200ms");
