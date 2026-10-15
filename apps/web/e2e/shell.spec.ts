@@ -632,6 +632,26 @@ test.describe("skip link", () => {
   });
 });
 
+test.describe("tab order once the page is live", () => {
+  test.use({ colorScheme: "light" });
+
+  test("skip link, Sign in, Sign up, Light, then Dark", async ({ page }) => {
+    await page.goto("/");
+    await waitForHydration(page);
+
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Sign up" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(lightButton(page)).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(darkButton(page)).toBeFocused();
+  });
+});
+
 test.describe("reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
 

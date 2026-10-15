@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -9,6 +10,7 @@ import {
   type Browser,
   type BrowserContext,
   type Cookie,
+  type Locator,
   type Page,
 } from "@playwright/test";
 
@@ -24,8 +26,10 @@ import {
 // tries. No guard is turned off.
 //
 // Test data: made-up users. The username is `e2e-<12 hex>` and the email is
-// `e2e-<12 hex>@example.com`, so the API's e2e cleanup (test/global-setup.ts)
-// removes them on its next run.
+// `e2e-<12 hex>@example.com`, so the shared e2e cleanup in
+// apps/api/test/e2e-cleanup.ts removes them. It runs before and after this
+// web run, through Playwright's globalSetup and globalTeardown (e2e/global-setup.ts
+// and e2e/global-teardown.ts), as well as before and after each API e2e run.
 
 const SKIP_MESSAGE = "Start the API: pnpm db:up, then the API dev server";
 const PASSWORD = "a-long-secret-123";
@@ -192,6 +196,43 @@ async function newSignedOutContext(browser: Browser) {
   const context = await browser.newContext();
   return { context, page: await context.newPage() };
 }
+
+// Presses Tab until the target has focus, so a test uses the keyboard only.
+// It stops with a clear failure if the target is not on the tab path.
+async function tabTo(page: Page, target: Locator, limit = 40) {
+  for (let step = 0; step < limit; step += 1) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+  }
+  await expect(target, `not reached by Tab in ${limit} presses`).toBeFocused();
+}
+
+// Types into the field that has focus, then moves on with Tab.
+async function typeAndTab(page: Page, field: Locator, text: string) {
+  await tabTo(page, field);
+  await page.keyboard.type(text);
+}
+
+// The text of every element an input's aria-describedby names.
+function describedText(input: Locator): Promise<string[]> {
+  return input.evaluate((el) =>
+    (el.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? ""),
+  );
+}
+
+// Waits for the POST to answer, whatever its status, and returns the status.
+function postStatus(page: Page, path: string) {
+  return page.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === path,
+  );
+}
+
+const THEMES = ["light", "dark"] as const;
+const MOTIONS = ["no-preference", "reduce"] as const;
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 test.describe("sign up", () => {
   test("makes the user in Nest and sets two httpOnly cookies that page scripts cannot see", async ({
@@ -536,7 +577,12 @@ test.describe("with JavaScript off", () => {
     const dude = await createDude(request);
     await page.goto("/login");
     await fillSignIn(page, dude);
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    const [post] = await Promise.all([
+      postStatus(page, "/login"),
+      page.getByRole("button", { name: "Sign in", exact: true }).click(),
+    ]);
+    // The action answers with a redirect, not a page (lesson point 5).
+    expect(post.status()).toBe(303);
 
     await expect(page).toHaveURL("/");
     const cookies = await context.cookies();
@@ -552,7 +598,11 @@ test.describe("with JavaScript off", () => {
     const dude = newDude();
     await page.goto("/signup");
     await fillSignUp(page, dude);
-    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+    const [post] = await Promise.all([
+      postStatus(page, "/signup"),
+      page.getByRole("button", { name: "Sign up", exact: true }).click(),
+    ]);
+    expect(post.status()).toBe(303);
 
     await expect(page).toHaveURL("/");
     expect(byName(await context.cookies(), SESSION_COOKIE)).toBeDefined();
@@ -563,6 +613,37 @@ test.describe("with JavaScript off", () => {
         })
       ).status(),
     ).toBe(200);
+  });
+
+  test("the show-password button is hidden and out of the tab path, and sign in still works", async ({
+    page,
+    context,
+    request,
+  }) => {
+    const dude = await createDude(request);
+    await page.goto("/login");
+
+    // It is in the HTML, but not visible and not usable.
+    // Playwright's role locators skip hidden and inert elements, so find it by
+    // its markup.
+    const eye = page.locator('form button[type="button"][aria-pressed]');
+    await expect(eye).toHaveCount(1);
+    await expect(eye).toBeHidden();
+    await expect(eye).toHaveJSProperty("inert", true);
+    await expect(page.getByRole("button", { name: "Show password" })).toHaveCount(0);
+
+    // Tab goes from the password straight to the submit button.
+    await page.getByLabel("Email").fill(dude.email);
+    const password = page.getByLabel("Password", { exact: true });
+    await password.fill(dude.password);
+    await expect(password).toHaveAttribute("type", "password");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    // The session corner needs JavaScript, so check the cookie instead.
+    await expect(page).toHaveURL("/");
+    expect(byName(await context.cookies(), SESSION_COOKIE)).toBeDefined();
   });
 
   test("the browser's own rules stop a short password, so nothing posts", async ({ page }) => {
@@ -622,4 +703,194 @@ test.describe("with JavaScript off", () => {
     // Fails when Next answers with a real document.
     expect(body, `Next may have fixed ${NEXT_BUG}`).not.toContain("<html");
   });
+});
+
+test.describe("after a 400, with JavaScript on", () => {
+  test("focus is on the first invalid field, its error is read through aria-describedby, and typing clears both", async ({
+    page,
+  }) => {
+    const dude = newDude();
+    dude.username = `e2e@${dude.username.slice(4)}`;
+
+    await page.goto("/signup");
+    await waitForHydration(page, "Sign up");
+    await fillSignUp(page, dude);
+    // Switch the browser's own checks off for this form, so Nest answers 400.
+    await page.locator("form").evaluate((form) => {
+      (form as HTMLFormElement).noValidate = true;
+    });
+    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+
+    const username = page.getByLabel("Username");
+    await expect(username).toHaveAttribute("aria-invalid", "true");
+    await expect(username).toBeFocused();
+
+    const message = "username must not contain spaces or @";
+    expect(await describedText(username)).toContain(message);
+    await expect(page.getByLabel("Email")).not.toHaveAttribute("aria-invalid", "true");
+
+    // Typing in the field clears the flag and the message.
+    await page.keyboard.type("x");
+    await expect(username).not.toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText(message)).toHaveCount(0);
+    expect(await describedText(username)).not.toContain(message);
+  });
+});
+
+test.describe("keyboard only", () => {
+  test("sign up, sign out, sign in, then sign out everywhere", async ({ page, request }) => {
+    const dude = newDude();
+
+    // Sign up.
+    await page.goto("/signup");
+    await waitForHydration(page, "Sign up");
+    await typeAndTab(page, page.getByLabel("Email"), dude.email);
+    await typeAndTab(page, page.getByLabel("Display name"), dude.displayName);
+    await typeAndTab(page, page.getByLabel("Username"), dude.username);
+    await typeAndTab(page, page.getByLabel("Password", { exact: true }), dude.password);
+    await tabTo(page, page.getByRole("button", { name: "Sign up", exact: true }));
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("You're signed in.")).toBeVisible();
+    await expect(page).toHaveURL("/");
+
+    // Sign out.
+    await tabTo(page, page.getByRole("button", { name: "Sign out", exact: true }));
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("You're signed in.")).toBeHidden();
+
+    // Sign in, with Enter inside the password field.
+    await tabTo(page, page.getByRole("link", { name: "Sign in" }));
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/login$/);
+    await waitForHydration(page, "Sign in");
+    await typeAndTab(page, page.getByLabel("Email"), dude.email);
+    await typeAndTab(page, page.getByLabel("Password", { exact: true }), dude.password);
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("You're signed in.")).toBeVisible();
+
+    // Sign out everywhere, with Space.
+    await tabTo(page, page.getByRole("button", { name: "Sign out everywhere" }));
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("You're signed in.")).toBeHidden();
+
+    // Nest agrees the user can still sign in (nothing was deleted).
+    expect((await nestTokens(request, dude)).accessToken).toBeTruthy();
+  });
+});
+
+test.describe("show or hide the password, with JavaScript on", () => {
+  test("the eye button is a Tab stop after the field, toggles aria-pressed and the input type, and the form still posts the password", async ({
+    page,
+    request,
+  }) => {
+    const dude = await createDude(request);
+    await page.goto("/login");
+    await waitForHydration(page, "Sign in");
+
+    const password = page.getByLabel("Password", { exact: true });
+    const eye = page.getByRole("button", { name: "Show password" });
+    await expect(eye).toBeVisible();
+    await expect(eye).toHaveAttribute("aria-pressed", "false");
+    await expect(eye).toHaveAttribute("aria-controls", (await password.getAttribute("id")) ?? "");
+
+    await page.getByLabel("Email").fill(dude.email);
+    await password.fill(dude.password);
+
+    // Keyboard: the next Tab stop after the field is the eye button.
+    await password.focus();
+    await page.keyboard.press("Tab");
+    await expect(eye).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(eye).toHaveAttribute("aria-pressed", "true");
+    await expect(eye).toBeFocused();
+    await expect(password).toHaveAttribute("type", "text");
+    await expect(password).toHaveValue(dude.password);
+
+    await page.keyboard.press("Space");
+    await expect(eye).toHaveAttribute("aria-pressed", "false");
+    await expect(password).toHaveAttribute("type", "password");
+
+    // Show it once more, then submit: the form posts the typed password.
+    await page.keyboard.press("Enter");
+    await expect(password).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page.getByText("You're signed in.")).toBeVisible();
+  });
+
+  test("the eye button does not submit the form", async ({ page }) => {
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
+    });
+    await page.goto("/login");
+    await waitForHydration(page, "Sign in");
+    await page.getByRole("button", { name: "Show password" }).click();
+    await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
+    expect(posts).toEqual([]);
+  });
+});
+
+test.describe("accessibility (axe)", () => {
+  for (const theme of THEMES) {
+    for (const motion of MOTIONS) {
+      test.describe(`${theme}, motion ${motion}`, () => {
+        test.use({
+          colorScheme: theme,
+          reducedMotion: motion,
+        });
+
+        async function setTheme(page: Page) {
+          await page
+            .context()
+            .addCookies([{ name: "theme", value: theme, url: "http://localhost" }]);
+        }
+
+        async function expectNoViolations(page: Page) {
+          const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+          expect(results.violations).toEqual([]);
+        }
+
+        for (const path of ["/", "/login", "/signup"]) {
+          test(`${path} has no violations`, async ({ page }) => {
+            await setTheme(page);
+            await page.goto(path);
+            await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+            await expectNoViolations(page);
+          });
+        }
+
+        test("the sign-in error state has no violations", async ({ page }) => {
+          await setTheme(page);
+          const dude = newDude(); // never created: Nest answers 401
+          await page.goto("/login");
+          await waitForHydration(page, "Sign in");
+          await fillSignIn(page, dude);
+          await page.getByRole("button", { name: "Sign in", exact: true }).click();
+          await expect(page.locator("form").getByRole("alert")).toHaveText(
+            "That email or password doesn't match.",
+          );
+          await expectNoViolations(page);
+        });
+
+        test("the sign-up field error state has no violations", async ({ page }) => {
+          await setTheme(page);
+          const dude = newDude();
+          dude.username = `e2e@${dude.username.slice(4)}`;
+          await page.goto("/signup");
+          await waitForHydration(page, "Sign up");
+          await fillSignUp(page, dude);
+          await page.locator("form").evaluate((form) => {
+            (form as HTMLFormElement).noValidate = true;
+          });
+          await page.getByRole("button", { name: "Sign up", exact: true }).click();
+          await expect(page.getByLabel("Username")).toHaveAttribute("aria-invalid", "true");
+          await expect(page.getByText("username must not contain spaces or @")).toBeVisible();
+          await expectNoViolations(page);
+        });
+      });
+    }
+  }
 });
