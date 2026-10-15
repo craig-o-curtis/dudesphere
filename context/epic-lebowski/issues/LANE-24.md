@@ -1,6 +1,6 @@
 # LANE-24: Lane Night UI
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Lane. Phase 2. Blocked by: WEB-5, AUTH-8, LANE-21, API-22, API-23, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Lane. Phase 2. Blocked by: WEB-5, AUTH-8, LANE-21, API-22, API-23.
 
 **Scope:** `/lanes/[id]` draws a 2D top-down lane where the player aims, sets power and spin, and releases on a timing meter, with "Over the line!" fouls, the "MARK IT ZERO" stamp, sound, and a live scorecard.
 

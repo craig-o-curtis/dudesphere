@@ -1,6 +1,6 @@
 # AUTH-9: Forgot and reset password pages
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 0. Blocked by: AUTH-7, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 0. Blocked by: AUTH-7.
 
 **Scope:** `/forgot-password` asks Nest to email a reset link, `/reset-password?token=` sets the new password, and Nest's `FRONTEND_URL` points at the web origin so the emailed link opens the Next page.
 

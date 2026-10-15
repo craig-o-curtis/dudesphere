@@ -1,6 +1,6 @@
 # AUTH-52: Passwordless sign-in
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 1. Blocked by: AUTH-7, AUTH-8, API-10, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 1. Blocked by: AUTH-7, AUTH-8, API-10.
 
 **Scope:** A fullstack story: members sign up and sign in with an emailed link, a passkey, or Google or GitHub, from one "Roll in" screen, while existing members keep their password as a fallback.
 

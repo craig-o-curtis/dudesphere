@@ -1,6 +1,6 @@
 # RUG-34: Laws of the Lane quiz
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Rug. Phase 3. Blocked by: WEB-5, WEB-6, API-29, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Rug. Phase 3. Blocked by: WEB-5, WEB-6, API-29.
 
 **Scope:** A fully static set of original tenets, "The Laws of the Lane", and a short personality quiz on them that gives each member a Dudeist alignment (Dude, Walter, Donny or Maude), saved to the profile through a Server Action.
 

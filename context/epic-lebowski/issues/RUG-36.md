@@ -1,6 +1,6 @@
 # RUG-36: Ask the Stranger
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Rug. Phase 3. Blocked by: WEB-5, WEB-6, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Rug. Phase 3. Blocked by: WEB-5, WEB-6.
 
 **Scope:** `/stranger` shows a daily aphorism from a curated set of original cowboy-narrator lines, and lets a visitor ask a question and get a line picked for it, with no LLM and no database.
 

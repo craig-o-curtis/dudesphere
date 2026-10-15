@@ -1,6 +1,6 @@
 # FEED-13: Feed with infinite scroll and hashtag chips
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, AUTH-8, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, AUTH-8.
 
 **Scope:** `/feed` is the signed-in home: the newest abidings with infinite scroll on `links.next`, and up to 10 hashtag chips that filter the list.
 

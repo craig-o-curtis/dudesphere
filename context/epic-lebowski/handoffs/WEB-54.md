@@ -4,7 +4,7 @@
 - **Spec:** [issues/WEB-54.md](../issues/WEB-54.md)
 - **Branch:** `90-web-54-shared-ui-parts-and-the-auth-form`. Matches `feature/<id>-<slug>`: no. `worktree branch --github` named it. Left as it is.
 - **Blocked by:** none. AUTH-7 is `✅ Done` in tracker.md, and its PR (#91) is merged to `main`.
-- **Status:** Finalizing
+- **Status:** Done
 
 ## Scope
 
@@ -368,3 +368,5 @@ Closes #90
 - 2026-10-15: Final check, qa-skeptic: PASS, with no blocker, major or minor. QA-22 to QA-27 hold, SEC-4, SEC-5 and A11Y-4 hold, form parity holds in normal and forced colours, and the coverage spec was proved to fail on a probe table and a probe schema. Two nits. QA-28: the coverage scan misses `createTable(new Table({ name }))` migrations and `@Schema` with something between it and `export class`; sent to the cleanup builder. QA-29: three agent files still said "delete and count"; the driver changed them to name the single `E2E_TARGETS` list and its coverage spec.
 - 2026-10-15: QA-28 fixed. The coverage scan strips comments and catches `new Table({ name })` in any quote form, lower-case and `IF NOT EXISTS` `CREATE TABLE`, `@Entity({ name })`, and `@Schema` with decorators or comments before the class. It was proved against probes in a scratch copy, with nothing written to `src`. Two limits are written in the spec: run-time table names, and collections with no `@Schema()` class. 1169 API tests pass, and lint and format are clean. qa-skeptic is asked to confirm QA-28 and QA-29.
 - 2026-10-15: qa-skeptic confirmed QA-28 and QA-29: PASS with no open items. All three reviewers are now clean, with no blocker, major, minor or nit open. The driver wiped the final checks' e2e data and `pnpm e2e:check` passed. The review server on 3101 is stopped. Status set to Finalizing, and pr-finalizer started.
+- 2026-10-15: PR opened: https://github.com/craig-o-curtis/dudesphere/pull/92. Every check passed and the 8 story commits are pushed. Status set to Done.
+- 2026-10-15: Follow-up after PR #92, approved by the user: WEB-54 removed from the "Blocked by" header of 13 specs (ABIDE-30, ABIDE-31, AUTH-9, AUTH-52, FEED-12, FEED-13, FEED-17, FEED-19, LANE-24, RUG-34, RUG-36, WEB-11 and WEB-53; WEB-53 now reads "none"). None of their issues had drifted. Each spec was copied into its issue (#65, #66, #43, #46, #47, #48, #52, #54, #59, #69, #71, #45 and #89), changing only that line, and each matched on read-back.

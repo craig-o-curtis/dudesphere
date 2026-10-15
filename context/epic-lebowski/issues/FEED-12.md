@@ -1,6 +1,6 @@
 # FEED-12: Splash page
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-6, AUTH-8, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-6, AUTH-8.
 
 **Scope:** `/` is a static shell with hero copy and calls to action, a cached ticker of recent abidings and a cached hashtag list, and a small "who is signed in" corner that streams in through Suspense.
 
