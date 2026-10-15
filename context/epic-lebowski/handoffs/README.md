@@ -17,7 +17,7 @@ Copy everything below the line into `<ID>.md`.
 - **Spec:** [issues/<ID>.md](../issues/<ID>.md)
 - **Branch:** `<branch>`. Matches `feature/<id>-<slug>`: yes or no
 - **Blocked by:** <each blocker and its status in tracker.md>
-- **Status:** Planned | Building | Reviewing | Finalizing | PR open
+- **Status:** Planned | Building | Reviewing | Finalizing | Done
 
 ## Scope
 

@@ -20,8 +20,8 @@ const UTC_NOW = "2026-10-14T09:25:42.204006202Z";
 // tests: a revoked sign-in, a sign-in past its family's end, and another
 // member's sid all get 401 in test/tokens.e2e-spec.ts.
 describe("SignInsRepository", () => {
-  const dataSource = { query: vi.fn() };
   const manager = { update: vi.fn(), delete: vi.fn() };
+  const dataSource = { query: vi.fn(), manager };
 
   const repository = new SignInsRepository(dataSource as unknown as DataSource);
 
@@ -58,6 +58,40 @@ describe("SignInsRepository", () => {
       await expect(repository.isLive(sid, "25")).rejects.toBeInstanceOf(ClockUnavailableException);
 
       expect(dataSource.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("endSignIn", () => {
+    // Every row of the sign-in shares its sid, so one write ends the whole
+    // family, as TokenService.revoke does by family id. The member's id
+    // goes in too, so a sid from another member's sign-in ends nothing.
+    it("marks every refresh token of that sign-in, of that member, revoked", async () => {
+      manager.update.mockResolvedValue({ affected: 3 });
+
+      await expect(repository.endSignIn(sid, "25")).resolves.toBeUndefined();
+
+      expect(manager.update).toHaveBeenCalledTimes(1);
+      expect(manager.update).toHaveBeenCalledWith(
+        RefreshTokenEntity,
+        { sid, userId: "25" },
+        { revoked: true },
+      );
+    });
+
+    // A sign-in whose rows are gone already, or a sid nobody was given: no
+    // row matches, and there is nothing left to end.
+    it("resolves when no row matches", async () => {
+      manager.update.mockResolvedValue({ affected: 0 });
+
+      await expect(repository.endSignIn(sid, "25")).resolves.toBeUndefined();
+    });
+
+    // Swallowing it would answer 204 with the sign-in still going.
+    it("lets a failed write through", async () => {
+      const down = new Error("database down");
+      manager.update.mockRejectedValue(down);
+
+      await expect(repository.endSignIn(sid, "25")).rejects.toBe(down);
     });
   });
 

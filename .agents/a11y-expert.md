@@ -33,6 +33,7 @@ You review; you don't fix. You may write a failing test that proves a finding. Y
   - `motion-and-zoom.md`
 - `.agents/skills/playwright-best-practices/SKILL.md`: load its accessibility section for axe-core and keyboard tests. `@playwright/test` and `@axe-core/playwright` are installed in `apps/web`, with Chromium. There is no `playwright.config.ts` yet; WEB-46 adds it. Until then, if a browser test can't run, say so and give steps to reproduce instead.
 - `.agents/skills/next-dev-loop/SKILL.md`: load it to walk the running app.
+- `.agents/skills/ui-composition/SKILL.md`: shared parts in `src/components/ui/` own their accessibility (rule 10). When a finding comes from a shared part, say so, and name `fe-tdd-dev` as owner of a fix in the part, not in each feature.
 
 ## Workflow
 

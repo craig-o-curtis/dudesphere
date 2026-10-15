@@ -593,11 +593,19 @@ the bearer token.
 - A family started afterwards is not affected. The member can sign in again
   straight away.
 
+**This device, with the access token.** `POST /auth/sign-out`, with the
+access token as the bearer token, ends the sign-in that token belongs to,
+through `SignInsRepository.endSignIn`. The web app's `signIn` and `signUp`
+actions call it with the old access cookie before they set the new one, so a
+second sign-in in the same browser never leaves the first one alive. It only
+works while that access token is still valid, for 15 minutes, until AUTH-8.
+
 ## Everything that ends a sign-in
 
 | What happened                          | Which families end  | The access tokens            | Where in the code                                                                     |
 | -------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
 | `POST /auth/token/revoke`              | That one            | **Stop on the next request** | `TokenService.revoke`                                                                 |
+| `POST /auth/sign-out`                  | That one            | **Stop on the next request** | `SignInsRepository.endSignIn`                                                         |
 | `POST /auth/sign-out-everywhere`       | All of the caller's | **Stop on the next request** | `SignInService.signOutEverywhere`, `TokenService.revokeAll`                           |
 | A refresh token used twice             | That one            | **Stop on the next request** | `TokenService.refresh`, step 4 or 5                                                   |
 | The member changes their password      | All of the member's | **Stop on the next request** | `UsersService.updateUser`, with `SignInsRepository.endAllForUser` in its transaction  |
@@ -1106,7 +1114,7 @@ An env file that sets one of these wins over the default.
 | [src/app.module.ts](../src/app.module.ts)                                                                           | Registers both packages with their options, and `AuthThrottlerGuard`                                               |
 | [src/auth/auth.module.ts](../src/auth/auth.module.ts)                                                               | The app's parts: four controllers, `JwtAuth`, `CredentialsService`, the mailer, the store. Imports `SignInsModule` |
 | [src/auth/tokens.controller.ts](../src/auth/tokens.controller.ts)                                                   | `POST /auth/token`, `/auth/token/refresh`, `/auth/token/revoke`                                                    |
-| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                                               | `POST /auth/sign-out-everywhere`                                                                                   |
+| [src/auth/sessions.controller.ts](../src/auth/sessions.controller.ts)                                               | `POST /auth/sign-out` and `/auth/sign-out-everywhere`                                                              |
 | [src/auth/auth.controller.ts](../src/auth/auth.controller.ts)                                                       | `POST /auth/sign-up`                                                                                               |
 | [src/auth/password-reset.controller.ts](../src/auth/password-reset.controller.ts)                                   | `POST /auth/password/forgot` and `/auth/password/reset`                                                            |
 | [src/auth/credentials.service.ts](../src/auth/credentials.service.ts)                                               | `verify`: checks a password at sign-in, and upgrades a bcrypt hash. `stillValid`: the recheck                      |

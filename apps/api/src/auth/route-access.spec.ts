@@ -33,6 +33,11 @@ const SIGN_IN_ROUTES = [
   "POST /auth/password/reset",
 ];
 
+// The routes that sign out by the caller's access token. Each reads the
+// member, and the sign-in, from the token, so each must need one: as
+// @Public() it would have no member to sign out.
+const SIGNED_IN_SIGN_OUT_ROUTES = ["POST /auth/sign-out", "POST /auth/sign-out-everywhere"];
+
 describe("every route says who may call it", () => {
   it("finds the app's routes", () => {
     // Without this, a rename that broke the lookup would leave the test
@@ -54,5 +59,16 @@ describe("the sign-in routes stay public", () => {
     // A moved or renamed route should fail here, not drop out of the check.
     expect(route).toBeDefined();
     expect(accessOf(route!).isPublic).toBe(true);
+  });
+});
+
+describe("the sign-out routes that read the access token need one", () => {
+  it.each(SIGNED_IN_SIGN_OUT_ROUTES)("%s is @Can.Anyone(), not @Public()", (request) => {
+    const route = routes.find((candidate) => candidate.request === request);
+
+    expect(route).toBeDefined();
+    const { isPublic, anyone } = accessOf(route!);
+    expect(isPublic).toBe(false);
+    expect(anyone).toBe(true);
   });
 });

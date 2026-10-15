@@ -255,15 +255,16 @@ Deleting a hashtag takes it off the list. Abidings that used it keep it, and `GE
 
 ### Auth
 
-| Method | Endpoint                  | Description                         |
-| ------ | ------------------------- | ----------------------------------- |
-| POST   | /auth/sign-up             | Sign up                             |
-| POST   | /auth/token               | Sign in with username or email      |
-| POST   | /auth/token/refresh       | Swap a refresh token for a new pair |
-| POST   | /auth/token/revoke        | Sign out this device                |
-| POST   | /auth/sign-out-everywhere | Sign out every device               |
-| POST   | /auth/password/forgot     | Email a password reset link         |
-| POST   | /auth/password/reset      | Set a new password with the link    |
+| Method | Endpoint                  | Description                          |
+| ------ | ------------------------- | ------------------------------------ |
+| POST   | /auth/sign-up             | Sign up                              |
+| POST   | /auth/token               | Sign in with username or email       |
+| POST   | /auth/token/refresh       | Swap a refresh token for a new pair  |
+| POST   | /auth/token/revoke        | Sign out this device                 |
+| POST   | /auth/sign-out            | Sign out this access token's sign-in |
+| POST   | /auth/sign-out-everywhere | Sign out every device                |
+| POST   | /auth/password/forgot     | Email a password reset link          |
+| POST   | /auth/password/reset      | Set a new password with the link     |
 
 The routes and their names follow the NestJS docs, which build auth on
 `@nestjs/authentication` and `@nestjs/authorization`. [reference/TOKENS_AND_SESSIONS.md](reference/TOKENS_AND_SESSIONS.md) explains them.

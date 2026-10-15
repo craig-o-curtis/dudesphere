@@ -14,6 +14,7 @@
     ".agents/skills/playwright-best-practices/**",
     ".agents/skills/r3f-fundamentals/**",
     ".agents/skills/tanstack-query-best-practices/**",
+    ".agents/skills/vercel-composition-patterns/**",
     ".agents/skills/vercel-react-best-practices/**",
     ".agents/skills/vercel-react-view-transitions/**",
     ".agents/skills/vitest/**"

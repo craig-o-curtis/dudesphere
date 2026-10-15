@@ -383,11 +383,11 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/users/me
 
 ### Which routes need what
 
-| Needs          | Routes                                                                                                                        |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Nothing        | `GET /`, every `/auth` route but `POST /auth/sign-out-everywhere`, `GET /abidings`, `GET /abidings/:id`, both `GET /hashtags` |
-| Any token      | Everything under `/profiles`, the `me` routes, `POST /auth/sign-out-everywhere`, and posting, editing or deleting an abiding  |
-| An admin token | `GET /users`, `POST /users`, the `/users/:id` writes, hiding and restoring a hashtag                                          |
+| Needs          | Routes                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nothing        | `GET /`, every `/auth` route but the two sign-outs below, `GET /abidings`, `GET /abidings/:id`, both `GET /hashtags`                                   |
+| Any token      | Everything under `/profiles`, the `me` routes, `POST /auth/sign-out` and `POST /auth/sign-out-everywhere`, and posting, editing or deleting an abiding |
+| An admin token | `GET /users`, `POST /users`, the `/users/:id` writes, hiding and restoring a hashtag                                                                   |
 
 `GET /users/:id` answers only that user or an admin.
 [context/overview.md](context/overview.md) lists every route.

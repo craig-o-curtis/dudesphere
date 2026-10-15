@@ -29,20 +29,21 @@ as it is on npm, before any page ships.
 
 ## Decisions
 
-| Choice           | Pick                                                                                         | Why                                                                                                                   |
-| ---------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Framework        | Next.js 16.4, React 19.3, App Router, Turbopack, Node runtime only                           | Every rendering strategy in one framework, on the newest Next and React. Cache Components and React Compiler are on   |
-| Why Next now     | Nuxt 4 was the plan until 2026-10-14                                                         | Craig reversed it: the web app is now a lesson in Next's rendering strategies. The Nuxt plan was never built          |
-| Language         | TypeScript, strict                                                                           | Same as the API. The base options come from `packages/config/tsconfig.base.json`                                      |
-| Styling          | CSS Modules, CSS variables in `src/styles/tokens.css`, `motion/react` for movement           | Plain CSS per component, tokens for light and dark. No Tailwind                                                       |
-| 3D               | React Three Fiber, `@react-three/drei`, `@react-three/rapier`, `@react-three/postprocessing` | After the MVP, as WORLD-48. The React renderer for three.js has the largest set of examples                           |
-| Server state     | Server Components fetch on the server. TanStack Query 5 on the client                        | Server Components render the first page. `useInfiniteQuery` pages on `links.next`. `refetchInterval` polls live games |
-| Global state     | None in the MVP                                                                              | The URL, Server Components and the query cache hold everything the MVP needs                                          |
-| Forms            | `<form action={serverAction}>` with `useActionState`                                         | Field errors come straight from Nest's 400 body. No zod and no client validation library                              |
-| Auth storage     | httpOnly cookies set by Next (the BFF)                                                       | Page scripts never see a token. The browser never calls Nest. See "Auth as a BFF"                                     |
-| Images and fonts | `next/image`, `next/font`                                                                    | Resizing, modern formats and self-hosted fonts with no layout shift                                                   |
-| Dates            | `@northguild/gmt`                                                                            | The zero-`Date` rule covers `apps/web`. The root oxlint config enforces it                                            |
-| Tests            | Vitest with `@testing-library/react`, Playwright with `instant()` from `@next/playwright`    | Vitest matches the API. Playwright drives the real browser that View Transitions and the lane canvas need             |
+| Choice           | Pick                                                                                                  | Why                                                                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework        | Next.js 16.4, React 19.3, App Router, Turbopack, Node runtime only                                    | Every rendering strategy in one framework, on the newest Next and React. Cache Components and React Compiler are on                                                  |
+| Why Next now     | Nuxt 4 was the plan until 2026-10-14                                                                  | Craig reversed it: the web app is now a lesson in Next's rendering strategies. The Nuxt plan was never built                                                         |
+| Language         | TypeScript, strict                                                                                    | Same as the API. The base options come from `packages/config/tsconfig.base.json`                                                                                     |
+| Styling          | CSS Modules, CSS variables in `src/styles/tokens.css`, `motion/react` for movement                    | Plain CSS per component, tokens for light and dark. No Tailwind                                                                                                      |
+| UI parts         | Shared parts in `components/ui/`, with Base UI (`@base-ui/react`) behind the ones that need behaviour | Each look written once. Base UI ships no styles, so our tokens drive it. Rules in the `ui-composition` skill; chosen 2026-10-15 (`context/audits/frontend-audit.md`) |
+| 3D               | React Three Fiber, `@react-three/drei`, `@react-three/rapier`, `@react-three/postprocessing`          | After the MVP, as WORLD-48. The React renderer for three.js has the largest set of examples                                                                          |
+| Server state     | Server Components fetch on the server. TanStack Query 5 on the client                                 | Server Components render the first page. `useInfiniteQuery` pages on `links.next`. `refetchInterval` polls live games                                                |
+| Global state     | None in the MVP                                                                                       | The URL, Server Components and the query cache hold everything the MVP needs                                                                                         |
+| Forms            | `<form action={serverAction}>` with `useActionState`                                                  | Field errors come straight from Nest's 400 body. No zod and no form library. Compared with React Hook Form and TanStack Form in `context/audits/forms-analysis.md`   |
+| Auth storage     | httpOnly cookies set by Next (the BFF)                                                                | Page scripts never see a token. The browser never calls Nest. See "Auth as a BFF"                                                                                    |
+| Images and fonts | `next/image`, `next/font`                                                                             | Resizing, modern formats and self-hosted fonts with no layout shift                                                                                                  |
+| Dates            | `@northguild/gmt`                                                                                     | The zero-`Date` rule covers `apps/web`. The root oxlint config enforces it                                                                                           |
+| Tests            | Vitest with `@testing-library/react`, Playwright with `instant()` from `@next/playwright`             | Vitest matches the API. Playwright drives the real browser that View Transitions and the lane canvas need                                                            |
 
 ## Layout of `apps/web/src`
 
@@ -50,8 +51,9 @@ as it is on npm, before any page ships.
 apps/web/src/
   app/
     layout.tsx, layout.module.css, not-found.tsx, error.tsx, forbidden.tsx
-    (public)/page.tsx                        splash
-    (public)/login, signup, forgot-password, reset-password
+    (public)/page.tsx                        splash (FEED-12's planned place; home is app/page.tsx today)
+    (public)/login, signup                   AUTH-7 (static shell, client form)
+    (public)/forgot-password, reset-password  AUTH-9
     (app)/feed/page.tsx, loading.tsx
     (app)/@modal/(.)abidings/[id]/page.tsx   intercepting route: the thread as a modal
     (app)/abidings/[id]/page.tsx             the thread as a full page
@@ -59,17 +61,27 @@ apps/web/src/
     (app)/lanes/..., abide/..., rug/..., laws/..., stranger, groups/..., nights/...
     (app)/admin/...
     lab/page.tsx                             the rendering-strategies index (WEB-11)
-    api/auth/{login,signup,logout,refresh}/route.ts
+    api/auth/{logout,logout-everywhere}/route.ts   AUTH-7: plain form POSTs, 303 to /
+    api/auth/refresh/route.ts                      AUTH-8
     api/bff/[...path]/route.ts               client fetches, Bearer added on the server
     api/lanes/ticker/route.ts                SSE
     sitemap.ts, robots.ts, opengraph-image.tsx
   proxy.ts
-  lib/api.ts          typed fetch to Nest, Bearer from the DAL, maps 400 field errors
-  lib/session.ts      'server-only' Data Access Layer: verifySession = cache(...), cookie helpers
-  lib/actions/*.ts    Server Actions (lib/actions/theme.ts sets the theme cookie)
+  hooks/useFocusFirstInvalid.ts  moves focus to the first invalid field after a failed form submit
+  lib/api.ts          'server-only' typed fetch to Nest: apiFetch, ApiRequestError, maps 400 field errors
+  lib/session.ts      'server-only': cookie names and options, startSession, clearSessionCookies,
+                      readSessionCookies (AUTH-8 adds verifySession, getMe, requireSession)
+  lib/next-path.ts    safeNextPath: the same-origin check for ?next=
+  lib/origin.ts       assertSameOrigin: the Origin check each /api/auth handler calls
+  lib/route-responses.ts  'server-only': seeOther(path) (303 to a safe path), seeOtherToHome (= seeOther("/")), logFailure
+  lib/actions/*.ts    Server Actions: auth.ts (signIn, signUp) with auth-state.ts (form state and
+                      copy), theme.ts (sets the theme cookie)
   lib/theme.ts        theme cookie name and value check
   lib/motion.ts       motion/react presets that copy the --dur-* tokens
-  components/*        each with a .module.css beside it
+  components/ui/*     shared parts (Button, Text, Field, Stack, Dialog...), each with a .module.css
+                      and a spec. They know nothing about the app. Only these import @base-ui/react (WEB-54)
+  components/*        feature components that compose the shared parts, each with a .module.css
+                      for layout only. Auth: SignInForm, SignUpForm, NextPathField, CookieNote, SessionCorner
   styles/tokens.css   CSS variables, light and dark
   styles/globals.css  reset and base rules
   styles/motion.css   motion rules: .enter, reduced-motion View Transitions
@@ -78,31 +90,63 @@ apps/web/src/
 Route groups such as `(public)` and `(app)` share a layout only. They do not
 check auth. Each page, Server Action and Route Handler checks for itself.
 
-`next.config.ts` turns on `cacheComponents`, `reactCompiler` and
-`transpilePackages: ['@dudesphere/api-types', '@dudesphere/lane-engine']`. It
-also sets `agentRules: false` and `experimental.agentUpgrade: false`, because
-the root `AGENTS.md` is the only agent file.
+`next.config.ts` turns on `cacheComponents`, `partialPrefetching` and
+`reactCompiler`, and sets `experimental.agentFeedback: false`, so `next dev`
+sends no anonymous feedback about how agents use Next. It has no
+`transpilePackages`, `agentRules` or `agentUpgrade`. Earlier versions of this
+file named all three. Fixed security headers come in WEB-45, through
+`headers()`.
 
 ## Auth as a BFF
 
 Next is the backend for the frontend (BFF). Nest stays bearer-only, with no
 cookies and no CORS. The browser talks only to Next.
 
-**Sign in.** `POST /api/auth/login` calls Nest `POST /auth/token` with
-`{ identifier, password }`. Nest answers `{ accessToken, refreshToken, expiresIn }`.
-The handler sets two cookies, both `httpOnly`, `secure` and `sameSite: 'lax'`:
+**Sign in.** The `signIn` Server Action in `lib/actions/auth.ts` calls Nest
+`POST /auth/token` with `{ identifier, password }`. Nest answers
+`{ accessToken, refreshToken, expiresIn }`. `startSession(pair, next)` in
+`lib/session.ts` finishes every sign-in. It sets two cookies and returns the safe
+place to land: `safeNextPath(next)`, or `/` when `next` is missing or unsafe. The
+action then calls `redirect()` on that path. AUTH-52's email-link, passkey and
+social handlers call `startSession()` too. There are no `api/auth/login` or
+`api/auth/signup` handlers, because nothing would call them.
 
-- `session` holds the access token, with `path: '/'` and `maxAge: expiresIn`.
-- `refresh` holds the refresh token, with `path: '/api/auth'` and a lifetime of
-  7 days. Only the refresh and logout handlers ever receive it.
+Both cookies are `httpOnly`, `secure: true` always (browsers accept it on
+`http://localhost`) and `sameSite: 'lax'`. The `__Host-` and `__Secure-` prefixes
+make a browser refuse a copy set without `Secure`:
 
-**Sign up.** `POST /api/auth/signup` calls Nest `POST /auth/sign-up`, then runs
-the same sign-in step.
+- `__Host-session` holds the access token, with `path: '/'` and
+  `maxAge: expiresIn` (900 seconds). The `__Host-` prefix needs `path=/`, `Secure`
+  and no `Domain`.
+- `__Secure-refresh` holds the refresh token, with `path: '/api/auth'` and
+  `maxAge` 604800 (7 days). Only the `/api/auth` handlers ever receive it. A
+  refresh cookie at `/` would travel on every request, and parallel requests
+  could race a single-use token.
+
+Clearing sets each cookie to `""` at its own path with `maxAge: 0`, through
+`clearSessionCookies()`. `cookies().delete(name)` clears only `/`, so it could
+never clear the refresh cookie. `expires` takes a `Date`, so the code uses
+`maxAge`.
+
+**Sign up.** The `signUp` Server Action calls Nest `POST /auth/sign-up`, then
+runs the same sign-in step with `{ identifier: email, password }`. If sign-up
+succeeds and the sign-in step fails, the member stays on `/signup` and sees "Your
+account is ready, but we couldn't sign you in just now." with a "Sign in" link to
+`/login` that carries `next`.
+
+**The Origin check.** Next checks `Origin` on Server Actions only. A Route
+Handler gets no check. Each `/api/auth` handler calls `assertSameOrigin()` in
+`lib/origin.ts` itself. It is true only when the `Origin` header's host equals
+`x-forwarded-host`, or else `host`. A missing Origin, or `"null"`, is false and
+gets a 403 with no cookie touched. The check lives in each handler, not in
+`proxy.ts`, because a matcher change can silently drop proxy coverage.
 
 **The Data Access Layer.** `lib/session.ts` imports `server-only`, so a client
-component cannot import it.
+component cannot import it. AUTH-7 builds the cookie half: the names, the options,
+`startSession()`, `clearSessionCookies()` and `readSessionCookies()`. AUTH-8 adds
+the two functions below and `requireSession()`.
 
-- `verifySession()` reads the `session` cookie and decodes `exp` locally. It does
+- `verifySession()` reads the `__Host-session` cookie and decodes `exp` locally. It does
   not verify the signature: Nest does that on every call. It returns
   `{ accessToken, exp }` or `null`. React's `cache()` wraps it, so it runs once per
   request.
@@ -111,13 +155,18 @@ component cannot import it.
   Nest reads it from the database on every request.
 
 **Refresh.** `proxy.ts` runs on the Node runtime before each route. When the
-`session` cookie is missing or expires within 60 seconds, and the request is a
-document navigation, it redirects to `/api/auth/refresh?next=<path>`. An RSC
-prefetch carries the `Next-Router-Prefetch` header. A prefetch is never
-redirected; with a dead session it renders as anonymous.
+`__Host-session` cookie is missing or expires within 60 seconds, and the request
+is a document navigation, it redirects to `/api/auth/refresh?next=<path>`. Proxy
+cannot see the `next-router-prefetch` header: Next 16.4 strips it from
+`request.headers`. So the matcher skips prefetches with
+`missing: [{ type: 'header', key: 'next-router-prefetch' }]`, and proxy redirects
+only when `Sec-Fetch-Dest` is `document`. A prefetch is never redirected; with a
+dead session it renders as anonymous.
 
 The refresh handler calls Nest `POST /auth/token/refresh` with the refresh
-token, sets both cookies from the answer, and redirects back to `next`.
+token, sets both cookies from the answer, and redirects back to `next`. It reuses
+`startSession()`, `safeNextPath()`, `seeOther(path)` and `logFailure()`.
+`seeOther(path)` sends a 303 to `safeNextPath(path)`.
 
 **One refresh at a time.** A refresh token works once, and Nest ends the whole
 sign-in if one is used twice. The handler keeps a `Map` from a hash of the
@@ -126,16 +175,43 @@ one refresh on each server instance. On a 401 "Refresh token invalid", "expired"
 or "reused", the handler clears both cookies and redirects to `/login?next=`.
 
 **Client fetches.** Client components call `/api/bff/*` Route Handlers, which add
-the Bearer from the `session` cookie and call Nest. These handlers never
+the Bearer from the `__Host-session` cookie and call Nest. These handlers never
 refresh. On a 401 the client fetch wrapper calls `/api/auth/refresh` once, with
 one shared promise in the browser, and retries the request.
 
-**Log out.** A Server Action calls Nest `POST /auth/token/revoke` with the refresh
-token, then clears both cookies. "Log out everywhere" calls
-`POST /auth/sign-out-everywhere`. Nest ends the sign-in, access tokens included,
-because every access token carries the sign-in's id (`sid`). Clearing the
-cookies still matters: dead tokens left in them would cost a 401 and a failed
-refresh on the next page.
+**Sign out.** Sign out cannot be a Server Action. An action posts to the
+page's own path, so the `__Secure-refresh` cookie, limited to `/api/auth`, never
+reaches it. The corner on `/` (`SessionCorner`) holds two plain
+`<form method="post">` buttons that post to Route Handlers:
+
+- "Sign out" posts to `/api/auth/logout`. With a refresh cookie, it calls Nest
+  `POST /auth/token/revoke`. It ignores Nest errors.
+- "Sign out everywhere" posts to `/api/auth/logout-everywhere`. It calls
+  `POST /auth/sign-out-everywhere` with the access token. If the access token is
+  missing, or Nest answers 401, it first swaps the refresh token through
+  `POST /auth/token/refresh` and tries once more. If that still fails, it
+  revokes the refresh token in the cookie, which ends its whole family in Nest.
+  If Nest could not sign out the other devices, the handler redirects to
+  `/?signout=partial`. The corner on `/` then says: "You're signed out here, but
+  we couldn't reach your other devices. Sign in and try Sign out everywhere
+  again." If this sign-in had already ended at Nest, it redirects to
+  `/?signout=ended`, and the corner says: "This sign-in had already ended, so
+  you're signed out here. To be sure your other devices are signed out, sign in
+  and press Sign out everywhere."
+
+Each handler exports `POST` only, checks Origin, clears both cookies, and answers
+303 to `/`, or to `/?signout=partial` or `/?signout=ended` from sign out
+everywhere. A Nest failure never stops the clearing. Nest ends the
+sign-in, access tokens included, because every access token carries the
+sign-in's id (`sid`). Clearing the cookies still matters: dead tokens left in
+them would cost a 401 and a failed refresh on the next page. `seeOther(path)`
+and `logFailure()` in `lib/route-responses.ts` hold the parts the handlers share.
+
+Signing in again also ends the previous sign-in. `signIn` and `signUp` call Nest
+`POST /auth/sign-out` (bearer) with the old access cookie, after a successful
+`/auth/token` and before they set the new cookies. That route ends only the
+current sign-in. It works only while the old access token is valid (15 minutes),
+until AUTH-8 keeps the access cookie fresh.
 
 **Where auth is checked.** Every Server Action and Route Handler re-checks the
 session itself. Layouts never check auth, because a layout does not re-render on
@@ -195,7 +271,7 @@ Every page names its Next route file, its rendering strategy, and the Nest
 routes it calls. The Nest routes are in [overview.md](./overview.md) unless a
 line says "backend gap". The browser never calls Nest. A Server Component,
 Server Action or Route Handler in `apps/web` calls Nest through `lib/api.ts`,
-with the Bearer from the `session` cookie.
+with the Bearer from the `__Host-session` cookie.
 
 ### Splash `/`
 
@@ -221,25 +297,43 @@ Stories AUTH-7, AUTH-9 and AUTH-52.
 - Route files: `app/(public)/login/page.tsx`, `signup/page.tsx`,
   `forgot-password/page.tsx` and `reset-password/page.tsx`.
 - Strategy: a static shell with a client form. Each form is a client component
-  that uses `useActionState` with a Server Action in `lib/actions/auth.ts`.
-  `reset-password` reads `searchParams`, which is async, inside `<Suspense>`.
-- The Server Actions and the `api/auth/*` Route Handlers share one helper that
-  calls Nest and sets the cookies. AUTH-7 decides whether the forms post to the
-  Server Actions, the Route Handlers, or both.
+  (`SignInForm`, `SignUpForm`) that uses `useActionState` with a Server Action in
+  `lib/actions/auth.ts`. The form sits in the static shell, never in a Suspense
+  hole, because a hole shows only its fallback with JavaScript off. `NextPathField`
+  reads `?next=` through `useSearchParams()` inside its own
+  `<Suspense fallback={null}>` and writes a hidden `next` input. With JavaScript
+  off there is no `next`, and sign-in lands on `/`. `reset-password` reads
+  `searchParams`, which is async, inside `<Suspense>`.
+- Settled in AUTH-7: password sign-in and sign-up are Server Actions. There are
+  no `api/auth/login` or `api/auth/signup` handlers. Both actions finish with
+  `startSession()`, as the "Auth as a BFF" section describes. Only sign out uses
+  Route Handlers.
 - Sign up calls `POST /auth/sign-up`, then `POST /auth/token` with the same
-  credentials, then sets the cookies.
+  credentials, then `startSession()`.
 - Log in calls `POST /auth/token`.
-- Until AUTH-52 lands, the login form has one input, labelled "Username or
-  email", and a password. It posts `{ identifier, password }`. The API decides
-  which of the two the identifier is and ignores its letter case, so the form
-  does neither.
-- The sign up form says a username cannot hold `@` or spaces. The API answers
-  400 for one that does.
+- `/login` and `/signup` always show their forms. A signed-in visitor is not
+  bounced, because a `__Host-session` cookie can look alive for up to 15 minutes
+  after Nest ended the sign-in. Success lands on `/`, or on a safe `next`.
+- The login form has one input labelled "Email" (`type="email"`,
+  `autocomplete="username"`) and a password. It posts `{ identifier, password }`,
+  so the API still takes an email or a username. AUTH-52 builds on that label and
+  decides whether usernames go for good.
+- The forms carry native constraints that copy Nest's DTO rules: `required`,
+  `type="email"`, `minlength`, `maxlength`, and a username `pattern` with no `@`
+  or spaces. The login password has no length rules, so older passwords still
+  work. Nest still decides. With JavaScript off, an error response shows a blank
+  page. See "Known limit" in `rendering-strategies.md`.
+- Both pages end with a one-line cookie note (`CookieNote`). No banner: the
+  session, refresh and theme cookies are strictly necessary or set at the
+  member's request. WEB-53 holds the full notice.
+- The sign up form asks for email, display name, username and password, in that
+  order. It says a username cannot hold `@` or spaces, and that it is private. The
+  API answers 400 for one that does.
 - The sign up form also asks for a display name, and says that it is the name
-  other members see and that the username is only for logging in. It posts
-  `profile: { displayName }`. The API answers 409 `DISPLAY_NAME_TAKEN` for a
+  other members see. It posts `profile: { displayName }`. The API answers 409 `DISPLAY_NAME_TAKEN` for a
   name in use, in any letter case, and the form shows that under the input.
-- "Forgot password?" on the login page opens `/forgot-password`: one email input.
+- AUTH-9 adds "Forgot password?" to the login page (AUTH-7 leaves it out, because
+  the page does not exist yet). The link opens `/forgot-password`: one email input.
   Its Server Action calls `POST /auth/password/forgot`. The API answers 202
   whether or not the address has an account, so the page always says "If that
   address has an account, we sent it a link."

@@ -2,15 +2,19 @@ import { Inject, Injectable } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
 
 import { utcNowOrThrow } from "../shared/utils/utc-clock.js";
+import { RefreshTokenEntity } from "./authentication.entities.js";
 import { deleteUserSessions, revokeUserRefreshTokens } from "./end-sign-ins.js";
 
 /**
  * The app's own questions about sign-ins, beside the package's store.
  *
- * Two things the package does not do, and the NestJS docs do not ask for:
+ * Three things the package does not do, and the NestJS docs do not ask for:
  *
  * - `isLive` lets JwtAuth refuse an access token whose sign-in was ended,
  *   on the very next request. The package only ends refresh tokens.
+ * - `endSignIn` ends one sign-in by its `sid`, for a client that holds the
+ *   access token but not the refresh token. The package ends a family only
+ *   by its refresh token.
  * - `endAllForUser` ends every sign-in of a member inside the caller's
  *   transaction, so a password change and the end of its sign-ins are saved
  *   together or not at all. The package's revokeAll calls run on their own.
@@ -54,6 +58,25 @@ export class SignInsRepository {
       [sid, userId, utcNowOrThrow()],
     )) as [{ live: boolean }];
     return row.live;
+  }
+
+  /**
+   * Ends the sign-in with this `sid`, for this member: every refresh token
+   * of its family is marked revoked, the same write as the store's
+   * revokeRefreshTokenFamily. Every row of a family shares its `sid`, so
+   * this is the family, found by the access token instead of a refresh
+   * token. Its access tokens then stop through `isLive`.
+   *
+   * The member's id goes in the match too, so a `sid` from another member's
+   * sign-in ends nothing. No row matching is not an error: the sign-in is
+   * already gone.
+   *
+   * The package's TokenService.revoke also reports a `sign-out` event. This
+   * does not: the package keeps its emit to itself, and nothing in the app
+   * listens for it.
+   */
+  async endSignIn(sid: string, userId: string): Promise<void> {
+    await this.dataSource.manager.update(RefreshTokenEntity, { sid, userId }, { revoked: true });
   }
 
   /**

@@ -25,6 +25,7 @@ You review; you don't fix. You may write a failing test that proves a finding. Y
 
 - `.agents/skills/code-reviewer-nestjs/SKILL.md` (loaded): your method for the whole diff. It covers the standards and spec axes, the table of checks and the zero-Date rule. It is written for `apps/api`. Apply its method to `apps/web` and `packages/*` too.
 - `.agents/skills/nextjs-app-architecture/SKILL.md`: load it to judge web code: where code lives, Suspense, the client boundary, `'use cache'`.
+- `.agents/skills/ui-composition/SKILL.md`: load it for any diff that touches `apps/web` UI. Run its `references/audit.md` checks on the changed files, and cite a finding as `ui-composition › audit › <check number>`.
 - `.agents/skills/vitest/SKILL.md`: load it to write a failing unit test.
 - `.agents/skills/playwright-best-practices/SKILL.md`: load it to write a failing browser test. `@playwright/test` and `@axe-core/playwright` are installed in `apps/web`, with Chromium. There is no `playwright.config.ts` yet; WEB-46 adds it. Until then, if a browser test can't run, say so and give steps to reproduce instead.
 - `.agents/skills/next-dev-loop/SKILL.md`: load it to drive the running app.
@@ -67,6 +68,7 @@ Check the work against these rules:
 - `AGENTS.md` and the hard rules below;
 - `context/coding-standards.md`;
 - nestjs-best-practices for the API, and nextjs-app-architecture for the web app;
+- ui-composition for web UI: shared parts reused, no raw values, no copied markup or CSS, and no `@base-ui/react` import outside `src/components/ui/`;
 - the zero-Date rule, by hand, in files where lint is switched off.
 
 ### 4. Spec axis
