@@ -5,6 +5,7 @@ This file teaches how Next.js 16.4 makes a page's HTML in Dudesphere, and how lo
 ## Contents
 
 - [AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies](#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies): A visitor can now sign up at `/signup` and sign in at `/login`, and both forms work with JavaScript off.
+- [AUTH-8: proxy.ts refresh and the Data Access Layer](#auth-8-proxyts-refresh-and-the-data-access-layer): A member's session now refreshes before a page renders, whether they load the page or click a link inside the app.
 
 ## AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies
 
@@ -81,3 +82,107 @@ export function NextPathField() {
 - [`useActionState`, React docs](https://react.dev/reference/react/useActionState)
 - [rendering-strategies.md: Known limit, JavaScript-off Server Action errors](../context/epic-lebowski/rendering-strategies.md#known-limit-javascript-off-server-action-errors)
 - The auth side of this story: [auth-lesson.md, AUTH-7](./auth-lesson.md#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies)
+
+## AUTH-8: proxy.ts refresh and the Data Access Layer
+
+[#42](https://github.com/craig-o-curtis/dudesphere/issues/42) · 2026-10-15 · `proxy.ts`, Data Access Layer, and Streaming dynamic
+
+**TLDR.** A member's session now refreshes before a page renders, whether they load the page or click a link inside the app. The idea: `proxy.ts` runs on the server before routing, for every request its matcher lets in, so it can send a navigation through a Route Handler that sets fresh cookies and back, while every page stays a static shell. Inside the page, one `<Suspense>` hole asks who is signed in through the Data Access Layer (DAL): one cached, server-only module that every page, action and handler asks.
+
+### How it works here
+
+A member whose access token runs out in 20 seconds clicks a `<Link>` to `/feed`.
+
+1. **The prefetch, earlier.** When the link appeared, the router prefetched `/feed`. Every prefetch sends a `next-router-prefetch` header, and the `missing` rule in `apps/web/src/proxy.ts` → `config` keeps any request with that header out of proxy. So a hovered link never starts a refresh. The prefetch holds no session output either, because `verifySession` stops at `await io()` (step 6).
+2. **The click.** The router fetches `/feed` as an RSC request: it asks for the data React uses to render the page on the client, not for HTML. Next strips its RSC headers from the request proxy sees, so that proxy treats an RSC request and an HTML request the same. `proxy.ts` → `proxy` runs before Next picks a route. For a GET with `__Host-session` whose token is inside its refresh window, it answers 307 to `/api/auth/refresh?next=/feed`. `nextPathFor` builds `next` from `request.nextUrl`, which never carries Next's internal `_rsc` query.
+3. **The round trip.** The router follows the 307. `apps/web/src/app/api/auth/refresh/route.ts` → `GET` swaps the tokens, sets both cookies and answers 303 to `/feed`. The router follows that too, and renders `/feed` on the client with no full reload. The Task 1 spike proved this chain in Chromium and WebKit, on a production build, before proxy was written. The auth side of this step is in [auth-lesson.md, AUTH-8](./auth-lesson.md#auth-8-proxyts-refresh-and-the-data-access-layer).
+4. **The shell.** `apps/web/src/app/(app)/feed/page.tsx` → `FeedPage` is synchronous and reads nothing from the request. Its heading is in the static shell, and `next build` lists the route as `◐ /feed`. `apps/web/src/components/SiteHeader/SiteHeader.tsx` → `SiteHeader`, new in the root layout, reads nothing either, so every page stays `◐`.
+5. **The hole.** `apps/web/src/components/FeedWelcome/FeedWelcome.tsx` → `FeedWelcome` sits in `<Suspense fallback={<FeedWelcomeSkeleton />}>`. It awaits `requireSession("/feed")` and then `getMe()`, both from `apps/web/src/lib/session.ts`, and streams in "Signed in as …".
+6. **The DAL.** `session.ts` → `verifySession` reads the cookie through `cookies()`, decodes `exp`, awaits `io()` from `next/cache`, and only then compares `exp` with gmt's clock. React's `cache()` wraps it, so `requireSession` and `getMe` share one run per render. `getMe` is wrapped too, so any number of components that ask make one call to Nest's `GET /users/me`. `import "server-only"` on the file's first line makes the build fail if a Client Component imports it.
+
+### Look-alikes
+
+|                         | `proxy.ts`                                                         | A Route Handler                                                 |
+| ----------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| What it is              | Code that runs before routing, on every request its matcher admits | A `route.ts` file that answers HTTP at its own path             |
+| Runs on                 | Node only. `runtime` can't be set; setting it throws               | Node, the default                                               |
+| Sees `__Secure-refresh` | No: it runs for page paths, and that cookie's path is `/api/auth`  | Yes, when it lives under `/api/auth`                            |
+| When to use it          | A quick check on cookie data alone, then a redirect                | Work that needs a body, a call to Nest or a path-limited cookie |
+| In this app             | `proxy.ts` → `proxy`                                               | `refresh/route.ts` → `GET`, `POST`; `bff/[...path]/route.ts`    |
+
+`proxy.ts` replaces `middleware.ts`, which Next 16 deprecated. Proxy runs on Node and can't use the Edge runtime. This app has no `middleware.ts`.
+
+|                         | React `cache()`                                             | `'use cache'`                                                       |
+| ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| What it is              | A wrapper that remembers a function's result for one render | A directive that keeps a function's or component's output for reuse |
+| How long it keeps it    | One server request. React starts afresh on the next         | Until its `cacheLife` runs out, or a tag expires it                 |
+| Can it read `cookies()` | Yes                                                         | No. A plain `'use cache'` throws on `cookies()`                     |
+| In this app             | `session.ts` → `verifySession`, `getMe`                     | Not used in this story                                              |
+
+### The code
+
+```ts
+// NEW FILE: apps/web/src/proxy.ts
+export function proxy(request: NextRequest): NextResponse {
+  if (request.method !== "GET") {
+    return NextResponse.next();
+  }
+
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!token || !needsRefresh(token)) {
+    return NextResponse.next();
+  }
+
+  // Next strips its internal `_rsc` query from nextUrl, so this is only the
+  // page's own path and query (proved in the Task 1 spike).
+  const next = nextPathFor(request.nextUrl.pathname, request.nextUrl.search);
+  const target = new URL(REFRESH_PATH, request.url);
+  if (next !== null) {
+    target.searchParams.set("next", next);
+  }
+  return NextResponse.redirect(target, 307);
+}
+```
+
+```ts
+// EXISTING FILE: apps/web/src/lib/session.ts
+export const verifySession = cache(async function verifySession(): Promise<VerifiedSession | null> {
+  const { accessToken } = await readSessionCookies();
+  if (accessToken === null) {
+    return null;
+  }
+
+  const exp = readTokenExp(accessToken);
+  if (exp === null) {
+    return null;
+  }
+
+  await io();
+  if (expiresWithin(exp, 0)) {
+    return null;
+  }
+
+  return { accessToken, exp };
+});
+```
+
+`proxy` decides on cookie data alone and makes no network call. The Next docs call this an optimistic check: fast, and never the last word. A Server Action POST passes straight through, and every page, handler and action checks the session again. `proxy.ts` copies `SESSION_COOKIE` rather than import it from `session.ts`, because that file pulls in `server-only`, `next/headers` and the API client, and the proxy docs advise against shared modules there. `proxy.spec.ts` fails if the two names drift apart.
+
+### Watch out
+
+- **The `missing` rule works only while every prefetch sends the header.** Proxy can't spot a prefetch itself, because Next strips `next-router-prefetch` from `request.headers`. So the matcher has to. Auto prefetches and `<Link prefetch={true}>` send the header while `partialPrefetching` is on in `apps/web/next.config.ts`. A Full prefetch sends none, so it would reach proxy and could start a refresh. The proxy docs also warn that a matcher change silently drops coverage, so `apps/web/src/proxy.spec.ts` pins `config` word for word.
+- **Read the clock after `io()`, not just after `cookies()`.** The `io()` docs say a component that reads `cookies()` doesn't need `io()`, because the cookie read is already where a prerender stops. Here that wasn't enough. With partial prefetching, session data resolves in the App Shell, the per-session prefetch Next makes ahead of a navigation. So `cookies()` resolved there, and gmt's clock was read during a prerender. The Task 9 e2e run caught Next logging "encountered the unstable value Date.now() while prerendering". `verifySession` now awaits `io()` before the clock: a control build logged 8 of those lines, and the fixed build none. The docs prefer `io()` to `connection()`, which would also block prefetches.
+- **`cache()` dedupes inside a render only.** In a Route Handler or a Server Action it does nothing, and every call runs the function (Next docs, "Creating a Data Access Layer"). Vitest has no server render either. So the claim that three `getMe()` calls make one Nest call was checked by counting calls in the API log, not by a unit test.
+
+### Read more
+
+- [`proxy.js` API reference: matcher, runtime and execution order](https://nextjs.org/docs/app/api-reference/file-conventions/proxy)
+- [`proxy.js`: RSC requests and rewrites](https://nextjs.org/docs/app/api-reference/file-conventions/proxy#rsc-requests-and-rewrites)
+- [`io()`, and how it differs from `connection()`](https://nextjs.org/docs/app/api-reference/functions/io)
+- [Optimizing prefetching: include session data in the shell](https://nextjs.org/docs/app/guides/optimizing-prefetching#include-session-data-in-the-shell)
+- [Authentication: creating a Data Access Layer](https://nextjs.org/docs/app/guides/authentication#creating-a-data-access-layer-dal)
+- [Authentication with Cache Components](https://nextjs.org/docs/app/guides/authentication-with-cache-components)
+- [Server and Client Components: preventing environment poisoning (`server-only`)](https://nextjs.org/docs/app/getting-started/server-and-client-components#preventing-environment-poisoning)
+- [`cache`, React docs](https://react.dev/reference/react/cache)
+- [rendering-strategies.md: the `proxy.ts`, Route Handlers, Data Access Layer and Streaming dynamic rows](../context/epic-lebowski/rendering-strategies.md#the-strategies)
+- The auth side of this story: [auth-lesson.md, AUTH-8](./auth-lesson.md#auth-8-proxyts-refresh-and-the-data-access-layer)

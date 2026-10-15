@@ -19,6 +19,7 @@ A game exists only if someone knows it is their turn. Without a lobby, invites a
 - "Let's go bowling" button on `/dudes/[id]` (FEED-17): Server Action `startGame([id])` calls `POST /lanes/games` and redirects to `/lanes/<new id>`.
 - A "Bowl with others" picker on `/lanes` for up to 3 opponents, by searching display names through `GET /profiles?limit=...`.
 - Turn signal in the app header: a small pin icon with the count of my-turn games, "Phone's ringing, Dude" as its label. It polls `GET /lanes/games?turn=mine&limit=1` (reading `meta.totalItems`) with TanStack Query `refetchInterval: 30_000` while the tab is visible, and `refetchIntervalInBackground: false`.
+- The polls go through `clientFetch` and AUTH-8's `/api/bff/[...path]`, whose allow-list doesn't have `lanes` yet. Add `lanes` to it in `apps/web/src/lib/bff-paths.ts`, with a spec line.
 - While a game page is open and it is the opponent's turn, `useQuery` on the game polls every 5 seconds (`refetchInterval: 5_000`), and stops when it is the viewer's turn or the game ends.
 - Paused games: Nest reports `status: "paused"` once `turnDueAt` has passed (API-22). The game page and list show "The Dude abides; game paused." Either player can press "Nudge back in", a new Nest route:
   - `POST /lanes/games/:id/resume`, player in the game: sets `turnStartedAt` to now and `turnDueAt` 72 hours later, same seat. 200. Allowed only when paused.

@@ -5,6 +5,7 @@ This file teaches authentication (proving who the member is) and authorization (
 ## Contents
 
 - [AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies](#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies): A member can now sign up, sign in and sign out in the web app, and the browser never sees a token or calls Nest.
+- [AUTH-8: proxy.ts refresh and the Data Access Layer](#auth-8-proxyts-refresh-and-the-data-access-layer): A member now stays signed in past the 15-minute access token, until the refresh token runs out.
 
 ## AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies
 
@@ -126,3 +127,136 @@ Every sign-in ends in `startSession`. AUTH-52's email-link, passkey and social s
 - [TOKENS_AND_SESSIONS.md: Signing out](../reference/TOKENS_AND_SESSIONS.md#signing-out)
 - [TOKENS_AND_SESSIONS.md: How an access token is tied to its sign-in](../reference/TOKENS_AND_SESSIONS.md#how-an-access-token-is-tied-to-its-sign-in)
 - The rendering side of this story: [rendering-lesson.md, AUTH-7](./rendering-lesson.md#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies)
+
+## AUTH-8: proxy.ts refresh and the Data Access Layer
+
+[#42](https://github.com/craig-o-curtis/dudesphere/issues/42) · 2026-10-15 · Authentication
+
+**TLDR.** A member now stays signed in past the 15-minute access token, until the refresh token runs out: 7 days without a visit, and 30 days at most for one sign-in. The idea: the refresh token travels only to `/api/auth` and works only once, so `proxy.ts` sends any navigation whose access token is about to run out to one refresh handler. That handler swaps the token at most once per server, and keeps the new pair only when it belongs to the same sign-in as the session cookie.
+
+### How it works here
+
+The member's access token has 20 seconds left. They open `/feed`.
+
+1. **The browser** sends `GET /feed` with `__Host-session`, but not `__Secure-refresh`, whose path is `/api/auth`. `__Host-session` now lives 7 days, as long as the refresh cookie, though the token inside it still runs out after 15 minutes. `apps/web/src/lib/session.ts` → `startSession` sets both with `REFRESH_MAX_AGE_SECONDS`. Without that, proxy couldn't tell a member whose token ran out from an anonymous visitor, and redirecting visitors would loop: refresh, `/login`, refresh.
+2. `apps/web/src/proxy.ts` → `proxy` → `needsRefresh`: `apps/web/src/lib/access-token.ts` → `readTokenTimes` decodes `exp` and `iat` with no signature check. `refreshWindowSeconds` gives `min(60, floor((exp - iat) / 2))`, and `expiresWithin` compares with gmt's clock. Inside the window, or unreadable: 307 to `/api/auth/refresh?next=/feed`. No cookie at all: pass through, signed out.
+3. `apps/web/src/app/api/auth/refresh/route.ts` → `GET`. The path is under `/api/auth`, so now the browser sends both cookies. `rawSessionCookie` must find `__Host-session`, or the member counts as signed out and Nest isn't called.
+4. `route.ts` → `refreshFromCookie` refuses a request that carries `__Secure-refresh` twice (`session.ts` → `hasDuplicateRefreshCookie`). It reads the refresh token with `readSessionCookies`, and refuses a session token with no `sid` (`access-token.ts` → `readTokenSid`). The `sid` is the sign-in's id, the same in every access token of one sign-in.
+5. `apps/web/src/lib/refresh.ts` → `refreshOnce` keys a module-level `Map` by the SHA-256 of the refresh token. A second request with the same token, from another tab say, gets the same promise. After Nest answers, the pair stays 10 seconds, so a tab that arrives a moment late with the old cookie gets that pair and doesn't send a spent token.
+6. In Nest, `TokenService.refresh` (from `@nestjs/authentication`) spends the token and returns its successor, with the family's claims, `sid` included. A token used a second time throws "reused" and revokes the whole family.
+7. Back in `refreshFromCookie`, `access-token.ts` → `sameSignIn(sessionToken, pair.accessToken)` must find the same `sid` in the old and the new access token, or nothing is saved.
+8. `GET` calls `startSession(pair, next, "/feed")`, which sets both cookies, and `redirectTo` answers 303 to `/feed` with `Cache-Control: no-store`.
+9. `/feed` renders. `apps/web/src/components/FeedWelcome/FeedWelcome.tsx` → `FeedWelcome` calls `requireSession("/feed")`, which only reads the cookie. Then `getMe()` calls Nest's `GET /users/me` with the Bearer token, and Nest's `JwtAuth.validate` checks the signature and that the `sid` is live (AUTH-7). Only that Nest check proves who the member is. If Nest answers 401, `FeedWelcome` sends them to `/login?next=%2Ffeed`.
+
+When refresh fails, every path clears `__Host-session`, so proxy lets the next request through as anonymous. A 401 from Nest, or a refusal in steps 3, 4 or 7, clears both cookies and lands on `/login?next=%2Ffeed`. Nest down (a 5xx, a 429 or no answer) clears only `__Host-session`, keeps the unspent refresh cookie, and lands on `/feed`, which sends the member to sign in. Client components get the same through `apps/web/src/lib/client-fetch.ts` → `clientFetch`: after a 401 from `/api/bff`, it posts to `/api/auth/refresh` once for the whole tab, and retries once.
+
+### Look-alikes
+
+|                                                  | `verifySession` and `requireSession`                                    | `getMe`                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| What it checks                                   | The cookie holds a JWT-shaped token whose unchecked `exp` hasn't passed | Nest's answer to `GET /users/me`, with the token as Bearer |
+| Catches a forged token, or one ended at sign-out | No                                                                      | Yes: Nest checks the signature and the `sid`               |
+| Calls Nest                                       | No                                                                      | Once per render, through React's `cache()`                 |
+| When to use it                                   | Choosing what to try: which links to show, an early trip to `/login`    | Anything private. Render it only when Nest answered        |
+| In this app                                      | `session.ts`; `SessionCorner`; the first line of `FeedWelcome`          | `session.ts`; the second line of `FeedWelcome`             |
+
+Both columns are authentication: they ask who the member is. Neither is authorization. `requireSession` lets a forged token through, so it guards nothing on its own (SEC-2). The member's role comes from `getMe`, never from the token, which carries none on purpose. What the member may do is decided in Nest, by its guards, on every call made with the Bearer.
+
+|              | `GET /api/auth/refresh`                                                | `POST /api/auth/refresh`                                       |
+| ------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Who calls it | `proxy.ts`, by redirecting a navigation                                | `clientFetch`, after a 401 from `/api/bff`                     |
+| Origin check | None. A cross-site GET can only swap the tokens for ones it never sees | `assertSameOrigin`, or 403 with no cookie touched              |
+| Success      | 303 to `next`, or `/feed`                                              | 204                                                            |
+| Signed out   | 303 to `/login?next=`                                                  | 401. `clientFetch` then sends the browser to `/login?next=`    |
+| Nest down    | 303 to `next`, with `__Host-session` cleared                           | 503. `clientFetch` hands its caller the first 401, no redirect |
+| In this app  | `refresh/route.ts` → `GET`                                             | `refresh/route.ts` → `POST`                                    |
+
+Both call `refreshFromCookie`, so the checks and the cookie writes are the same.
+
+### The code
+
+```ts
+// NEW FILE: apps/web/src/lib/refresh.ts
+export function refreshOnce(refreshToken: string): Promise<TokenPair> {
+  const key = keyOf(refreshToken);
+  const pending = refreshes.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const promise = apiFetch<TokenPair>("/auth/token/refresh", {
+    method: "POST",
+    body: { refreshToken },
+  });
+  refreshes.set(key, promise);
+  // Both handlers return nothing and never throw, so this chain never
+  // rejects. Callers see the failure on `promise` itself.
+  promise.then(
+    () => forgetAfterHold(key, promise),
+    () => forget(key, promise),
+  );
+  return promise;
+}
+```
+
+```ts
+// NEW FILE: apps/web/src/app/api/auth/refresh/route.ts
+async function refreshFromCookie(request: Request, sessionToken: string): Promise<Outcome> {
+  if (hasDuplicateRefreshCookie(request)) {
+    // Never the values: one of them is the member's live refresh token.
+    console.warn(`${LOG_LABEL}: refused, the refresh cookie was sent more than once.`);
+    return signedOut();
+  }
+
+  const { refreshToken } = await readSessionCookies();
+  if (refreshToken === null) {
+    return signedOut();
+  }
+
+  // Nothing to tie the refresh token to, so don't spend it.
+  if (readTokenSid(sessionToken) === null) {
+    return refusedOtherSignIn();
+  }
+
+  let pair: TokenPair;
+  try {
+    pair = await refreshOnce(refreshToken);
+  } catch (error) {
+    // Nest says "invalid", "expired" or "reused". Each one means the same
+    // here: this sign-in is over. That is no failure of the app, so no log.
+    if (error instanceof ApiRequestError && error.status === 401) {
+      await clearSessionCookies();
+      return { kind: "signed-out" };
+    }
+    // Logs the method, path and status only: never a token or Nest's body.
+    logFailure(LOG_LABEL, error);
+    await clearSessionCookie();
+    return { kind: "unavailable" };
+  }
+
+  if (!sameSignIn(sessionToken, pair.accessToken)) {
+    return refusedOtherSignIn();
+  }
+  return { kind: "refreshed", pair };
+}
+```
+
+`refreshOnce` stores the promise, not the result, so a request that arrives while Nest is still answering joins the same call. A failure leaves the `Map` at once, so the next request asks Nest again.
+
+### Watch out
+
+- **A flat 60-second window loops.** qa-skeptic set `JWT_EXPIRES_IN=60` and got `ERR_TOO_MANY_REDIRECTS` (QA-1). A token that lives 60 seconds is "within 60 seconds" the moment Nest issues it, so the 303 back to the page went straight to refresh again. `refreshWindowSeconds` caps the window at half the token's life. A token that lives 2 seconds or less can still loop as the second ticks over, so `JWT_EXPIRES_IN` must be 3 or more.
+- **A sibling subdomain can plant `__Secure-refresh`, but not `__Host-session`.** `__Secure-` allows a `Domain` attribute, and `__Host-` forbids one. owasp-hacker proved live that a planted refresh cookie could sign the member in to the attacker's account (SEC-1, SEC-6). Three checks close it: refresh only with `__Host-session` present, refuse a refresh cookie sent twice, and keep a fresh pair only when its `sid` matches the session cookie's. AUTH-7's sign-out routes now use the access token first, through Nest's `POST /auth/sign-out`, for the same reason.
+- **The 10-second hold is a grace period, on the web side.** Nest has none by choice: a thief who replays a spent token inside a grace window gets a working pair (TOKENS_AND_SESSIONS.md). The hold brings back that cost for 10 seconds, on one server, and the spec accepts it. The `sid` check narrows it, because a replay must come with a session cookie of the same sign-in. Two servers can still race. The loser gets 401 "reused", and the member signs in again.
+
+### Read more
+
+- [Next.js authentication: optimistic checks with Proxy](https://nextjs.org/docs/app/guides/authentication#optimistic-checks-with-proxy-optional)
+- [Next.js authentication: creating a Data Access Layer](https://nextjs.org/docs/app/guides/authentication#creating-a-data-access-layer-dal)
+- [NestJS docs: authentication, refresh token rotation and reuse](https://docs.nestjs.com/security/authentication)
+- [MDN: `Set-Cookie`, cookie prefixes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#cookie_prefixes)
+- [frontend-architecture.md: Auth as a BFF (Refresh, One refresh at a time, Client fetches)](../context/frontend-architecture.md#auth-as-a-bff)
+- [TOKENS_AND_SESSIONS.md: Refreshing, step by step](../reference/TOKENS_AND_SESSIONS.md#refreshing-step-by-step)
+- [TOKENS_AND_SESSIONS.md: Why a token used twice ends the whole family](../reference/TOKENS_AND_SESSIONS.md#why-a-token-used-twice-ends-the-whole-family)
+- [TOKENS_AND_SESSIONS.md: Two requests at the same moment](../reference/TOKENS_AND_SESSIONS.md#two-requests-at-the-same-moment)
+- The rendering side of this story: [rendering-lesson.md, AUTH-8](./rendering-lesson.md#auth-8-proxyts-refresh-and-the-data-access-layer)
