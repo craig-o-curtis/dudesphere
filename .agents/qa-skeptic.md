@@ -66,7 +66,7 @@ Rules for the results:
 Check the work against these rules:
 
 - `AGENTS.md` and the hard rules below;
-- `context/coding-standards.md`;
+- `context/coding-standards.md`, and each topic file in its index that matches the diff, such as `context/standards/nextjs.md` for routes, rendering and caching in `apps/web`;
 - nestjs-best-practices for the API, and nextjs-app-architecture for the web app;
 - ui-composition for web UI: shared parts reused, no raw values, no copied markup or CSS, and no `@base-ui/react` import outside `src/components/ui/`;
 - the zero-Date rule, by hand, in files where lint is switched off.

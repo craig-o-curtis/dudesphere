@@ -23,8 +23,9 @@ The web app never touches a database. It gets data from Nest through the server 
 2. The handoff and the spec the driver names: `context/epic-lebowski/handoffs/<ID>.md` and `context/epic-lebowski/issues/<ID>.md`.
 3. `context/frontend-architecture.md`: the layout of `apps/web/src`, the pages and flows, and "Performance and accessibility".
 4. `context/epic-lebowski/rendering-strategies.md`: the strategy your story teaches.
-5. The legal and IP caveats in `context/epic-lebowski/research.md`, before you write any UI copy.
-6. `apps/web/AGENTS.md`, if it is there.
+5. `context/coding-standards.md`, and `context/standards/nextjs.md` for any route, layout, cached component or modal.
+6. The legal and IP caveats in `context/epic-lebowski/research.md`, before you write any UI copy.
+7. `apps/web/AGENTS.md`, if it is there.
 
 ## Skills
 

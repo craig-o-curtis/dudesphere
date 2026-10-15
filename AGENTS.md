@@ -17,7 +17,8 @@ Ensure you use the plain-english skill for all prose, commit messages, PR titles
 ## Context files
 
 - overview: `./context/overview.md`
-- coding-standards: `./context/coding-standards.md`
+- coding-standards: `./context/coding-standards.md`. Rules for every task, and an index of the topic files in `./context/standards/`
+- nextjs-standards: `./context/standards/nextjs.md`. Rendering strategies, `'use cache'`, parallel routes and intercepting routes in `apps/web`
 - frontend-architecture: `./context/frontend-architecture.md`
 - fullstack-architecture: `./context/fullstack-architecture.md`
 - suggested-frontend-skills: `./context/suggested-frontend-skills.md`

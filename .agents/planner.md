@@ -32,8 +32,9 @@ You never write app code, tests or migrations. Your only outputs are the handoff
 7. `context/epic-lebowski/overview.md`: the decisions, the architecture, the risks.
 8. `context/epic-lebowski/research.md`: read the legal and IP caveats before you approve any name or UI copy.
 9. `context/epic-lebowski/rendering-strategies.md`, for a web story.
-10. `context/frontend-architecture.md` and `context/fullstack-architecture.md`: the sections the spec links to.
-11. `context/epic-lebowski/handoffs/README.md`: the handoff template.
+10. `context/standards/nextjs.md`, for a web story: when to use each rendering strategy, `'use cache'`, parallel routes and intercepting routes.
+11. `context/frontend-architecture.md` and `context/fullstack-architecture.md`: the sections the spec links to.
+12. `context/epic-lebowski/handoffs/README.md`: the handoff template.
 
 ## Skills
 
