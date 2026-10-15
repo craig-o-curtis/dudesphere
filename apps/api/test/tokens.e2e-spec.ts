@@ -97,6 +97,11 @@ describe("Tokens (e2e)", () => {
     return request(app.getHttpServer()).post("/auth/token/revoke").send({ refreshToken });
   }
 
+  function signOut(accessToken?: string) {
+    const post = request(app.getHttpServer()).post("/auth/sign-out");
+    return accessToken ? post.set(bearer(accessToken)) : post;
+  }
+
   function signOutEverywhere(accessToken?: string) {
     const post = request(app.getHttpServer()).post("/auth/sign-out-everywhere");
     return accessToken ? post.set(bearer(accessToken)) : post;
@@ -452,6 +457,104 @@ describe("Tokens (e2e)", () => {
     });
   });
 
+  // The same end as POST /auth/token/revoke, found by the access token
+  // instead of the refresh token: the token's `sid` names its sign-in. For
+  // a client that holds only the access token, such as the web app's
+  // sign-in action, which cannot read the refresh cookie.
+  describe("signing out the access token's sign-in", () => {
+    it("401 with no access token", async () => {
+      const { body } = await signOut().expect(401);
+
+      expect(body).toMatchObject({ errorCode: "missing_credentials" });
+    });
+
+    it("answers 204 with no body, and ends that family at once", async () => {
+      const { pair } = await newSession();
+
+      const response = await signOut(pair.accessToken).expect(204);
+
+      expect(response.text).toBe("");
+      expect(await storedToken(pair.refreshToken)).toMatchObject({ revoked: true });
+      await refresh(pair.refreshToken).expect(401);
+    });
+
+    it("stops the access token at once", async () => {
+      const { pair } = await newSession();
+      await whoAmI(pair.accessToken).expect(200);
+
+      await signOut(pair.accessToken).expect(204);
+
+      const refusedMe = await whoAmI(pair.accessToken).expect(401);
+      expect(refusedMe.body).toMatchObject({ statusCode: 401, message: "unknown subject" });
+    });
+
+    // The family, not one token: a refreshed pair belongs to the same
+    // sign-in, so it ends too.
+    it("ends the tokens the sign-in was refreshed to", async () => {
+      const { pair } = await newSession();
+      const next = (await refresh(pair.refreshToken).expect(200)).body as Pair;
+
+      await signOut(pair.accessToken).expect(204);
+
+      await refresh(next.refreshToken).expect(401);
+      await whoAmI(next.accessToken).expect(401);
+    });
+
+    // The case it was built for: the member signed in twice, and signing
+    // out of the second must not leave the first alive, nor the other way.
+    it("leaves the member's other sign-in working", async () => {
+      const { sent, pair: first } = await newSession();
+      const second = (await signInAs(sent).expect(200)).body as Pair;
+
+      await signOut(first.accessToken).expect(204);
+
+      await whoAmI(first.accessToken).expect(401);
+      await refresh(first.refreshToken).expect(401);
+      await whoAmI(second.accessToken).expect(200);
+      await refresh(second.refreshToken).expect(200);
+    });
+
+    it("leaves every other member signed in", async () => {
+      const walter = await newSession();
+      const donny = await newSession();
+
+      await signOut(walter.pair.accessToken).expect(204);
+
+      await whoAmI(donny.pair.accessToken).expect(200);
+      await refresh(donny.pair.refreshToken).expect(200);
+    });
+
+    // The token's sign-in is over, so the guard refuses it before the
+    // route runs. Nothing is left to end.
+    it("401 a second time, with the same token", async () => {
+      const { pair } = await newSession();
+      await signOut(pair.accessToken).expect(204);
+
+      await signOut(pair.accessToken).expect(401);
+    });
+
+    // A dev token belongs to no sign-in, so there is nothing to end, and
+    // the member's real sign-ins carry on. See src/dev/dev-token.ts.
+    it("answers 204 for a dev token, and ends none of the member's sign-ins", async () => {
+      const { userId, pair } = await newSession();
+
+      await signOut(signedWith({ sub: String(userId), amr: ["dev"] })).expect(204);
+
+      await whoAmI(pair.accessToken).expect(200);
+      await refresh(pair.refreshToken).expect(200);
+    });
+
+    it("lets the member sign in again straight away", async () => {
+      const { sent, pair } = await newSession();
+      await signOut(pair.accessToken).expect(204);
+
+      const again = (await signInAs(sent).expect(200)).body as Pair;
+
+      await whoAmI(again.accessToken).expect(200);
+      await refresh(again.refreshToken).expect(200);
+    });
+  });
+
   describe("signing out every device", () => {
     it("401 with no access token", async () => {
       const { body } = await signOutEverywhere().expect(401);
@@ -762,7 +865,8 @@ describe("Tokens (e2e)", () => {
 
   // The paths these routes had before. Signing in is POST /auth/token,
   // refreshing is POST /auth/token/refresh, signing out is
-  // POST /auth/token/revoke or POST /auth/sign-out-everywhere, signing up is
+  // POST /auth/token/revoke, POST /auth/sign-out or
+  // POST /auth/sign-out-everywhere, signing up is
   // POST /auth/sign-up, and a reset is POST /auth/password/forgot and
   // POST /auth/password/reset.
   it.each([
