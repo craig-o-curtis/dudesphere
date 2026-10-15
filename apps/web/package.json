@@ -2,7 +2,7 @@
   "name": "@dudesphere/web",
   "version": "0.0.1",
   "private": true,
-  "description": "The Dudesphere web app: Next.js 16.4 and React 19.3, a BFF in front of the NestJS API.",
+  "description": "Dudesphere web app: Next.js 16.4 and React 19.3, a BFF in front of the NestJS API.",
   "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev -p 3001",

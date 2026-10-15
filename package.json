@@ -2,7 +2,7 @@
   "name": "dudesphere",
   "version": "0.0.1",
   "private": true,
-  "description": "The Dudesphere: a NestJS API and a Next.js web app in one pnpm workspace.",
+  "description": "Dudesphere: a NestJS API and a Next.js web app in one pnpm workspace.",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {

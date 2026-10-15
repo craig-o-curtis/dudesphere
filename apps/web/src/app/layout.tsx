@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 
 import { MotionProvider } from "@/components/MotionProvider/MotionProvider";
 import { SiteFooter } from "@/components/SiteFooter/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader/SiteHeader";
 import { SkipLink } from "@/components/ui/SkipLink/SkipLink";
 import { themeInitScript } from "@/lib/theme";
 
@@ -35,7 +36,7 @@ const atkinson = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "The Dudesphere",
+  title: "Dudesphere",
   description:
     "A place for dudes to abide: bowling, take-it-easy rituals and the occasional Caucasian.",
 };
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body>
         <SkipLink href="#main">Skip to content</SkipLink>
+        <SiteHeader />
         <MotionProvider>
           <main id="main" tabIndex={-1} className={styles.main}>
             {children}

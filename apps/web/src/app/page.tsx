@@ -16,7 +16,7 @@ export default function Home({ searchParams }: { searchParams: Promise<SignoutPa
   return (
     <PageShell.Root width="fit" align="center" text="center">
       <Heading level={1} size="3xl">
-        The Dudesphere
+        Dudesphere
       </Heading>
       <Text size="xl">The Dude abides. The lanes open soon.</Text>
       <Text tone="muted">{FRAMES_PER_GAME} frames, no hurry. Take it easy, man.</Text>

@@ -1,19 +1,18 @@
 import { render, screen } from "@testing-library/react";
 
-import { readSessionCookies } from "@/lib/session";
+import { verifySession } from "@/lib/session";
 
 import { SessionCorner, SessionCornerSkeleton } from "./SessionCorner";
 
-vi.mock("@/lib/session", () => ({ readSessionCookies: vi.fn() }));
+vi.mock("@/lib/session", () => ({ verifySession: vi.fn() }));
 
 const TOKEN = "e2e-fake-access-token-value";
 const REFRESH = "e2e-fake-refresh-token-value";
 
 async function renderCorner(accessToken: string | null, signout?: string | string[]) {
-  vi.mocked(readSessionCookies).mockResolvedValue({
-    accessToken,
-    refreshToken: accessToken ? REFRESH : null,
-  });
+  vi.mocked(verifySession).mockResolvedValue(
+    accessToken ? { accessToken, exp: 4_102_444_800 } : null,
+  );
   return render(await SessionCorner({ searchParams: Promise.resolve(signout ? { signout } : {}) }));
 }
 
@@ -27,9 +26,20 @@ describe("SessionCorner", () => {
     });
   });
 
+  describe("signed out with an expired token", () => {
+    it("shows the links when a cookie is present but verifySession finds no live token", async () => {
+      // The cookie lives 7 days; the token inside it lives 15 minutes.
+      vi.mocked(verifySession).mockResolvedValue(null);
+      const { container } = render(await SessionCorner({ searchParams: Promise.resolve({}) }));
+      expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+      expect(screen.queryByText("You're signed in.")).not.toBeInTheDocument();
+      expect(container.querySelectorAll("form")).toHaveLength(0);
+    });
+  });
+
   describe("signed out after a partial sign-out", () => {
     const message =
-      "You're signed out here, but we couldn't reach your other devices. Sign in and try Sign out everywhere again.";
+      "You're signed out here, but we couldn't confirm every sign-in ended. Sign in and press Sign out everywhere to be sure.";
 
     it("shows the message in a status element", async () => {
       await renderCorner(null, "partial");
@@ -89,10 +99,7 @@ describe("SessionCorner", () => {
     });
 
     it("gives two corners on one page different hint ids, each its own", async () => {
-      vi.mocked(readSessionCookies).mockResolvedValue({
-        accessToken: TOKEN,
-        refreshToken: REFRESH,
-      });
+      vi.mocked(verifySession).mockResolvedValue({ accessToken: TOKEN, exp: 4_102_444_800 });
       const first = await SessionCorner({ searchParams: Promise.resolve({}) });
       const second = await SessionCorner({ searchParams: Promise.resolve({}) });
       render(
