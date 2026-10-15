@@ -46,63 +46,67 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    ⬜ Todo · [#41][41] · Blocked by: none\
    `/signup`, `/login`, Route Handlers that set the `session` and `refresh` cookies
 
-8. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
+8. **WEB-54** · [Shared UI parts and the auth form refactor](issues/WEB-54.md)\
+   ⬜ Todo · [#90][90] · Blocked by: AUTH-7\
+   `components/ui/` parts on the tokens and Base UI, auth forms rebuilt on them
+
+9. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
    ⬜ Todo · [#42][42] · Blocked by: AUTH-7\
    `proxy.ts` redirect-to-refresh, `lib/session.ts` with `verifySession`, `/api/bff`
 
-9. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
-   ⬜ Todo · [#43][43] · Blocked by: AUTH-7\
-   `/forgot-password`, `/reset-password`, `FRONTEND_URL` on the web origin
+10. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
+    ⬜ Todo · [#43][43] · Blocked by: AUTH-7, WEB-54\
+    `/forgot-password`, `/reset-password`, `FRONTEND_URL` on the web origin
 
-10. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
+11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
     ⬜ Todo · [#44][44] · Blocked by: none\
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
-11. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
-    ⬜ Todo · [#45][45] · Blocked by: none\
+12. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
+    ⬜ Todo · [#45][45] · Blocked by: WEB-54\
     `rendering-strategies.md` and a `/lab` index of every strategy
 
 ## Phase 1: The Feed
 
 Passwordless sign-in, then the Twitter part of the app.
 
-12. **AUTH-52** · [Passwordless sign-in](issues/AUTH-52.md)\
-    ⬜ Todo · [#46][46] · Blocked by: AUTH-7, AUTH-8, API-10\
+13. **AUTH-52** · [Passwordless sign-in](issues/AUTH-52.md)\
+    ⬜ Todo · [#46][46] · Blocked by: AUTH-7, AUTH-8, API-10, WEB-54\
     Email links, email verification, passkeys, Google and GitHub, one "Roll in" form
 
-13. **FEED-12** · [Splash page](issues/FEED-12.md)\
-    ⬜ Todo · [#47][47] · Blocked by: AUTH-8\
+14. **FEED-12** · [Splash page](issues/FEED-12.md)\
+    ⬜ Todo · [#47][47] · Blocked by: AUTH-8, WEB-54\
     Static shell, cached abidings ticker and hashtags, "who is signed in" in Suspense
 
-14. **FEED-13** · [Feed with infinite scroll and hashtag chips](issues/FEED-13.md)\
-    ⬜ Todo · [#48][48] · Blocked by: AUTH-8\
+15. **FEED-13** · [Feed with infinite scroll and hashtag chips](issues/FEED-13.md)\
+    ⬜ Todo · [#48][48] · Blocked by: AUTH-8, WEB-54\
     `/feed`, dynamic, `useInfiniteQuery` on `links.next`, up to 10 chips
 
-15. **FEED-14** · [Compose and reply with optimistic insert](issues/FEED-14.md)\
+16. **FEED-14** · [Compose and reply with optimistic insert](issues/FEED-14.md)\
     ⬜ Todo · [#49][49] · Blocked by: FEED-13\
     Server Action, `useActionState`, `useOptimistic`, `updateTag('abidings')`
 
-16. **API-15** · [Replies list and reply count](issues/API-15.md)\
+17. **API-15** · [Replies list and reply count](issues/API-15.md)\
     ⬜ Todo · [#50][50] · Blocked by: none\
     `GET /abidings?replyToId=` and `replyCount` on every abiding
 
-17. **FEED-16** · [Thread page and thread modal](issues/FEED-16.md)\
+18. **FEED-16** · [Thread page and thread modal](issues/FEED-16.md)\
     ⬜ Todo · [#51][51] · Blocked by: API-15, FEED-14\
     `/abidings/[id]`, intercepting-route modal, `<Activity>`, View Transitions
 
-18. **FEED-17** · [Dude pages and edit forms](issues/FEED-17.md)\
-    ⬜ Todo · [#52][52] · Blocked by: AUTH-8\
+19. **FEED-17** · [Dude pages and edit forms](issues/FEED-17.md)\
+    ⬜ Todo · [#52][52] · Blocked by: AUTH-8, WEB-54\
     `/dudes/[id]` and `/dudes/me`, edit forms with Nest's field errors
 
-19. **API-18** · [Hidden hashtags list for admins](issues/API-18.md)\
+20. **API-18** · [Hidden hashtags list for admins](issues/API-18.md)\
     ⬜ Todo · [#53][53] · Blocked by: none\
     An admin-only list of every tag, hidden ones included
 
-20. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
-    ⬜ Todo · [#54][54] · Blocked by: AUTH-8, API-18\
+21. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
+    ⬜ Todo · [#54][54] · Blocked by: AUTH-8, API-18, WEB-54\
     `/admin/users`, `/admin/hashtags`, `forbidden()`, `after()` audit line
 
-21. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
+22. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
     ⬜ Todo · [#55][55] · Blocked by: FEED-12, FEED-16, FEED-17\
     Metadata, OG image, sitemap, robots, "You're out of your element" 404
 
@@ -110,35 +114,35 @@ Passwordless sign-in, then the Twitter part of the app.
 
 The anchor: async bowling and the Score Sheet.
 
-22. **LANE-21** · [Bowling scoring engine in packages/lane-engine](issues/LANE-21.md)\
+23. **LANE-21** · [Bowling scoring engine in packages/lane-engine](issues/LANE-21.md)\
     ⬜ Todo · [#56][56] · Blocked by: none\
     Pure TS scoring, roll validation and fouls, with the USBC test vectors
 
-23. **API-22** · [Lane Night tables and game routes](issues/API-22.md)\
+24. **API-22** · [Lane Night tables and game routes](issues/API-22.md)\
     ⬜ Todo · [#57][57] · Blocked by: LANE-21\
     `lane_game`, `lane_player`, `lane_roll`; create, invite, state, my-turn list
 
-24. **API-23** · [Server-authoritative pinfall](issues/API-23.md)\
+25. **API-23** · [Server-authoritative pinfall](issues/API-23.md)\
     ⬜ Todo · [#58][58] · Blocked by: LANE-21, API-22\
     Seeded pin model in `lane-engine`; `POST /lanes/games/:id/rolls` takes inputs only
 
-25. **LANE-24** · [Lane Night UI](issues/LANE-24.md)\
-    ⬜ Todo · [#59][59] · Blocked by: AUTH-8, LANE-21, API-22, API-23\
+26. **LANE-24** · [Lane Night UI](issues/LANE-24.md)\
+    ⬜ Todo · [#59][59] · Blocked by: AUTH-8, LANE-21, API-22, API-23, WEB-54\
     2D lane, release meter, Over-the-line foul, scorecard, "MARK IT ZERO" stamp
 
-26. **LANE-25** · [Turn flow and gentle timeout](issues/LANE-25.md)\
+27. **LANE-25** · [Turn flow and gentle timeout](issues/LANE-25.md)\
     ⬜ Todo · [#60][60] · Blocked by: LANE-24\
     Invites, "Phone's ringing, Dude", my-turn list, 72-hour pause, rematch
 
-27. **LANE-26** · [Jesus taunt cards](issues/LANE-26.md)\
+28. **LANE-26** · [Jesus taunt cards](issues/LANE-26.md)\
     ⬜ Todo · [#61][61] · Blocked by: LANE-24\
     A curated card set sent with a turn; no free text
 
-28. **LANE-27** · [SSE lane ticker](issues/LANE-27.md)\
+29. **LANE-27** · [SSE lane ticker](issues/LANE-27.md)\
     ⬜ Todo · [#62][62] · Blocked by: API-22, LANE-24\
     Streaming Route Handler, 25-second cap, `EventSource` reconnect
 
-29. **LANE-28** · [Score Sheet for a real alley game](issues/LANE-28.md)\
+30. **LANE-28** · [Score Sheet for a real alley game](issues/LANE-28.md)\
     ⬜ Todo · [#63][63] · Blocked by: AUTH-8, LANE-21, API-22, FEED-14\
     Log a real game frame by frame; same engine; posts an abiding
 
@@ -146,71 +150,71 @@ The anchor: async bowling and the Score Sheet.
 
 Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Stranger.
 
-30. **API-29** · [Profile extensions, check-ins and timer sessions](issues/API-29.md)\
+31. **API-29** · [Profile extensions, check-ins and timer sessions](issues/API-29.md)\
     ⬜ Todo · [#64][64] · Blocked by: none\
     Rug, alignment, quiet day, time zone, certificate columns; two new tables
 
-31. **ABIDE-30** · [Daily "The Dude abides" check-in](issues/ABIDE-30.md)\
-    ⬜ Todo · [#65][65] · Blocked by: AUTH-8, API-29\
+32. **ABIDE-30** · [Daily "The Dude abides" check-in](issues/ABIDE-30.md)\
+    ⬜ Todo · [#65][65] · Blocked by: AUTH-8, API-29, WEB-54\
     One-tap check-in, optional mood, soft streaks, `after()`
 
-32. **ABIDE-31** · [Take-It-Easy timer](issues/ABIDE-31.md)\
-    ⬜ Todo · [#66][66] · Blocked by: AUTH-8, API-29\
+33. **ABIDE-31** · [Take-It-Easy timer](issues/ABIDE-31.md)\
+    ⬜ Todo · [#66][66] · Blocked by: AUTH-8, API-29, WEB-54\
     1 to 10 minute calm timer that saves a session
 
-33. **ABIDE-32** · [Shomer Shabbos quiet mode](issues/ABIDE-32.md)\
+34. **ABIDE-32** · [Shomer Shabbos quiet mode](issues/ABIDE-32.md)\
     ⬜ Todo · [#67][67] · Blocked by: AUTH-8, API-29, LANE-25\
     A weekly quiet day the member picks; turn clocks pause
 
-34. **RUG-33** · [The Rug profile theme](issues/RUG-33.md)\
+35. **RUG-33** · [The Rug profile theme](issues/RUG-33.md)\
     ⬜ Todo · [#68][68] · Blocked by: API-29, FEED-17\
     Seeded rug pattern generator; config saved through Nest
 
-35. **RUG-34** · [Laws of the Lane quiz](issues/RUG-34.md)\
-    ⬜ Todo · [#69][69] · Blocked by: API-29\
+36. **RUG-34** · [Laws of the Lane quiz](issues/RUG-34.md)\
+    ⬜ Todo · [#69][69] · Blocked by: API-29, WEB-54\
     Original tenets, fully static quiz, alignment saved by a Server Action
 
-36. **RUG-35** · [Lane Certificate](issues/RUG-35.md)\
+37. **RUG-35** · [Lane Certificate](issues/RUG-35.md)\
     ⬜ Todo · [#70][70] · Blocked by: RUG-34, ABIDE-30\
     `ImageResponse` certificate and share card; never implies ordination
 
-37. **RUG-36** · [Ask the Stranger](issues/RUG-36.md)\
-    ⬜ Todo · [#71][71] · Blocked by: none\
+38. **RUG-36** · [Ask the Stranger](issues/RUG-36.md)\
+    ⬜ Todo · [#71][71] · Blocked by: WEB-54\
     Curated original aphorisms, daily pick with `cacheLife('days')`
 
 ## Phase 4: Achievers
 
 Groups, Bowling Nights, recipe posts and moderation.
 
-38. **API-37** · [Achievers groups and the group feed](issues/API-37.md)\
+39. **API-37** · [Achievers groups and the group feed](issues/API-37.md)\
     ⬜ Todo · [#72][72] · Blocked by: none\
     `achiever_group`, `group_member`, `GET /abidings?groupId=`
 
-39. **ACHV-38** · [Groups UI](issues/ACHV-38.md)\
+40. **ACHV-38** · [Groups UI](issues/ACHV-38.md)\
     ⬜ Todo · [#73][73] · Blocked by: AUTH-8, API-37, FEED-14\
     Group list, group page with its feed, join and leave
 
-40. **API-39** · [Bowling Night events and the group leaderboard](issues/API-39.md)\
+41. **API-39** · [Bowling Night events and the group leaderboard](issues/API-39.md)\
     ⬜ Todo · [#74][74] · Blocked by: API-22, API-37\
     `bowling_night`, `rsvp`, check-in, leaderboard read
 
-41. **ACHV-40** · [Bowling Night UI and group leaderboard](issues/ACHV-40.md)\
+42. **ACHV-40** · [Bowling Night UI and group leaderboard](issues/ACHV-40.md)\
     ⬜ Todo · [#75][75] · Blocked by: API-39, ACHV-38, LANE-28\
     Night pages, RSVP and check-in, leaderboard from both game sources
 
-42. **API-41** · [Caucasian Bar recipe post type](issues/API-41.md)\
+43. **API-41** · [Caucasian Bar recipe post type](issues/API-41.md)\
     ⬜ Todo · [#76][76] · Blocked by: none\
     `kind: 'recipe'` on abidings, recipe sub-document, 21+ attestation
 
-43. **FEED-42** · [Caucasian Bar UI](issues/FEED-42.md)\
+44. **FEED-42** · [Caucasian Bar UI](issues/FEED-42.md)\
     ⬜ Todo · [#77][77] · Blocked by: AUTH-8, API-41, FEED-14\
     Recipe compose form, recipe card, 21+ gate
 
-44. **API-43** · [Walter's Rules reports and moderation states](issues/API-43.md)\
+45. **API-43** · [Walter's Rules reports and moderation states](issues/API-43.md)\
     ⬜ Todo · [#78][78] · Blocked by: none\
     `report` table, Over the line and Mark it zero states, admin routes
 
-45. **MOD-44** · [Walter's Rules UI and the "Calmer than you are" nudge](issues/MOD-44.md)\
+46. **MOD-44** · [Walter's Rules UI and the "Calmer than you are" nudge](issues/MOD-44.md)\
     ⬜ Todo · [#79][79] · Blocked by: AUTH-8, API-43, FEED-14, FEED-19\
     "There are rules" page, report dialog, moderation queue, pre-post nudge
 
@@ -218,15 +222,15 @@ Groups, Bowling Nights, recipe posts and moderation.
 
 Deploy, browser tests, and a performance and accessibility pass.
 
-46. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
+47. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
     ⬜ Todo · [#80][80] · Blocked by: API-10, AUTH-8\
     Next on Vercel, Nest on Railway or Fly, Neon, production env
 
-47. **WEB-46** · [Playwright flows and instant() navigation tests](issues/WEB-46.md)\
+48. **WEB-46** · [Playwright flows and instant() navigation tests](issues/WEB-46.md)\
     ⬜ Todo · [#81][81] · Blocked by: AUTH-52, FEED-16, LANE-25\
     Browser flows for sign-in, feed, thread and Lane Night
 
-48. **WEB-47** · [Performance and accessibility pass](issues/WEB-47.md)\
+49. **WEB-47** · [Performance and accessibility pass](issues/WEB-47.md)\
     ⬜ Todo · [#82][82] · Blocked by: WEB-46\
     Partial Prefetching, budgets, keyboard, contrast, reduced motion everywhere
 
@@ -234,19 +238,19 @@ Deploy, browser tests, and a performance and accessibility pass.
 
 Tracked, not scheduled.
 
-49. **WORLD-48** · [React Three Fiber world](issues/WORLD-48.md)\
+50. **WORLD-48** · [React Three Fiber world](issues/WORLD-48.md)\
     ⬜ Todo · [#83][83] · Blocked by: WEB-47\
     Stations, HDRI backdrops, the yin-yang ball, the strike, quality tiers
 
-50. **LANE-49** · [Live Lane rooms](issues/LANE-49.md)\
+51. **LANE-49** · [Live Lane rooms](issues/LANE-49.md)\
     ⬜ Todo · [#84][84] · Blocked by: LANE-27, WEB-45\
     Nest WebSocket gateway, CORS for the web origin only
 
-51. **SPHERE-50** · [The globe and opt-in coarse location](issues/SPHERE-50.md)\
+52. **SPHERE-50** · [The globe and opt-in coarse location](issues/SPHERE-50.md)\
     ⬜ Todo · [#85][85] · Blocked by: FEED-17\
     Location modes, `GET /sphere/cells`, `GET /dudes/nearby`, the globe
 
-52. **ACHV-51** · [Fest Finder and Day of the Dude](issues/ACHV-51.md)\
+53. **ACHV-51** · [Fest Finder and Day of the Dude](issues/ACHV-51.md)\
     ⬜ Todo · [#86][86] · Blocked by: API-39, ACHV-40\
     Member-submitted fests and screenings; a March 6 event
 
@@ -323,3 +327,4 @@ Every story meets every line below before it says `Done`.
 [84]: https://github.com/craig-o-curtis/dudesphere/issues/84
 [85]: https://github.com/craig-o-curtis/dudesphere/issues/85
 [86]: https://github.com/craig-o-curtis/dudesphere/issues/86
+[90]: https://github.com/craig-o-curtis/dudesphere/issues/90
