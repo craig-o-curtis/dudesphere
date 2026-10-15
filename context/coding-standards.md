@@ -12,6 +12,14 @@ Avoid Immediately Invoked Functions
 
 For ALL dates and times, ONLY use the package `@northguild/gmt`.
 
+Never add another date library to any `package.json`, as a dependency, dev dependency or peer, and never import one. That includes `date-fns`, `date-fns-tz`, `moment`, `moment-timezone`, `dayjs`, `luxon`, `spacetime` and any time zone add-on. When a package lists a date library as an optional peer (Base UI lists `date-fns`), leave it uninstalled. When a feature seems to need one, ask for the missing piece in `@northguild/gmt` instead.
+
+The lint rule `@northguild/gmt-oxlint/no-date-library-imports` fails any import of these packages. The one copy in the lockfile, `dayjs`, comes in through TypeORM's own code. It is not ours to use.
+
+## Memoization
+
+React Compiler is on in `apps/web` (`reactCompiler: true` in `next.config.ts`). It memoizes components and values for you. Don't write `useMemo`, `useCallback` or `memo`. If a profile shows a real problem the compiler doesn't fix, write down why next to the one place you add it.
+
 ## Composability and Reusability
 
 Build from small parts that each do one thing, and compose them. This goes for utilities, hooks and services as much as for components.
@@ -26,6 +34,17 @@ In `apps/web`:
 - Style with tokens, never raw values. Every shared part accepts `className`, its root element's native props and `ref`, and changes its look only through a `variant` or `tone` prop or its component tokens.
 - Base UI (`@base-ui/react`) is the only UI library. Only files in `src/components/ui/` import it.
 - Full rules: `.agents/skills/ui-composition/SKILL.md`. Current problems: `context/audits/frontend-audit.md`.
+
+## Tests that act like a member
+
+In component tests, act as the member would, with `@testing-library/user-event`. Never use `fireEvent`.
+
+- Call `const user = userEvent.setup()` before `render`. Then `await` each action: `user.click`, `user.type`, `user.clear`, `user.keyboard` and `user.tab`.
+- With fake timers, pass `vi.advanceTimersByTime` as `advanceTimers` to `userEvent.setup`. Don't set `delay: null`.
+
+`fireEvent` sends one bare DOM event. A real click or keypress is a chain of events: pointer and mouse events, focus, key events and input. That chain is what `user-event` plays. A test that uses `fireEvent` can pass while the real browser fails, for example on a button that can't take focus.
+
+A lint rule in `apps/web/.oxlintrc.json` fails any import of `fireEvent`.
 
 ## Topic standards
 

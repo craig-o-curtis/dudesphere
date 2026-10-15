@@ -56,6 +56,7 @@ Run each check as its own command, so one failure doesn't hide another:
 | API end-to-end  | `pnpm test:e2e`                                 |
 | Web end-to-end  | `pnpm --filter @dudesphere/web test:e2e`        |
 | Migration drift | `pnpm --filter @dudesphere/api migration:check` |
+| E2E leftovers   | `pnpm e2e:check`, after both e2e rows           |
 
 Rules for the results:
 
@@ -70,7 +71,8 @@ Rules for the results:
 
 Check each line of the Definition of Done in `tracker.md` against the work, and note the evidence. Check these by hand:
 
-- every new table is in the cleanup in `apps/api/test/global-setup.ts`;
+- every new table or collection an e2e run writes to is in the shared e2e cleanup in `apps/api/test/`, and both e2e suites run it;
+- `pnpm e2e:check` passed after the e2e runs, so nothing e2e-created is left in the dev databases;
 - every Postgres change has a new migration, and no existing migration was edited;
 - there is a `rendering-strategies.md` row, for a web story;
 - `context/overview.md` is updated, for an API change;
@@ -78,7 +80,23 @@ Check each line of the Definition of Done in `tracker.md` against the work, and 
 
 A missing line is a failure. Return it to the driver.
 
-### 3. Get the lesson
+### 3. Clear every nit
+
+A PR carries no open nits. The user set this rule on 2026-10-15. Before you commit, gather every finding still open from the review reports and the handoff Log: every `nit`, and any `minor` the owner gave a reason to skip. For each one, decide which of three cases it is:
+
+- **It fits this story.** It touches this story's files or feature. It gets fixed in this PR. You never write code, so return it to the driver as "Nits to fix", with each finding quoted in full and its owner. The driver routes the fixes, and the reviewers check them again. Alone, stop and give the list to the user.
+- **It belongs to a later story.** For example, it needs a copy change this story promised not to make, or it is about a part no form uses yet and a later story builds that form. Find the story that owns that work in `tracker.md` and its spec. Then:
+  - add a line to that story's `issues/<ID>.md`, under Scope or Design notes, naming the finding and where it came from, such as "(WEB-54 A11Y-1)";
+  - mirror the spec into its GitHub issue with `gh issue edit <n> --body-file <file>`, keeping the body the same as the spec, with links made absolute as the other issues do. Read the issue back and compare;
+  - log each move in the handoff, with the issue number.
+
+  The user approved these moves in advance, so don't ask first.
+
+- **It has no home.** No story owns it. Stop and ask the user whether to make a new story or drop it.
+
+Move on only when nothing is left open. The PR body lists the nits fixed, and the nits moved with a link to each issue. It never lists "nits left".
+
+### 4. Get the lesson
 
 The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. Its lesson goes into the story's docs commit, so get it now, after the checks pass and before you commit.
 
@@ -96,7 +114,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
    - Each snippet's first line names a real file, and that file holds the code as quoted.
 6. Keep the mentor's TLDRs for the PR body. Pass on any claim it couldn't check, and anything it says looked wrong in the code, in your report.
 
-### 4. Make the commits
+### 5. Make the commits
 
 - Read `git status --short` and `git diff`. Group the changes into logical commits. Each commit is one idea that builds and passes on its own where it can. A typical order:
   1. migration and entity;
@@ -111,7 +129,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
 - Never add a `Co-Authored-By` trailer, a "Generated with" line, or any other attribution. Check each message before you commit it.
 - If the branch already has commits, check how they are split. If they are already one idea each, keep them. If not, propose a new split and stop for approval. Only with a yes, and only on this story's branch, may you run `git reset --soft $(git merge-base main HEAD)` and commit again. That is the one exception to the no-reset rule.
 
-### 5. Write the PR
+### 6. Write the PR
 
 - **Read the issue first:** `gh issue view <n> --json number,title,labels,milestone`. Its title has the form `<ID>: <name>`, such as `ACHV-51: Fest Finder and Day of the Dude`.
 - **Title:** `<ID> (#<issue>): <name>`, such as `ACHV-51 (#86): Fest Finder and Day of the Dude`.
@@ -124,12 +142,12 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
   - the rendering strategy, for a web story;
   - what the story teaches: each lesson's TLDR, with a link to its entry in `lessons/`;
   - the checks, with test counts, and anything not run with its reason;
-  - the review rounds, and any nits left;
+  - the review rounds; the nits fixed in this PR; and the nits moved to later stories, each with a link to its issue;
   - the last line: `Closes #<issue>`.
 - No attribution lines in the title or the body.
 - Write the title and body into the handoff's PR section.
 
-### 6. Push and open the PR
+### 7. Push and open the PR
 
 1. Stop and ask: "Push `<branch>` to origin and open this PR?" Quote the title and body. A yes covers this one push only.
 2. On a yes, run `git push -u origin <branch>`.
@@ -162,6 +180,7 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 
 - Each check, with its result and test counts.
 - The Definition-of-Done walk.
+- The nits: each one fixed, moved (with its issue), or returned to the driver to fix.
 - The lesson: each file the mentor wrote and its TLDR, or why there is none. Any claim the mentor couldn't check.
 - The commits made: hash and subject.
 - The PR title and body.

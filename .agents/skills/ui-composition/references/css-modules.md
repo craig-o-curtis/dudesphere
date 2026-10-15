@@ -37,7 +37,7 @@
 
 ## Merging classes: `cx()`
 
-WEB-54 adds a small helper in `apps/web/src/lib/cx.ts` with a spec. Don't add `clsx` or `classnames`.
+The helper lives in `apps/web/src/lib/cx.ts`, with a spec. Don't add `clsx` or `classnames`.
 
 ```ts
 // apps/web/src/lib/cx.ts

@@ -62,33 +62,43 @@ Pass a class that sets the part's tokens. Nothing else.
 
 If the same adjustment shows up in two features, it is a variant. Add it to the part.
 
-## Tokens to add (WEB-54)
+## Tokens added in WEB-54
 
-The audit found these values hard-coded across modules because no token covers them. Add them to `:root` in `tokens.css`, then replace every raw use.
+The audit found these values hard-coded across modules because no token covered them. WEB-54 added them to `:root` in `tokens.css`, replaced every raw use, and checks each value in `tokens.spec.ts`.
 
-| Token                  | Value         | Replaces                                     |
-| ---------------------- | ------------- | -------------------------------------------- |
-| `--control-min-height` | `44px`        | 7 uses in the form and SessionCorner modules |
-| `--target-min`         | `24px`        | 10 uses (WCAG 2.2 target size)               |
-| `--border-width`       | `1px`         | 10 `1px solid` borders                       |
-| `--font-weight-bold`   | `700`         | 7 uses                                       |
-| `--tracking-tight`     | `-0.02em`     | 3 page titles                                |
-| `--leading-tight`      | `1.1`         | `globals.css` headings, page titles (`1`)    |
-| `--leading-body`       | `1.5`         | `globals.css` body                           |
-| `--measure-form`       | `28rem`       | The two form wrappers                        |
-| `--measure-content`    | `60ch`        | SiteFooter, and later content pages          |
-| `--opacity-pending`    | `0.8`         | The pending button state                     |
-| `--z-skip`             | `100`         | SkipLink                                     |
-| `--z-dialog`           | to be decided | The first Dialog                             |
+| Token                  | Value     | Replaced                                      |
+| ---------------------- | --------- | --------------------------------------------- |
+| `--control-min-height` | `44px`    | 7 uses in the form and SessionCorner modules  |
+| `--target-min`         | `24px`    | 10 uses (WCAG 2.2 target size)                |
+| `--border-width`       | `1px`     | 10 `1px solid` borders                        |
+| `--glyph-width`        | `1em`     | The ToggleGroup check mark (follows the font) |
+| `--font-weight-bold`   | `700`     | 7 uses                                        |
+| `--tracking-tight`     | `-0.02em` | 3 page titles                                 |
+| `--leading-tight`      | `1.1`     | `globals.css` headings, page titles (`1`)     |
+| `--leading-body`       | `1.5`     | `globals.css` body                            |
+| `--measure-form`       | `28rem`   | The two form wrappers                         |
+| `--measure-content`    | `60ch`    | SiteFooter, and later content pages           |
+| `--measure-hint`       | `28ch`    | ThemeToggle hint line                         |
+| `--measure-status`     | `40ch`    | ThemeToggle status line                       |
+| `--measure-narrow`     | `20rem`   | SiteFooter disclaimer's minimum flex basis    |
+| `--opacity-pending`    | `0.8`     | The pending button state                      |
+| `--z-skip`             | `100`     | SkipLink                                      |
 
-Two hard-coded copies of tokens can't be replaced by `var()`, because they live outside CSS:
+Still to come:
 
-- `app/layout.tsx:47-48` copies `--color-bg` as hex for the `themeColor` viewport metadata. Keep it, but add it to `tokens.spec.ts` so a change to the token fails the test.
-- `lib/motion.ts` copies the duration tokens for `motion/react`. `motion.spec.ts` already checks they match. Keep doing that for any new motion token.
+| Token        | Value         | Added by                   |
+| ------------ | ------------- | -------------------------- |
+| `--z-dialog` | to be decided | The first Dialog (FEED-16) |
+
+The page titles moved from `line-height: 1` to `--leading-tight` (1.1) in WEB-54. This is one of the named fixes.
+
+The themeColor copy: `app/layout.tsx` copies `--color-bg` as hex for the `themeColor` viewport metadata. A `var()` can't reach it, so `tokens.spec.ts` already checks that the hex matches the token.
+
+`lib/motion.ts` copies the duration tokens for `motion/react`. `motion.spec.ts` checks they match. Keep doing that for any new motion token.
 
 ## Rules
 
 - No raw `px`, `rem`, `em`, `ch`, hex, `rgb()`, font weight, line height, z-index or duration in a module. Allowed: `0`, `100%`, `1fr`, `auto`, `1lh`, `currentColor`, and system colours inside `@media (forced-colors: active)`.
 - A part's rules read its component tokens. Component tokens read role or base tokens. Features read nothing; they only set component tokens through a class.
 - A new token needs a reason that holds across more than one part. A value used by one part only belongs in that part's component tokens.
-- Keep unused base tokens only if a planned story needs them. The audit lists 8 unused tokens. WEB-54 decides which to keep.
+- Keep unused base tokens only if a planned story needs them. The audit listed 8 unused tokens, and WEB-54 kept all 8. The parts now read `--space-5`, `--space-7`, `--text-lg`, `--text-2xl` and `--color-success`. `lib/motion.ts` copies `--dur-fast` and `--dur-slow`. `--color-accent-2` is the rug red that the RUG and LANE stories plan to use.

@@ -73,7 +73,7 @@ Check each of these. Use Explore subagents for facts in the code, so you never a
 - **Naming and copy.** Names and UI copy respect the legal caveats in `research.md`.
 - **Definition of Done.** Each line in the tracker's Definition of Done maps to a task:
   - a migration for each Postgres change;
-  - each new table added to the cleanup in `apps/api/test/global-setup.ts`;
+  - for each new table or collection an e2e run writes to, add an entry to `E2E_TARGETS` in `apps/api/test/e2e-cleanup.ts`. That one list drives both the delete and the count, and the coverage spec in `e2e-cleanup.spec.ts` fails until the entry is there;
   - unit and e2e specs for backend work;
   - keyboard-only use and reduced motion for web work;
   - a `rendering-strategies.md` row;
