@@ -10,6 +10,10 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
+  // Before the first test and after the last, the API deletes every e2e- user
+  // this suite signed up (pnpm e2e:cleanup). Needs `pnpm db:up`.
+  globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
   use: {
     baseURL: `http://localhost:${port}`,
     trace: "on-first-retry",
