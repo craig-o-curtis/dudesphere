@@ -51,7 +51,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `components/ui/` native parts on the tokens, auth forms rebuilt on them
 
 9. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
-   ⬜ Todo · [#42][42] · Blocked by: none\
+   ✅ Done · [#42][42] · Blocked by: none\
    `proxy.ts` redirect-to-refresh, `lib/session.ts` with `verifySession`, `/api/bff`
 
 10. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
@@ -71,15 +71,15 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
 Passwordless sign-in, then the Twitter part of the app.
 
 13. **AUTH-52** · [Passwordless sign-in](issues/AUTH-52.md)\
-    ⬜ Todo · [#46][46] · Blocked by: AUTH-8, API-10\
+    ⬜ Todo · [#46][46] · Blocked by: API-10\
     Email links, email verification, passkeys, Google and GitHub, one "Roll in" form
 
 14. **FEED-12** · [Splash page](issues/FEED-12.md)\
-    ⬜ Todo · [#47][47] · Blocked by: AUTH-8\
+    ⬜ Todo · [#47][47] · Blocked by: none\
     Static shell, cached abidings ticker and hashtags, "who is signed in" in Suspense
 
 15. **FEED-13** · [Feed with infinite scroll and hashtag chips](issues/FEED-13.md)\
-    ⬜ Todo · [#48][48] · Blocked by: AUTH-8\
+    ⬜ Todo · [#48][48] · Blocked by: none\
     `/feed`, dynamic, `useInfiniteQuery` on `links.next`, up to 10 chips
 
 16. **FEED-14** · [Compose and reply with optimistic insert](issues/FEED-14.md)\
@@ -95,7 +95,7 @@ Passwordless sign-in, then the Twitter part of the app.
     `/abidings/[id]`, intercepting-route modal, `<Activity>`, View Transitions
 
 19. **FEED-17** · [Dude pages and edit forms](issues/FEED-17.md)\
-    ⬜ Todo · [#52][52] · Blocked by: AUTH-8\
+    ⬜ Todo · [#52][52] · Blocked by: none\
     `/dudes/[id]` and `/dudes/me`, edit forms with Nest's field errors
 
 20. **API-18** · [Hidden hashtags list for admins](issues/API-18.md)\
@@ -103,7 +103,7 @@ Passwordless sign-in, then the Twitter part of the app.
     An admin-only list of every tag, hidden ones included
 
 21. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
-    ⬜ Todo · [#54][54] · Blocked by: AUTH-8, API-18\
+    ⬜ Todo · [#54][54] · Blocked by: API-18\
     `/admin/users`, `/admin/hashtags`, `forbidden()`, `after()` audit line
 
 22. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
@@ -127,7 +127,7 @@ The anchor: async bowling and the Score Sheet.
     Seeded pin model in `lane-engine`; `POST /lanes/games/:id/rolls` takes inputs only
 
 26. **LANE-24** · [Lane Night UI](issues/LANE-24.md)\
-    ⬜ Todo · [#59][59] · Blocked by: AUTH-8, LANE-21, API-22, API-23\
+    ⬜ Todo · [#59][59] · Blocked by: LANE-21, API-22, API-23\
     2D lane, release meter, Over-the-line foul, scorecard, "MARK IT ZERO" stamp
 
 27. **LANE-25** · [Turn flow and gentle timeout](issues/LANE-25.md)\
@@ -143,7 +143,7 @@ The anchor: async bowling and the Score Sheet.
     Streaming Route Handler, 25-second cap, `EventSource` reconnect
 
 30. **LANE-28** · [Score Sheet for a real alley game](issues/LANE-28.md)\
-    ⬜ Todo · [#63][63] · Blocked by: AUTH-8, LANE-21, API-22, FEED-14\
+    ⬜ Todo · [#63][63] · Blocked by: LANE-21, API-22, FEED-14\
     Log a real game frame by frame; same engine; posts an abiding
 
 ## Phase 3: Rituals and identity
@@ -155,15 +155,15 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     Rug, alignment, quiet day, time zone, certificate columns; two new tables
 
 32. **ABIDE-30** · [Daily "The Dude abides" check-in](issues/ABIDE-30.md)\
-    ⬜ Todo · [#65][65] · Blocked by: AUTH-8, API-29\
+    ⬜ Todo · [#65][65] · Blocked by: API-29\
     One-tap check-in, optional mood, soft streaks, `after()`
 
 33. **ABIDE-31** · [Take-It-Easy timer](issues/ABIDE-31.md)\
-    ⬜ Todo · [#66][66] · Blocked by: AUTH-8, API-29\
+    ⬜ Todo · [#66][66] · Blocked by: API-29\
     1 to 10 minute calm timer that saves a session
 
 34. **ABIDE-32** · [Shomer Shabbos quiet mode](issues/ABIDE-32.md)\
-    ⬜ Todo · [#67][67] · Blocked by: AUTH-8, API-29, LANE-25\
+    ⬜ Todo · [#67][67] · Blocked by: API-29, LANE-25\
     A weekly quiet day the member picks; turn clocks pause
 
 35. **RUG-33** · [The Rug profile theme](issues/RUG-33.md)\
@@ -191,7 +191,7 @@ Groups, Bowling Nights, recipe posts and moderation.
     `achiever_group`, `group_member`, `GET /abidings?groupId=`
 
 40. **ACHV-38** · [Groups UI](issues/ACHV-38.md)\
-    ⬜ Todo · [#73][73] · Blocked by: AUTH-8, API-37, FEED-14\
+    ⬜ Todo · [#73][73] · Blocked by: API-37, FEED-14\
     Group list, group page with its feed, join and leave
 
 41. **API-39** · [Bowling Night events and the group leaderboard](issues/API-39.md)\
@@ -207,7 +207,7 @@ Groups, Bowling Nights, recipe posts and moderation.
     `kind: 'recipe'` on abidings, recipe sub-document, 21+ attestation
 
 44. **FEED-42** · [Caucasian Bar UI](issues/FEED-42.md)\
-    ⬜ Todo · [#77][77] · Blocked by: AUTH-8, API-41, FEED-14\
+    ⬜ Todo · [#77][77] · Blocked by: API-41, FEED-14\
     Recipe compose form, recipe card, 21+ gate
 
 45. **API-43** · [Walter's Rules reports and moderation states](issues/API-43.md)\
@@ -215,7 +215,7 @@ Groups, Bowling Nights, recipe posts and moderation.
     `report` table, Over the line and Mark it zero states, admin routes
 
 46. **MOD-44** · [Walter's Rules UI and the "Calmer than you are" nudge](issues/MOD-44.md)\
-    ⬜ Todo · [#79][79] · Blocked by: AUTH-8, API-43, FEED-14, FEED-19\
+    ⬜ Todo · [#79][79] · Blocked by: API-43, FEED-14, FEED-19\
     "There are rules" page, report dialog, moderation queue, pre-post nudge
 
 ## Phase 5: Polish and deploy
@@ -227,7 +227,7 @@ Deploy, browser tests, and a performance and accessibility pass.
     `/privacy`: what Dudesphere keeps and why, the cookie table and members' rights
 
 48. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
-    ⬜ Todo · [#80][80] · Blocked by: API-10, AUTH-8, WEB-53\
+    ⬜ Todo · [#80][80] · Blocked by: API-10, WEB-53\
     Next on Vercel, Nest on Railway or Fly, Neon, production env
 
 49. **WEB-46** · [Playwright flows and instant() navigation tests](issues/WEB-46.md)\

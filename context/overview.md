@@ -1,4 +1,4 @@
-# The Dudesphere
+# Dudesphere
 
 ## App Concept
 

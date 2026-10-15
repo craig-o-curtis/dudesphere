@@ -1,6 +1,6 @@
 # ABIDE-32: Shomer Shabbos quiet mode
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, AUTH-8, API-29, LANE-25.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, API-29, LANE-25.
 
 **Scope:** A member picks one weekly quiet day; on that day the app shows no turn badge, and every Lane Night turn clock that would run through it is extended by the day, so no game pauses because someone rested.
 

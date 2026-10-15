@@ -5,7 +5,7 @@ import { ButtonLink } from "@/components/ui/ButtonLink/ButtonLink";
 import { Cluster } from "@/components/ui/Cluster/Cluster";
 import { Notice } from "@/components/ui/Notice/Notice";
 import { Text } from "@/components/ui/Text/Text";
-import { readSessionCookies } from "@/lib/session";
+import { verifySession } from "@/lib/session";
 
 import styles from "./SessionCorner.module.css";
 
@@ -19,17 +19,19 @@ export interface SignoutParams {
  * Signed in it says so and offers two plain HTML forms that post to the logout
  * handlers, so sign-out works with JavaScript off. No token is ever rendered.
  *
- * `/?signout=partial` means Nest could not sign out the other devices, and
+ * `/?signout=partial` means a sign-out, from either button, could not confirm
+ * that every sign-in ended, and
  * `/?signout=ended` means this sign-in had already ended. Signed out, the
  * corner then says so in an `<output>` line. Any other value shows nothing.
  *
- * Reading cookies makes this dynamic, so the page wraps it in `<Suspense>` with
+ * It asks `verifySession()`, which reads cookies, so a cookie holding an
+ * expired token counts as signed out. That makes this dynamic, so the page wraps it in `<Suspense>` with
  * `<SessionCornerSkeleton />` as the fallback.
  */
 export async function SessionCorner({ searchParams }: { searchParams: Promise<SignoutParams> }) {
-  const [{ accessToken }, { signout }] = await Promise.all([readSessionCookies(), searchParams]);
+  const [session, { signout }] = await Promise.all([verifySession(), searchParams]);
 
-  if (accessToken === null) {
+  if (session === null) {
     return <SignedOutLinks notice={noticeFor(signout)} />;
   }
 
@@ -63,7 +65,7 @@ function SignOutEverywhereForm() {
 
 const NOTICES = {
   partial:
-    "You're signed out here, but we couldn't reach your other devices. Sign in and try Sign out everywhere again.",
+    "You're signed out here, but we couldn't confirm every sign-in ended. Sign in and press Sign out everywhere to be sure.",
   ended:
     "This sign-in had already ended, so you're signed out here. To be sure your other devices are signed out, sign in and press Sign out everywhere.",
 } as const;

@@ -1,6 +1,6 @@
 # FEED-42: Caucasian Bar UI
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 4. Blocked by: WEB-5, AUTH-8, API-41, FEED-14.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 4. Blocked by: WEB-5, API-41, FEED-14.
 
 **Scope:** `/bar` lists recipe abidings, a recipe form posts them, recipe cards show the structured recipe in the feed, and readers confirm they are 21 or older before an alcoholic recipe's body shows.
 

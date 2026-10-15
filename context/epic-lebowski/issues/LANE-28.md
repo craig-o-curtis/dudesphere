@@ -1,6 +1,6 @@
 # LANE-28: Score Sheet for a real alley game
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Lane. Phase 2. Blocked by: WEB-5, AUTH-8, LANE-21, API-22, FEED-14.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Lane. Phase 2. Blocked by: WEB-5, LANE-21, API-22, FEED-14.
 
 **Scope:** A member logs a game bowled at a real alley frame by frame, the same engine totals it as they type, Nest stores it as a `real` game, and it can post to the feed as an abiding.
 

@@ -1,6 +1,6 @@
 # ACHV-38: Groups UI
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Achievers. Phase 4. Blocked by: WEB-5, AUTH-8, API-37, FEED-14.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Achievers. Phase 4. Blocked by: WEB-5, API-37, FEED-14.
 
 **Scope:** Members find, create, join and leave Achievers groups, and each group has a page with its own feed and compose box.
 

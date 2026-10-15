@@ -1,6 +1,6 @@
 # ABIDE-30: Daily "The Dude abides" check-in
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, AUTH-8, API-29.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, API-29.
 
 **Scope:** One tap on "The Dude abides" checks the member in for the day with an optional one-line mood, and the app shows a soft streak as "strikes and gutters", with no shaming.
 

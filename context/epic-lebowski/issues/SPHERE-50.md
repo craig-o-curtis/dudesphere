@@ -6,7 +6,7 @@ Part of the Lebowski epic. See [index.md](../index.md). Realm: Sphere. Later. Bl
 
 ## Gap
 
-"The Dudesphere" is the app's name, and nothing shows the sphere. Members also cannot find dudes nearby. The design is already written in `context/overview.md` under "Deferred work", "Dude location"; this story builds it.
+"Dudesphere" is the app's name, and nothing shows the sphere. Members also cannot find dudes nearby. The design is already written in `context/overview.md` under "Deferred work", "Dude location"; this story builds it.
 
 ## Scope
 

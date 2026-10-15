@@ -1,9 +1,10 @@
 // Picks where to send a member after sign-in, from a `next` value the client
 // sent. Only a same-origin path outside `/api` survives. Everything else,
-// including anything odd, becomes "/". It is pure, so client and server code,
-// and AUTH-8's refresh handler, can all use it.
+// including anything odd, becomes the fallback: "/" unless the caller names
+// another. It is pure, so client and server code, and the refresh handler,
+// can all use it.
 
-const FALLBACK = "/";
+const DEFAULT_FALLBACK = "/";
 
 // A made-up origin to parse against. If parsing moves the value off it, the
 // value named another origin.
@@ -57,33 +58,36 @@ function isSafeDecodedPath(decoded: string): boolean {
 
 /**
  * Returns the path, query and hash of `value` when it is a same-origin path
- * that starts with a single "/" and is not under `/api`. Returns "/" for
- * anything else.
+ * that starts with a single "/" and is not under `/api`. Returns `fallback`
+ * for anything else.
+ *
+ * `fallback` is not checked, so pass only a path written in the code, such as
+ * the refresh handler's "/feed". Every other caller leaves it at "/".
  */
-export function safeNextPath(value: unknown): string {
+export function safeNextPath(value: unknown, fallback = DEFAULT_FALLBACK): string {
   if (typeof value !== "string" || value.length === 0 || value.length > MAX_NEXT_PATH_LENGTH) {
-    return FALLBACK;
+    return fallback;
   }
   if (hasControlCharacter(value) || value.includes("\\")) {
-    return FALLBACK;
+    return fallback;
   }
   if (!value.startsWith("/") || value.startsWith("//")) {
-    return FALLBACK;
+    return fallback;
   }
 
   let url: URL;
   try {
     url = new URL(value, BASE);
   } catch {
-    return FALLBACK;
+    return fallback;
   }
   if (url.origin !== BASE.origin) {
-    return FALLBACK;
+    return fallback;
   }
 
   const decoded = decodePath(url.pathname);
   if (decoded === null || !isSafeDecodedPath(decoded)) {
-    return FALLBACK;
+    return fallback;
   }
 
   return `${url.pathname}${url.search}${url.hash}`;

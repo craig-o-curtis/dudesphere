@@ -62,10 +62,11 @@ zustand comes in with the first story whose client state several distant compone
 apps/web/src/
   app/
     layout.tsx, layout.module.css, not-found.tsx, error.tsx, forbidden.tsx
+                                             the root layout holds the skip link, SiteHeader, <main> and SiteFooter
     (public)/page.tsx                        splash (FEED-12's planned place; home is app/page.tsx today)
     (public)/login, signup                   AUTH-7 (static shell, client form)
     (public)/forgot-password, reset-password  AUTH-9
-    (app)/feed/page.tsx, loading.tsx
+    (app)/feed/page.tsx                      AUTH-8 placeholder (FEED-13 replaces the body and adds loading.tsx)
     (app)/@modal/(.)abidings/[id]/page.tsx   intercepting route: the thread as a modal
     (app)/abidings/[id]/page.tsx             the thread as a full page
     (app)/dudes/[id], dudes/me
@@ -73,14 +74,18 @@ apps/web/src/
     (app)/admin/...
     lab/page.tsx                             the rendering-strategies index (WEB-11)
     api/auth/{logout,logout-everywhere}/route.ts   AUTH-7: plain form POSTs, 303 to /
-    api/auth/refresh/route.ts                      AUTH-8
-    api/bff/[...path]/route.ts               client fetches, Bearer added on the server
+    api/auth/refresh/route.ts                      AUTH-8: GET for proxy, POST for clientFetch
+    api/bff/[...path]/route.ts               AUTH-8: client fetches, Bearer added on the server
     api/lanes/ticker/route.ts                SSE
     sitemap.ts, robots.ts, opengraph-image.tsx
-  proxy.ts
+  proxy.ts            AUTH-8: refreshes a session about to run out, before the page renders
   lib/api.ts          'server-only' typed fetch to Nest: apiFetch, ApiRequestError, maps 400 field errors
-  lib/session.ts      'server-only': cookie names and options, startSession, clearSessionCookies,
-                      readSessionCookies (AUTH-8 adds verifySession, getMe, requireSession)
+  lib/session.ts      'server-only', the Data Access Layer: cookie names and options, startSession,
+                      clearSessionCookies, readSessionCookies, verifySession, getMe, requireSession
+  lib/access-token.ts readTokenExp and expiresWithin. Pure, no 'server-only', so proxy.ts can import it
+  lib/refresh.ts      'server-only': refreshOnce, one refresh per refresh token (AUTH-8)
+  lib/bff-paths.ts    bffTarget and the allow-list for /api/bff. Pure
+  lib/client-fetch.ts clientFetch: the browser's call to /api/bff, with one refresh and one retry on a 401
   lib/next-path.ts    safeNextPath: the same-origin check for ?next=, and loginHref
   lib/auth-rules.ts   the sign-up and sign-in field rules the two forms share (EMAIL_PATTERN, DTO limits)
   lib/cx.ts           the one class-name merger. No clsx or tailwind-merge
@@ -93,8 +98,11 @@ apps/web/src/
   components/ui/*     shared parts (Button, Text, Form, TextField, Stack, ToggleGroup...), each with a
                       .module.css and a spec. They know nothing about the app. Only these may import
                       @base-ui/react, which FEED-16 adds with Dialog
+  components/SiteHeader  the banner in the root layout: "Dudesphere", linked to /. Static, reads no
+                      request data. FEED-12 adds WhoIsSignedIn beside it. Scaffolding until WORLD-48
   components/*        feature components that compose the shared parts, each with a .module.css
-                      for layout only. Auth: AuthForm, SignInForm, SignUpForm, NextPathField, CookieNote, SessionCorner
+                      for layout only. Auth: AuthForm, SignInForm, SignUpForm, NextPathField, CookieNote, SessionCorner.
+                      FeedWelcome (AUTH-8) is the placeholder greeting on /feed
   styles/tokens.css   CSS variables, light and dark
   styles/globals.css  reset and base rules
   styles/motion.css   motion rules: .enter, reduced-motion View Transitions
@@ -129,17 +137,23 @@ Both cookies are `httpOnly`, `secure: true` always (browsers accept it on
 make a browser refuse a copy set without `Secure`:
 
 - `__Host-session` holds the access token, with `path: '/'` and
-  `maxAge: expiresIn` (900 seconds). The `__Host-` prefix needs `path=/`, `Secure`
-  and no `Domain`.
+  `maxAge: REFRESH_MAX_AGE_SECONDS` (604800, 7 days). The token inside still
+  expires in 15 minutes, as Nest says in `expiresIn`. The cookie outlives it on
+  purpose: `proxy.ts` cannot see the refresh cookie, so a session cookie that is
+  present is how it tells a member whose token ran out from an anonymous
+  visitor. See "Refresh". The `__Host-` prefix needs `path=/`, `Secure` and no
+  `Domain`.
 - `__Secure-refresh` holds the refresh token, with `path: '/api/auth'` and
   `maxAge` 604800 (7 days). Only the `/api/auth` handlers ever receive it. A
   refresh cookie at `/` would travel on every request, and parallel requests
   could race a single-use token.
 
 Clearing sets each cookie to `""` at its own path with `maxAge: 0`, through
-`clearSessionCookies()`. `cookies().delete(name)` clears only `/`, so it could
-never clear the refresh cookie. `expires` takes a `Date`, so the code uses
-`maxAge`.
+`clearSessionCookies()`. `cookies().delete(name)`, the name-only form, clears
+only the cookie at `/`, so it could never clear the refresh cookie.
+`delete({ name, path })` can clear another path. The app uses
+`set(name, "", { path, maxAge: 0 })` instead, so every write has one shape.
+`expires` takes a `Date`, so the code uses `maxAge`.
 
 **Sign up.** The `signUp` Server Action calls Nest `POST /auth/sign-up`, then
 runs the same sign-in step with `{ identifier: email, password }`. If sign-up
@@ -155,66 +169,258 @@ gets a 403 with no cookie touched. The check lives in each handler, not in
 `proxy.ts`, because a matcher change can silently drop proxy coverage.
 
 **The Data Access Layer.** `lib/session.ts` imports `server-only`, so a client
-component cannot import it. AUTH-7 builds the cookie half: the names, the options,
-`startSession()`, `clearSessionCookies()` and `readSessionCookies()`. AUTH-8 adds
-the two functions below and `requireSession()`.
+component cannot import it, and the build fails if one tries. AUTH-7 built the
+cookie half: the names, the options, `startSession()`, `clearSessionCookies()` and
+`readSessionCookies()`. AUTH-8 adds three functions.
 
-- `verifySession()` reads the `__Host-session` cookie and decodes `exp` locally. It does
-  not verify the signature: Nest does that on every call. It returns
-  `{ accessToken, exp }` or `null`. React's `cache()` wraps it, so it runs once per
-  request.
-- `getMe()` calls Nest `GET /users/me` once per request, also through `cache()`.
-  The token carries no role on purpose. The role comes from `getMe()`, because
-  Nest reads it from the database on every request.
+- `verifySession()` reads the `__Host-session` cookie and decodes `exp` locally,
+  with `readTokenExp()` from `lib/access-token.ts`. It does not verify the
+  signature: Nest does that on every call. It returns `{ accessToken, exp }`, or
+  `null` when the token is missing, malformed or already expired. It makes no
+  network call. React's `cache()` wraps it, so it runs once per request.
+- `getMe()` calls Nest `GET /users/me` with that token, also through `cache()`, so
+  any number of components cost one call. It returns `null` when there is no
+  session or Nest answers 401, and throws on any other failure, so an outage
+  reaches the error boundary and never looks like "signed out". The token carries
+  no role on purpose. The role comes from `getMe()`, because Nest reads it from
+  the database on every request.
+- `requireSession(next)` calls `verifySession()` and, when it is `null`,
+  `redirect(loginHref(next))`. Pages for members only call it.
 
-**Refresh.** `proxy.ts` runs on the Node runtime before each route. When the
-`__Host-session` cookie is missing or expires within 60 seconds, and the request
-is a document navigation, it redirects to `/api/auth/refresh?next=<path>`. Proxy
-cannot see the `next-router-prefetch` header: Next 16.4 strips it from
-`request.headers`. So the matcher skips prefetches with
-`missing: [{ type: 'header', key: 'next-router-prefetch' }]`, and proxy redirects
-only when `Sec-Fetch-Dest` is `document`. A prefetch is never redirected; with a
-dead session it renders as anonymous.
+`verifySession()` and `requireSession()` authorize nothing. They read the cookie
+and decode `exp`, so a forged or ended token passes them. Only data fetched from
+Nest with the Bearer is protected, because Nest checks the signature and the
+sign-in on every call. A page that shows member data must get it from Nest, and
+send a 401 to `/login`.
 
-The refresh handler calls Nest `POST /auth/token/refresh` with the refresh
-token, sets both cookies from the answer, and redirects back to `next`. It reuses
-`startSession()`, `safeNextPath()`, `seeOther(path)` and `logFailure()`.
-`seeOther(path)` sends a 303 to `safeNextPath(path)`.
+`lib/access-token.ts` is pure and has no `server-only`, because `proxy.ts`
+imports it too. Both files read the clock through `@northguild/gmt`.
+
+`SessionCorner` and `/feed` use the layer. `SessionCorner` calls `verifySession()`,
+not `readSessionCookies()`: with a 7-day session cookie, a present cookie no
+longer means "signed in". `FeedWelcome` calls `requireSession("/feed")`, then
+`getMe()`, and a `null` from `getMe()` (Nest answered 401) goes to
+`/login?next=%2Ffeed` too. There is no loop: `/login` renders with that cookie,
+because proxy sends only unreadable or nearly expired tokens to refresh. Layouts
+never check auth. `cache()` shares results inside one render only, so nothing
+leaks from one request to the next.
+
+**Refresh.** `proxy.ts` runs on the Node runtime, before routing. Its rule is
+short. For a GET whose `__Host-session` cookie is present and whose token is
+inside its refresh window, already past `exp`, or unreadable, it redirects (307)
+to `/api/auth/refresh?next=<path and query>`. Everything else passes through:
+
+- **No cookie, or an empty one.** That is an anonymous visitor. A redirect would loop: refresh,
+  then `/login`, then refresh again.
+- **Any other method.** A Server Action POST passes through, and re-checks the
+  session itself.
+- **Prefetches.** Proxy cannot see the `next-router-prefetch` header: Next 16.4
+  strips it from `request.headers`. So the matcher keeps prefetches out with
+  `missing: [{ type: 'header', key: 'next-router-prefetch' }]`. That relies on
+  partial prefetching being on: auto prefetches send `1` or `3`, and
+  `<Link prefetch>` sends `2`. A Full prefetch sends no such header and would
+  reach proxy. A prefetch never reaches proxy. A session page's prefetch stops at
+  `io()` inside `verifySession`, so it holds no session output, and the click
+  goes through proxy and refreshes. Only a page that reads no session is served
+  whole from the prefetch.
+
+The refresh window is `min(60, floor((exp - iat) / 2))` seconds before `exp`, or
+60 when the token has no usable `iat`. A flat 60 seconds would loop for a token
+that lives 60 seconds or less: the fresh token would already be inside the window,
+and the handler's 303 would go straight back to refresh. Half the token's own life
+means a token Nest just issued never needs a refresh. The cap assumes the web
+server's clock and Nest's agree to within half the token's life, and a token that
+lives 2 seconds or less can still loop. So `JWT_EXPIRES_IN` must be 3 or more.
+
+Any GET counts, not only documents. A client-side `<Link>` navigation is an RSC
+fetch with `Sec-Fetch-Dest: empty`, and a document-only rule would sign a member
+out 15 minutes into a visit. The AUTH-8 Task 1 spike proved the chain in Chromium
+and WebKit: proxy's 307, Next's own 307 adding `_rsc`, the handler's 303 with the
+new cookie, then the page rendered client-side. `request.nextUrl` carries no
+`_rsc`, so `next` is the page's own path and query. If `safeNextPath()` would
+refuse that (a query over its 2048-character limit, say), proxy sends the path
+alone. If that is refused too, it sends no `next`, and the handler lands on
+`/feed`.
+
+The matcher skips `/api`, `_next/static`, `_next/image`, `favicon.ico` and a fixed
+list of static file extensions. It does not skip every path with a dot, because a
+username may hold one: a future `/u/john.doe` must still reach proxy.
+`proxy.spec.ts` pins the whole `config` word for word, because a matcher change
+silently drops coverage.
+
+Proxy is an optimistic step. It reads `exp` without checking the signature, so a
+forged `exp` gets past it and fails at Nest. Every page, handler and action
+re-checks.
+
+The refresh handler is `app/api/auth/refresh/route.ts`. It reads the refresh
+cookie, which only it can see, and calls Nest `POST /auth/token/refresh` through
+`refreshOnce()`. GET serves proxy and navigation. POST serves `clientFetch`: it
+checks Origin first (403, no cookie touched) and answers with a status only. It
+needs `__Host-session`, like GET.
+Every answer carries `Set-Cookie`, so every answer says `Cache-Control: no-store`.
+
+Three rules guard the refresh cookie:
+
+- **GET needs `__Host-session` first.** Proxy sends a navigation here only when
+  that cookie is present, so a GET without it, or with an empty one, did not come
+  from proxy. It can come from a cross-site link that carries a refresh cookie a
+  sibling subdomain planted: `__Secure-` allows a `Domain` attribute and `__Host-`
+  does not. Swapping that token would sign the browser in to the attacker's
+  account. So that GET clears both cookies and goes to `/login?next=`, with no
+  call to Nest. Only the cookie's presence counts, not its shape, because proxy
+  sends a token it cannot read here too.
+- **One refresh cookie only.** A request that carries `__Secure-refresh` twice is
+  refused, because a planted copy can come last, and Next reads the last one. GET
+  clears our cookies and goes to `/login?next=`. POST answers 401. Neither calls
+  Nest. `hasDuplicateRefreshCookie(request)` in `lib/session.ts` makes the check
+  from the raw `Cookie` header, because the cookie store cannot show a duplicate.
+  The refresh handler and both sign-out routes share it.
+
+- **Tie the refresh token to the session cookie's sign-in.** A single planted
+  cookie, with the member's own gone (evicted, say), looks like any other. So the
+  `sid` (the sign-in id) in the old `__Host-session` token must match the `sid`
+  in the fresh access token (`sameSignIn()` in `lib/access-token.ts`). With no
+  `sid` in the session cookie, Nest is not called at all. With no `sid` in the
+  fresh token, or a different one, nothing is saved, both cookies are cleared and
+  the member counts as signed out (SEC-6). A pair held for 10 seconds is keyed by
+  the refresh token alone, so every request is checked against its own session
+  cookie.
+
+POST follows the same rules, behind its Origin check. Without `__Host-session`,
+or with an empty one, it clears both cookies and answers 401, with no call to
+Nest. Otherwise a planted refresh cookie, with no session cookie, would sign a
+visitor in to the attacker's account the first time a page called `clientFetch`.
+
+| Outcome                                                                                                                                                                     | Cookies                                           | GET                                                                      | POST |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ | ---- |
+| Nest answers with a new pair                                                                                                                                                | `startSession()` sets both                        | 303 to the safe `next`, or `/feed`                                       | 204  |
+| No refresh cookie, a duplicate refresh cookie, no `__Host-session`, no `sid` in the session cookie or the new token, a fresh pair from another sign-in, or Nest answers 401 | both cleared                                      | 303 to `/login?next=<next>`, or plain `/login` for `/login` or `/signup` | 401  |
+| Nest answers 5xx or 429, does not answer, or any other error                                                                                                                | `__Host-session` cleared; `__Secure-refresh` kept | 303 to the safe `next`, or `/feed`                                       | 503  |
+
+- A 401 means this sign-in is over. It is no failure of the app, so it is not
+  logged. The other failures go through `logFailure()`, which never writes a
+  token or Nest's body.
+- Nest down keeps the refresh cookie, because the token was not spent. Clearing
+  the session cookie stops proxy from redirecting the same request again. The
+  page then renders signed out, or `requireSession()` sends the member to
+  `/login`.
+- `next=https://evil.example.com`, or no `next`, lands on `/feed`. `/feed` is the
+  fallback because a refresh is a signed-in act.
+- Every failure clears `__Host-session`, so nothing can loop while the browser
+  accepts the cookie writes. A browser that refuses them would redirect again and
+  again until it gives up, after 16 to 20 redirects. The handler cannot tell that
+  browser from a second tab that lost the race, and the only stateless loop
+  breaker would put a marker in the address bar, so this is accepted (QA-2).
+- An intended change: a malformed or unreadable session cookie with a live refresh
+  cookie now lands signed out, because there is no `sid` to tie the refresh token
+  to.
+- **Accepted limit (QA-4).** On the Nest-down path the kept refresh cookie is never
+  used or revoked, so the old sign-in stays live at Nest until it expires, up to
+  7 days.
 
 **One refresh at a time.** A refresh token works once, and Nest ends the whole
-sign-in if one is used twice. The handler keeps a `Map` from a hash of the
-refresh token to its pending promise, so two requests that arrive together share
-one refresh on each server instance. On a 401 "Refresh token invalid", "expired"
-or "reused", the handler clears both cookies and redirects to `/login?next=`.
+sign-in if one is used twice, with no grace period. `lib/refresh.ts` keeps a
+module-level `Map` from the SHA-256 hex of the refresh token (never the token
+itself) to its promise, so callers that arrive together share one call to Nest.
 
-**Client fetches.** Client components call `/api/bff/*` Route Handlers, which add
-the Bearer from the `__Host-session` cookie and call Nest. These handlers never
-refresh. On a 401 the client fetch wrapper calls `/api/auth/refresh` once, with
-one shared promise in the browser, and retries the request.
+The settled pair stays in the Map for 10 seconds (`SETTLED_PAIR_HOLD_MS`). A
+second tab can arrive a few milliseconds after the first finished, still holding
+the old cookie. If the entry went the moment Nest answered, that tab would send
+the spent token and end the sign-in for both tabs. A failure is dropped at once.
+
+The accepted cost: someone who replays the old token on the same instance within
+those 10 seconds also gets the new pair. The Map lives in one server instance, so
+two instances can still race. The loser gets 401 "reused" and signs in again.
+
+**Client fetches.** Client components call `clientFetch(path, init)` in
+`lib/client-fetch.ts`. It calls `/api/bff/<path>`, a Route Handler that adds the
+Bearer from the `__Host-session` cookie and calls Nest. The browser never calls
+Nest and never sees a token.
+
+On a 401, `clientFetch` posts to `/api/auth/refresh` once, with one promise shared
+by the whole tab, and retries the request once. A 401 after the retry, or a 401
+from the refresh, sends the browser to `/login?next=<current path and query>`. A
+503 from the refresh means Nest is down: the caller gets the original 401, with no
+redirect. After the Nest-down path the session cookie is gone but the refresh
+cookie is kept, and POST refuses to refresh without the session cookie. So a
+`clientFetch` 401 there goes to `/login`, where a reload also recovers. That is
+part of the accepted QA-4 limit. It refuses a path that is empty, absolute, holds
+a backslash, or has an empty, `.` or `..` segment (encoded or not), and a `ReadableStream` body, because
+the body may need to be sent twice.
+
+The `/api/bff` handler never refreshes. It guards each request, in this order:
+
+1. **Path.** `bffTarget()` in `lib/bff-paths.ts` allows `abidings`, `hashtags`,
+   `profiles` and `users/me`, matched segment by segment, so `users/me-x` and
+   `users/1` fail. An empty, `.` or `..` segment, or a segment holding `/`, `\`
+   or `%`, fails too. A failure answers 404. `lanes` waits for LANE-25.
+2. **Origin.** POST, PATCH and DELETE call `assertSameOrigin()`, and a failure
+   answers 403.
+3. **Session.** `verifySession()` is `null`: 401, with no call to Nest.
+4. **Headers.** Only the method, the query string, `Content-Type` and the body go
+   to Nest, with the Bearer. Only the status, `Content-Type`, `Retry-After` and
+   the body come back, with `Cache-Control: no-store` and
+   `X-Content-Type-Options: nosniff`, so a browser never reads a body as another
+   type. The browser's Cookie and
+   Authorization never go on. No answer from Nest gives 502.
+
+`X-Bff-Secret` and `X-Client-Ip` are not sent yet. Nest reads neither until
+API-10, which adds both headers to every BFF call, `/api/bff` included, from one
+helper. Until then Nest counts every BFF call under the Next server's address, so
+one visitor can use up the shared rate-limit bucket (SEC-3, accepted, API-10's
+scope).
 
 **Sign out.** Sign out cannot be a Server Action. An action posts to the
 page's own path, so the `__Secure-refresh` cookie, limited to `/api/auth`, never
 reaches it. The corner on `/` (`SessionCorner`) holds two plain
 `<form method="post">` buttons that post to Route Handlers:
 
-- "Sign out" posts to `/api/auth/logout`. With a refresh cookie, it calls Nest
-  `POST /auth/token/revoke`. It ignores Nest errors.
+- "Sign out" posts to `/api/auth/logout`. It signs out with the access token
+  first, through Nest `POST /auth/sign-out`, which ends the whole sign-in, refresh
+  family included. So it no longer calls `/auth/token/revoke`. Only if Nest
+  answers 401 to that token (usually because it is out of date) does it fall back
+  to the refresh token, and only with one refresh cookie and a `sid` in the
+  session cookie. It swaps the token once, checks the fresh pair has the same
+  `sid`, and signs out with the fresh access token, which it never saves. Any
+  failure lands on `/?signout=partial`.
 - "Sign out everywhere" posts to `/api/auth/logout-everywhere`. It calls
-  `POST /auth/sign-out-everywhere` with the access token. If the access token is
-  missing, or Nest answers 401, it first swaps the refresh token through
-  `POST /auth/token/refresh` and tries once more. If that still fails, it
-  revokes the refresh token in the cookie, which ends its whole family in Nest.
-  If Nest could not sign out the other devices, the handler redirects to
-  `/?signout=partial`. The corner on `/` then says: "You're signed out here, but
-  we couldn't reach your other devices. Sign in and try Sign out everywhere
-  again." If this sign-in had already ended at Nest, it redirects to
-  `/?signout=ended`, and the corner says: "This sign-in had already ended, so
-  you're signed out here. To be sure your other devices are signed out, sign in
-  and press Sign out everywhere."
+  `POST /auth/sign-out-everywhere` with the access token. If Nest answers 401 to
+  that token, and there is a usable access token with a `sid` and one refresh
+  cookie, it swaps the refresh token through `POST /auth/token/refresh`, checks
+  the `sid` of the fresh pair, and tries once more. With no usable access token
+  it makes no refresh call. On a `sid` mismatch it lands on partial and revokes
+  nothing. It never calls `/auth/token/revoke`. When sign-out
+  everywhere fails, it tries `POST /auth/sign-out` once with the newest access
+  token it can tie to this sign-in that Nest did not refuse: the session's own
+  token after a failure that was not a 401, or the `sid`-matched fresh token after
+  a refresh. It never tries after a 401. Either way it lands on
+  `/?signout=partial`, so the member learns other devices may still be signed in.
+  The corner on `/` then says the sign-out may not be complete, and tells the
+  member what to do. If
+  this sign-in had already ended at Nest, it redirects to `/?signout=ended`, and
+  the corner says: "This sign-in had already ended, so you're signed out here. To
+  be sure your other devices are signed out, sign in and press Sign out
+  everywhere."
+
+**The shared rule.** A refresh token goes to Nest only when it can be tied to the
+session cookie's sign-in: it is sent once, the session token has a `sid`, and the
+fresh pair has the same `sid`. A subdomain can plant `__Secure-refresh` but not
+`__Host-session`, so the session cookie is the one input the member can be sure
+of. The refresh route and both sign-out routes follow it.
+
+A request that sends the refresh cookie twice is the plainest case. Next reads the
+planted one and the app cannot clear it, so no call uses the refresh token. Each
+route checks with `hasDuplicateRefreshCookie()` after its Origin check:
+
+- "Sign out" signs out with the access token alone. It lands on `/` on success and
+  on `/?signout=partial` otherwise.
+- "Sign out everywhere" calls `/auth/sign-out-everywhere` with the access token
+  only, and only when `__Host-session` holds one. It lands on `/` on success and
+  on `/?signout=partial` otherwise.
 
 Each handler exports `POST` only, checks Origin, clears both cookies, and answers
-303 to `/`, or to `/?signout=partial` or `/?signout=ended` from sign out
-everywhere. A Nest failure never stops the clearing. Nest ends the
+303 to `/`, or to `/?signout=partial` (either route) or `/?signout=ended` (sign out
+everywhere). A Nest failure never stops the clearing. Nest ends the
 sign-in, access tokens included, because every access token carries the
 sign-in's id (`sid`). Clearing the cookies still matters: dead tokens left in
 them would cost a 401 and a failed refresh on the next page. `seeOther(path)`
@@ -223,13 +429,15 @@ and `logFailure()` in `lib/route-responses.ts` hold the parts the handlers share
 Signing in again also ends the previous sign-in. `signIn` and `signUp` call Nest
 `POST /auth/sign-out` (bearer) with the old access cookie, after a successful
 `/auth/token` and before they set the new cookies. That route ends only the
-current sign-in. It works only while the old access token is valid (15 minutes),
-until AUTH-8 keeps the access cookie fresh.
+current sign-in. It needs a live old access token. Since AUTH-8, proxy refreshes
+the token before `/login` renders, so a member who signs in again after 15 minutes
+still has one.
 
-**Where auth is checked.** Every Server Action and Route Handler re-checks the
-session itself. Layouts never check auth, because a layout does not re-render on
-every navigation. With Cache Components on, `cookies()` is read only inside a
-`<Suspense>` boundary and never inside `'use cache'`.
+**Where auth is checked.** Every page, Server Action and Route Handler re-checks the
+session itself, through the Data Access Layer. Layouts never check auth, because a
+layout does not re-render on every navigation. Proxy's check is only a first
+step. With Cache Components on, `cookies()` is read only inside a `<Suspense>`
+boundary and never inside `'use cache'`.
 
 **Correction to the old plan.** The Nuxt plan limited the refresh cookie to the
 refresh and logout paths. It also expected a server middleware on every request
@@ -325,8 +533,8 @@ Stories AUTH-7, AUTH-9 and AUTH-52.
   credentials, then `startSession()`.
 - Log in calls `POST /auth/token`.
 - `/login` and `/signup` always show their forms. A signed-in visitor is not
-  bounced, because a `__Host-session` cookie can look alive for up to 15 minutes
-  after Nest ended the sign-in. Success lands on `/`, or on a safe `next`.
+  bounced, because a `__Host-session` cookie can look alive for up to 7 days after
+  Nest ended the sign-in. Success lands on `/`, or on a safe `next`.
 - The login form has one input labelled "Email" (`type="email"`,
   `autocomplete="username"`) and a password. It posts `{ identifier, password }`,
   so the API still takes an email or a username. AUTH-52 builds on that label and
@@ -667,7 +875,7 @@ one.
 | `/feed`          | The lanes, seen from the ball return               | neon alley, Star Lanes    |
 | `/abidings/[id]` | One lane, camera close on the pins                 | same                      |
 | `/dudes/[id]`    | A straight Mojave road, the narrator's country     | desert HDRI               |
-| `/sphere`        | Earth from orbit. The Dudesphere itself            | globe texture, star field |
+| `/sphere`        | Earth from orbit. Dudesphere itself                | globe texture, star field |
 | `/admin/*`       | The pinsetter room behind the lanes                | machinery, work lights    |
 | `/lanes/*`       | Lane Night, the 2D lane replaced by a modeled one  | neon alley                |
 
@@ -737,7 +945,7 @@ Four moves carry the character of the app and get the most care:
 | `<Suspense>`, `loading.tsx`               | stream request data into the static shell                                   | every `cookies()` read sits inside one                   |
 | Server Actions                            | sign up, log in, post, edit, admin actions                                  | each one re-checks the session                           |
 | Route Handlers                            | the BFF auth steps, `/api/bff/*`, the SSE ticker, `ImageResponse`           |                                                          |
-| `proxy.ts`                                | refresh the session before a document navigation                            | Node runtime. Replaces `middleware.ts`                   |
+| `proxy.ts`                                | refresh the session before a page renders, on any navigation                | Node runtime. Replaces `middleware.ts`                   |
 | `useActionState`, `useOptimistic`         | form state and field errors, the optimistic post                            | React 19                                                 |
 | `<Activity>`                              | keep the feed alive behind the thread modal                                 | React 19.2 and later                                     |
 | `<ViewTransition>`                        | page swaps, the avatar shared element                                       | confirm the export name in React 19.3                    |

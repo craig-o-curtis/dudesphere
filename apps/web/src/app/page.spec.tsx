@@ -12,7 +12,7 @@ vi.mock("@/components/SessionCorner/SessionCorner", () => ({
 describe("Home", () => {
   it("names the app", () => {
     render(<Home searchParams={Promise.resolve({})} />);
-    expect(screen.getByRole("heading", { level: 1, name: "The Dudesphere" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Dudesphere" })).toBeInTheDocument();
   });
 
   it("reads the frame count from the shared lane engine", () => {
