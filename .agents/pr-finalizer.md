@@ -143,7 +143,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
    - **Milestone:** the issue's milestone, passed with `--milestone "<title>"`. It must match the story's phase in `tracker.md`, named as in `index.md`, such as `Phase 1: The Feed`. If the issue has none, or the two disagree, stop and ask.
    - Check every label and the milestone exist with `gh label list` and `gh api repos/{owner}/{repo}/milestones`. Never create one. If one is missing, stop and ask.
    - After `gh pr create`, check what was set with `gh pr view --json title,labels,milestone`. Fix any mismatch with `gh pr edit`.
-4. Append the PR link to the handoff Log, and set the handoff Status to `PR open`. Those edits come after the push, so they stay uncommitted. Say so in your report.
+4. Append the PR link to the handoff Log, and set the handoff Status to `Done`. `Done` means your work is finished: every check passed, the commits are made and the PR is open. It matches `✅ Done` in `tracker.md`. Those edits come after the push, so they stay uncommitted. Say so in your report.
 
 ## Hard rules
 

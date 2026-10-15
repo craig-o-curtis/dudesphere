@@ -4,7 +4,7 @@
 - **Spec:** [issues/AUTH-7.md](../issues/AUTH-7.md)
 - **Branch:** `41-auth-7-bff-sign-up-sign-in-and-sign-out-with`. It doesn't match `feature/<id>-<slug>`, because `worktree branch --github` named it. Not renamed.
 - **Blocked by:** none in tracker.md. The spec names WEB-5, WEB-6 and REPO-3. All three are Done, and WEB-6 is on `main` (`efd0874`, PR #88).
-- **Status:** Finalizing
+- **Status:** Done
 
 ## Scope
 
@@ -296,3 +296,5 @@ Closes #41
 - 2026-10-15: fe-tdd-dev fix round 2 done: the `ended` message in the corner; the email pattern needs a 2-character top-level domain; the display name needs 2 characters that aren't spaces; the hook moved to `src/hooks/`; the docs are updated. 651 web tests pass; lint is clean.
 - 2026-10-15: fullstack-hooker-upper fix round 2 done: QA-12 (`/?signout=ended` when the refresh step gets a 401; no fallback revoke and no log in that case), SEC-5 (`readSessionCookies` accepts only a JWT-shaped access token and a 43-character base64url refresh token, matching the package's TOKEN_PATTERN; token fixtures updated in 4 specs), QA-13 (the study notes). 680 web tests pass.
 - 2026-10-15: After fix round 2: lint, typecheck, format:check, 680 web unit, 1134 API unit and 46 web e2e all pass on a fresh build. The user chose to skip a reviewer confirmation pass and go to pr-finalizer. Another session committed 5 non-AUTH-7 commits on this branch (ui-composition skill, frontend audit, WEB-54 plan); they stay as they are. Status: Finalizing; pr-finalizer started.
+- 2026-10-15: PR opened: https://github.com/craig-o-curtis/dudesphere/pull/91. The user pushed the branch before pr-finalizer ran the push, so the push was a no-op.
+- 2026-10-15: Status set to `Done` instead of `PR open`, at the user's request. pr-finalizer now sets `Done` when its work is finished.

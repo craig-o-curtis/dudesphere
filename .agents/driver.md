@@ -90,7 +90,7 @@ If the handoff doesn't exist, or its Status isn't `Planned` or later, stop. Tell
 
 ### 5. Hand back
 
-- Set the handoff Status to `PR open`, and log the PR link.
+- Check that pr-finalizer set the handoff Status to `Done` and logged the PR link. If it didn't, set it yourself.
 - Send the user a summary:
   - the tasks done;
   - the review rounds and the findings fixed;
