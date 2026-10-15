@@ -79,7 +79,7 @@ E2E with e2e users:
 - Admin sets `marked-zero`: it drops from `GET /abidings` and `?hashtag=`; `GET /abidings/:id` is 404 for B, 200 for A and the admin.
 - Admin sets `ok`: back in lists; three action rows.
 - Dismiss a report: status `dismissed`.
-- `report` and `moderation_action` rows of e2e users in `apps/api/test/global-setup.ts`.
+- `report` and `moderation_action` rows of e2e users are deleted and counted in the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts`, so `pnpm e2e:check` sees them.
 
 ## Done when
 

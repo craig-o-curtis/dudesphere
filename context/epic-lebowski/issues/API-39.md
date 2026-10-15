@@ -75,7 +75,7 @@ E2E with e2e users and an `e2e-` group:
 - Leaderboard with A (games 180 and 150) and B (one game 90): A first with average 165, best 180; B second.
 - A member who leaves the group drops off the board.
 - Cancel: `cancelledAt` set; RSVP after cancel: 409 `NIGHT_CANCELLED`.
-- New tables in `apps/api/test/global-setup.ts`.
+- New tables are deleted and counted in the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts`, so `pnpm e2e:check` sees them.
 
 ## Done when
 

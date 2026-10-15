@@ -17,6 +17,7 @@ An abiding has no page of its own. Replies post (FEED-14) but cannot be read as 
   - A reply box (FEED-14's `ComposeBox` with `replyToId`) for signed-in members; "Roll in to reply" for anonymous visitors.
   - A missing id calls `notFound()`.
 - `apps/web/src/app/(app)/@modal/(.)abidings/[id]/page.tsx`: the intercepting route. The same content in a `<dialog>` over the feed. Escape or the close button calls `router.back()`.
+- Add `@base-ui/react` to `apps/web` (WEB-54 left it out) and build `Dialog` in `components/ui/` on it, following `ui-composition/references/base-ui.md`. Check the current version with ctx7 first, and install none of its optional date peers.
 - `apps/web/src/app/(app)/@modal/default.tsx`: returns `null`.
 - `apps/web/src/app/(app)/layout.tsx`: renders `{children}` and `{modal}`. The feed's subtree is wrapped in React's `<Activity mode={modalOpen ? "hidden" : "visible"}>` so the feed keeps its scroll and query state while the modal is open.
 - Edit and delete on the thread page, for the author or an admin: Server Actions `editAbiding` (`PATCH /abidings/:id`) and `deleteAbiding` (`DELETE /abidings/:id`). Both call `revalidateTag("abiding:" + id, "max")` and `revalidateTag("abidings", "max")`, then `refresh()` so this client's router shows the change.
@@ -55,5 +56,6 @@ The abiding and its first page of replies are `'use cache'` with a per-item `cac
 - [ ] Edit and delete actions with `revalidateTag(tag, "max")` and `refresh()`
 - [ ] View Transitions with a reduced-motion branch
 - [ ] Focus management for the dialog
+- [ ] `@base-ui/react` added, and `ui/Dialog` built with a spec
 - [ ] Vitest specs for the tag names and the actions
 - [ ] Row added to `rendering-strategies.md`

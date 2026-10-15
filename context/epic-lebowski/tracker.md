@@ -47,15 +47,15 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `/signup`, `/login`, Server Actions that set the session and refresh cookies, sign-out handlers
 
 8. **WEB-54** · [Shared UI parts and the auth form refactor](issues/WEB-54.md)\
-   ⬜ Todo · [#90][90] · Blocked by: none\
-   `components/ui/` parts on the tokens and Base UI, auth forms rebuilt on them
+   ✅ Done · [#90][90] · Blocked by: none\
+   `components/ui/` native parts on the tokens, auth forms rebuilt on them
 
 9. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
    ⬜ Todo · [#42][42] · Blocked by: none\
    `proxy.ts` redirect-to-refresh, `lib/session.ts` with `verifySession`, `/api/bff`
 
 10. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
-    ⬜ Todo · [#43][43] · Blocked by: WEB-54\
+    ⬜ Todo · [#43][43] · Blocked by: none\
     `/forgot-password`, `/reset-password`, `FRONTEND_URL` on the web origin
 
 11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
@@ -63,7 +63,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
 12. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
-    ⬜ Todo · [#45][45] · Blocked by: WEB-54\
+    ⬜ Todo · [#45][45] · Blocked by: none\
     `rendering-strategies.md` and a `/lab` index of every strategy
 
 ## Phase 1: The Feed
@@ -71,15 +71,15 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
 Passwordless sign-in, then the Twitter part of the app.
 
 13. **AUTH-52** · [Passwordless sign-in](issues/AUTH-52.md)\
-    ⬜ Todo · [#46][46] · Blocked by: AUTH-8, API-10, WEB-54\
+    ⬜ Todo · [#46][46] · Blocked by: AUTH-8, API-10\
     Email links, email verification, passkeys, Google and GitHub, one "Roll in" form
 
 14. **FEED-12** · [Splash page](issues/FEED-12.md)\
-    ⬜ Todo · [#47][47] · Blocked by: AUTH-8, WEB-54\
+    ⬜ Todo · [#47][47] · Blocked by: AUTH-8\
     Static shell, cached abidings ticker and hashtags, "who is signed in" in Suspense
 
 15. **FEED-13** · [Feed with infinite scroll and hashtag chips](issues/FEED-13.md)\
-    ⬜ Todo · [#48][48] · Blocked by: AUTH-8, WEB-54\
+    ⬜ Todo · [#48][48] · Blocked by: AUTH-8\
     `/feed`, dynamic, `useInfiniteQuery` on `links.next`, up to 10 chips
 
 16. **FEED-14** · [Compose and reply with optimistic insert](issues/FEED-14.md)\
@@ -95,7 +95,7 @@ Passwordless sign-in, then the Twitter part of the app.
     `/abidings/[id]`, intercepting-route modal, `<Activity>`, View Transitions
 
 19. **FEED-17** · [Dude pages and edit forms](issues/FEED-17.md)\
-    ⬜ Todo · [#52][52] · Blocked by: AUTH-8, WEB-54\
+    ⬜ Todo · [#52][52] · Blocked by: AUTH-8\
     `/dudes/[id]` and `/dudes/me`, edit forms with Nest's field errors
 
 20. **API-18** · [Hidden hashtags list for admins](issues/API-18.md)\
@@ -103,7 +103,7 @@ Passwordless sign-in, then the Twitter part of the app.
     An admin-only list of every tag, hidden ones included
 
 21. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
-    ⬜ Todo · [#54][54] · Blocked by: AUTH-8, API-18, WEB-54\
+    ⬜ Todo · [#54][54] · Blocked by: AUTH-8, API-18\
     `/admin/users`, `/admin/hashtags`, `forbidden()`, `after()` audit line
 
 22. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
@@ -127,7 +127,7 @@ The anchor: async bowling and the Score Sheet.
     Seeded pin model in `lane-engine`; `POST /lanes/games/:id/rolls` takes inputs only
 
 26. **LANE-24** · [Lane Night UI](issues/LANE-24.md)\
-    ⬜ Todo · [#59][59] · Blocked by: AUTH-8, LANE-21, API-22, API-23, WEB-54\
+    ⬜ Todo · [#59][59] · Blocked by: AUTH-8, LANE-21, API-22, API-23\
     2D lane, release meter, Over-the-line foul, scorecard, "MARK IT ZERO" stamp
 
 27. **LANE-25** · [Turn flow and gentle timeout](issues/LANE-25.md)\
@@ -155,11 +155,11 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     Rug, alignment, quiet day, time zone, certificate columns; two new tables
 
 32. **ABIDE-30** · [Daily "The Dude abides" check-in](issues/ABIDE-30.md)\
-    ⬜ Todo · [#65][65] · Blocked by: AUTH-8, API-29, WEB-54\
+    ⬜ Todo · [#65][65] · Blocked by: AUTH-8, API-29\
     One-tap check-in, optional mood, soft streaks, `after()`
 
 33. **ABIDE-31** · [Take-It-Easy timer](issues/ABIDE-31.md)\
-    ⬜ Todo · [#66][66] · Blocked by: AUTH-8, API-29, WEB-54\
+    ⬜ Todo · [#66][66] · Blocked by: AUTH-8, API-29\
     1 to 10 minute calm timer that saves a session
 
 34. **ABIDE-32** · [Shomer Shabbos quiet mode](issues/ABIDE-32.md)\
@@ -171,7 +171,7 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     Seeded rug pattern generator; config saved through Nest
 
 36. **RUG-34** · [Laws of the Lane quiz](issues/RUG-34.md)\
-    ⬜ Todo · [#69][69] · Blocked by: API-29, WEB-54\
+    ⬜ Todo · [#69][69] · Blocked by: API-29\
     Original tenets, fully static quiz, alignment saved by a Server Action
 
 37. **RUG-35** · [Lane Certificate](issues/RUG-35.md)\
@@ -179,7 +179,7 @@ Check-ins, the timer, quiet mode, the Rug, the quiz, the certificate and the Str
     `ImageResponse` certificate and share card; never implies ordination
 
 38. **RUG-36** · [Ask the Stranger](issues/RUG-36.md)\
-    ⬜ Todo · [#71][71] · Blocked by: WEB-54\
+    ⬜ Todo · [#71][71] · Blocked by: none\
     Curated original aphorisms, daily pick with `cacheLife('days')`
 
 ## Phase 4: Achievers
@@ -223,7 +223,7 @@ Groups, Bowling Nights, recipe posts and moderation.
 Deploy, browser tests, and a performance and accessibility pass.
 
 47. **WEB-53** · [Privacy and cookies page](issues/WEB-53.md)\
-    ⬜ Todo · [#89][89] · Blocked by: WEB-54\
+    ⬜ Todo · [#89][89] · Blocked by: none\
     `/privacy`: what Dudesphere keeps and why, the cookie table and members' rights
 
 48. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
@@ -266,7 +266,8 @@ Every story meets every line below before it says `Done`.
 - A backend story has unit specs and e2e specs. The e2e specs follow the repo's rules:
   - users are `e2e-` prefixed, with an `e2e-...@example.com` email;
   - hashtags are `e2e` plus 12 lower-case hex characters;
-  - every new table is added to the cleanup in `apps/api/test/global-setup.ts`.
+  - every new table or collection an e2e run writes to is added to the shared e2e cleanup in `apps/api/test/`. Both the API and the web e2e suites run it before and after every run.
+- Nothing created by e2e is left in the dev databases: no `e2e-` users, profiles, refresh tokens, sessions, email tokens, abidings or hashtags. After the story's e2e runs and review rounds, `pnpm e2e:check` passes.
 - Every Postgres change goes through a migration in `apps/api/src/database/migrations/`.
   Migrations are append-only.
 - Every date goes through `@northguild/gmt`. No code holds a `Date`.

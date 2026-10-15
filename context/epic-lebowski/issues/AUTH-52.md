@@ -175,7 +175,7 @@ Social:
 
 E2E housekeeping:
 
-- `apps/api/test/global-setup.ts` deletes `passkey`, `passkey_challenge` and `oidc_identity` rows for e2e users.
+- the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts` deletes and counts `passkey`, `passkey_challenge` and `oidc_identity` rows for e2e users, so `pnpm e2e:check` sees them.
 
 ## Done when
 

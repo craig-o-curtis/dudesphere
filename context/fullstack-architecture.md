@@ -266,8 +266,14 @@ the web origin only, and say why in `overview.md`.
 
 - Docker Compose still runs only the databases and their tools. Both apps run
   locally.
-- The e2e cleanup job in `apps/api/test/global-setup.ts` and the `e2e-` prefix
-  rule stay as they are.
+- The e2e cleanup and the `e2e-` prefix rule stay as they are. The cleanup
+  lives in one shared module, `apps/api/test/e2e-cleanup.ts`. It runs before
+  and after both suites: the API e2e run through `apps/api/test/global-setup.ts`,
+  and the web Playwright run through `apps/web/e2e/global-setup.ts` and
+  `global-teardown.ts`, which call the API's `e2e:cleanup` script, so
+  `apps/web` never touches a database. Run it by hand from the root with
+  `pnpm e2e:cleanup`. `pnpm e2e:check` deletes nothing: it counts the e2e rows
+  left, and exits 1 if there are any.
 - The zero-`Date` policy and `@northguild/gmt` apply to `apps/web` and every
   package as well. Timestamps cross the API as ISO 8601 UTC strings and stay
   strings in the browser until a formatter needs them.

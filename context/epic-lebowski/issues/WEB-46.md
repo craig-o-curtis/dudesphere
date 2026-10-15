@@ -11,7 +11,7 @@ Vitest covers pure functions and components, and the API has e2e suites, but not
 ## Scope
 
 - `apps/web/playwright.config.ts`: `webServer` starts `pnpm --filter @dudesphere/api dev` and `pnpm --filter @dudesphere/web start` after a build; `baseURL: http://localhost:3001`; projects Chromium, WebKit and Firefox; a `reducedMotion: "reduce"` project on Chromium.
-- `apps/web/e2e/fixtures.ts`: a fixture that signs up a fresh user with an `e2e-<random>@example.com` email and `e2e-<random>` username through the API, and stores the cookies as `storageState`. Hashtags are `e2e` plus 12 hex characters. The API's `test/global-setup.ts` cleanup removes them.
+- `apps/web/e2e/fixtures.ts`: a fixture that signs up a fresh user with an `e2e-<random>@example.com` email and `e2e-<random>` username through the API, and stores the cookies as `storageState`. Hashtags are `e2e` plus 12 hex characters. The shared e2e cleanup (`apps/api/test/e2e-cleanup.ts`) removes them before and after every API and web e2e run.
 - Flows (`apps/web/e2e/*.spec.ts`):
   - `auth.spec.ts`: sign up, sign in by password, sign out; email link through Mailpit's API; a passkey with a virtual authenticator; refresh after expiry with `JWT_EXPIRES_IN=60`.
   - `feed.spec.ts`: infinite scroll, chips, compose with optimistic insert, reply.
