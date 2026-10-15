@@ -169,9 +169,7 @@ export function mapValidationMessages(messages: readonly string[]): MappedValida
 function apiBaseUrl(): string {
   const base = process.env.API_URL;
   if (!base) {
-    throw new Error(
-      "API_URL is not set. Set it to the API's origin in apps/web/.env.local.",
-    );
+    throw new Error("API_URL is not set. Set it to the API's origin in apps/web/.env.local.");
   }
   return base.replace(/\/+$/, "");
 }
