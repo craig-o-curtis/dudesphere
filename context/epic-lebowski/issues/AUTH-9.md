@@ -10,6 +10,7 @@ Nest already sends reset links to `<FRONTEND_URL>/reset-password?token=<token>`,
 
 ## Scope
 
+- `apps/web/src/components/SignInForm/SignInForm.tsx`: add a "Forgot password?" link to `/forgot-password`. AUTH-7 left it out, because the page did not exist.
 - `apps/web/src/app/(public)/forgot-password/page.tsx`: one email input. Server Action `requestReset(prev, formData)` calls Nest `POST /auth/password/forgot` with `{ email }`.
   - On 202 the page always says: "If that address has an account, we sent it a link." Nest answers 202 whether or not the address has an account; the page must not hint either way.
   - On 429 it says how long to wait, from `Retry-After`.
@@ -24,10 +25,12 @@ Nest already sends reset links to `<FRONTEND_URL>/reset-password?token=<token>`,
 
 - **No session needed.** Both pages are public and never call `getMe()`.
 - **The token stays out of logs.** The Server Action reads it from the form, not from the URL. The page renders a hidden input with it.
-- **A reset ends every sign-in.** Nest stamps `passwordChangedAt` and ends every sign-in in one transaction. Any cookies this browser still holds stop working, so the success path clears them before the redirect.
+- **A reset ends every sign-in.** Nest stamps `passwordChangedAt` and ends every sign-in in one transaction. Any cookies this browser still holds stop working, so the success path calls `clearSessionCookies()` from AUTH-7's `lib/session.ts` before the redirect. That clears each cookie at its own path: `__Host-session` at `/` and `__Secure-refresh` at `/api/auth`.
 - **New passwords are 12 to 128 characters.** The input carries `minLength={12}` and `maxLength={128}` as a hint; Nest is the rule.
 
 ## Rendering strategy
+
+With `cacheComponents` on, a JavaScript-off Server Action POST that returns state (an error) instead of redirecting gets no HTML shell, so the page is blank. This holds for `requestReset` and `resetPassword` too. The 303 on success works. The same-password check in the browser and the `minLength` hint help. See "Known limit" in `rendering-strategies.md`.
 
 `/forgot-password` is static. `/reset-password` reads `searchParams`, so its form sits inside a Suspense boundary and the rest of the page stays in the static shell. Both use Server Actions with `useActionState`.
 

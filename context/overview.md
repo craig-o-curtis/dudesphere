@@ -198,12 +198,13 @@ full shape.
 
 ### Tokens
 
-| Method | Endpoint                    | Access | Description                                        |
-| ------ | --------------------------- | ------ | -------------------------------------------------- |
-| POST   | `/auth/token`               | Public | Sign in with `{ identifier, password }`. 200       |
-| POST   | `/auth/token/refresh`       | Public | Swap `{ refreshToken }` for a new pair. 200        |
-| POST   | `/auth/token/revoke`        | Public | Sign out this device, with `{ refreshToken }`. 204 |
-| POST   | `/auth/sign-out-everywhere` | Token  | Sign out every device of the caller. 204           |
+| Method | Endpoint                    | Access | Description                                                     |
+| ------ | --------------------------- | ------ | --------------------------------------------------------------- |
+| POST   | `/auth/token`               | Public | Sign in with `{ identifier, password }`. 200                    |
+| POST   | `/auth/token/refresh`       | Public | Swap `{ refreshToken }` for a new pair. 200                     |
+| POST   | `/auth/token/revoke`        | Public | Sign out this device, with `{ refreshToken }`. 204              |
+| POST   | `/auth/sign-out`            | Token  | Sign out the sign-in this access token belongs to. No body. 204 |
+| POST   | `/auth/sign-out-everywhere` | Token  | Sign out every device of the caller. 204                        |
 
 Signing in and refreshing both answer
 `{ "accessToken": "...", "refreshToken": "...", "expiresIn": 900 }`.
@@ -223,6 +224,18 @@ A member holds two tokens:
 The refresh tokens of one sign-in are a family. A family lasts as long as the
 member keeps refreshing, and 30 days at most.
 
+**Two ways to sign out one device.** `POST /auth/token/revoke` finds the
+family by its refresh token. `POST /auth/sign-out` finds it by the access
+token's `sid`, for a client that holds the access token but not the refresh
+token where it signs out, such as the web app's sign-in action. Both end the
+whole family, and its access tokens on the next request, and leave the
+member's other sign-ins alone. `POST /auth/sign-out` needs a live access
+token, so a second call with the same token gets 401. A dev token belongs to
+no sign-in: `POST /auth/sign-out` answers 204 and ends nothing. The docs'
+`/auth/sign-out` ends a browser session by its cookie instead, and is public.
+`SignInsRepository.endSignIn` makes the write; the package has no way to end
+a family by `sid`.
+
 **A refresh token works once.** Swapping it returns a new pair, and the client
 keeps the new refresh token. A client must send one refresh at a time. If a
 refresh token is used a second time, two parties hold it, so the whole family
@@ -239,7 +252,7 @@ same read ends the access token at once, with a 401, when:
 its sign-in's id, `sid`. On every request `JwtAuth` also asks
 `SignInsRepository.isLive` (`src/typeorm/sign-ins.repository.ts`) whether
 that sign-in is still going, beside the member read. So signing out this
-device, signing out everywhere, a refresh token used twice, a password
+device (either route), signing out everywhere, a refresh token used twice, a password
 change or reset, and a closed account all stop the access tokens on the
 next request, with a 401. A restored account keeps them stopped: the member
 signs in again. This is not in the NestJS docs,

@@ -99,16 +99,16 @@ Two facts from the package shape the design:
 
 ### Next (`apps/web`)
 
-- `/login` becomes "Roll in", `apps/web/src/app/(public)/login/page.tsx`:
+- `/login` becomes "Roll in", `apps/web/src/app/(public)/login/page.tsx`. AUTH-7 already built the form: the field is labelled "Email" (`type="email"`, `autocomplete="username"`), so only the `webauthn` token is new, and `NextPathField` already carries `next`:
   - One email field with `autocomplete="username webauthn"`, so the browser offers a saved passkey as the member types (conditional UI, `startAuthentication({ useBrowserAutofill: true })`).
   - Buttons, in order: "Email me a link", "Use a passkey", "Continue with Google", "Continue with GitHub".
   - A small "Use a password" link that reveals the AUTH-7 password form on the same page.
   - "New here? Sign up" links to `/signup`, which asks for email and display name only.
 - Route Handlers in `apps/web/src/app/api/auth/`:
   - `magic-link/route.ts`, `POST`: forwards `{ email, displayName? }` to Nest with the browser's `Origin` header, and copies Nest's `Set-Cookie: __Host-magic_link_tx` onto its own response unchanged.
-  - `magic-link/consume/route.ts`, `POST`: forwards `{ token }` and the browser's `__Host-magic_link_tx` cookie to Nest. On 200 sets the `session` and `refresh` cookies (AUTH-7's helper) and answers 204.
-  - `passkeys/[...step]/route.ts`: forwards the four passkey calls; on sign-in success sets the cookies.
-  - `oidc/[provider]/start/route.ts` (`POST`, then redirect to `url`) and `oidc/[provider]/callback/route.ts` (`GET` from the provider, then `POST` to Nest, then the cookies, then redirect to `next`).
+  - `magic-link/consume/route.ts`, `POST`: forwards `{ token }` and the browser's `__Host-magic_link_tx` cookie to Nest. On 200 calls `startSession(pair, next)` from AUTH-7's `lib/session.ts`, which sets the `__Host-session` and `__Secure-refresh` cookies, and answers 204.
+  - `passkeys/[...step]/route.ts`: forwards the four passkey calls; on sign-in success calls `startSession()`.
+  - `oidc/[provider]/start/route.ts` (`POST`, then redirect to `url`) and `oidc/[provider]/callback/route.ts` (`GET` from the provider, then `POST` to Nest, then `startSession()`, then redirect to the path it returns).
 - `/auth/link?token=` page: **the emailed link opens this page, which POSTs the token.** It shows "Rolling you in..." and a "Continue" button that submits a form. It never consumes on GET, because mail scanners and link previews follow GET links and would burn the token.
 - `/dudes/me/sign-in` page: list, rename and delete passkeys; "Add a passkey"; "Verify my email".
 - After a first sign-in by link or social, a one-time banner offers "Add a passkey, sign in faster next time."
@@ -151,7 +151,8 @@ The story may split into three sub-issues in gmt's style, each with its own spec
 
 Email links:
 
-- Request a link for a verified e2e user. Mailpit shows one email. Opening the link in the same browser and pressing "Continue" signs in; `session` and `refresh` cookies are set; no `__Host-sid` cookie is set.
+- Every path ends in `startSession()`, and no handler sets a cookie by hand. The names and options come from `lib/session.ts`.
+- Request a link for a verified e2e user. Mailpit shows one email. Opening the link in the same browser and pressing "Continue" signs in; `__Host-session` and `__Secure-refresh` are set; no `__Host-sid` cookie is set.
 - The same link a second time: "That link no longer works."
 - The link opened in a second browser profile: the package's 401, with "Open the link in the browser you asked from."
 - A `POST /auth/magic-link` with `Origin: https://evil.example.com`: 403, no email.

@@ -1,6 +1,6 @@
 # WEB-45: Deploy to Vercel and a Docker host
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 5. Blocked by: API-10, AUTH-8, REPO-4.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 5. Blocked by: API-10, AUTH-8, REPO-4, WEB-53.
 
 **Scope:** The web app runs on Vercel, the API runs as the `apps/api` Docker image on Railway or Fly with Neon Postgres and a hosted MongoDB, and every env var, secret and production setting each side needs is set and documented.
 

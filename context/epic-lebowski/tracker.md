@@ -43,19 +43,19 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `tokens.css`, light and dark, root layout, reduced-motion rules, disclaimer
 
 7. **AUTH-7** · [BFF sign-up, sign-in and sign-out with httpOnly cookies](issues/AUTH-7.md)\
-   ⬜ Todo · [#41][41] · Blocked by: none\
-   `/signup`, `/login`, Route Handlers that set the `session` and `refresh` cookies
+   ✅ Done · [#41][41] · Blocked by: none\
+   `/signup`, `/login`, Server Actions that set the session and refresh cookies, sign-out handlers
 
 8. **WEB-54** · [Shared UI parts and the auth form refactor](issues/WEB-54.md)\
-   ⬜ Todo · [#90][90] · Blocked by: AUTH-7\
+   ⬜ Todo · [#90][90] · Blocked by: none\
    `components/ui/` parts on the tokens and Base UI, auth forms rebuilt on them
 
 9. **AUTH-8** · [proxy.ts refresh and the Data Access Layer](issues/AUTH-8.md)\
-   ⬜ Todo · [#42][42] · Blocked by: AUTH-7\
+   ⬜ Todo · [#42][42] · Blocked by: none\
    `proxy.ts` redirect-to-refresh, `lib/session.ts` with `verifySession`, `/api/bff`
 
 10. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
-    ⬜ Todo · [#43][43] · Blocked by: AUTH-7, WEB-54\
+    ⬜ Todo · [#43][43] · Blocked by: WEB-54\
     `/forgot-password`, `/reset-password`, `FRONTEND_URL` on the web origin
 
 11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
@@ -71,7 +71,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
 Passwordless sign-in, then the Twitter part of the app.
 
 13. **AUTH-52** · [Passwordless sign-in](issues/AUTH-52.md)\
-    ⬜ Todo · [#46][46] · Blocked by: AUTH-7, AUTH-8, API-10, WEB-54\
+    ⬜ Todo · [#46][46] · Blocked by: AUTH-8, API-10, WEB-54\
     Email links, email verification, passkeys, Google and GitHub, one "Roll in" form
 
 14. **FEED-12** · [Splash page](issues/FEED-12.md)\
@@ -222,15 +222,19 @@ Groups, Bowling Nights, recipe posts and moderation.
 
 Deploy, browser tests, and a performance and accessibility pass.
 
-47. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
-    ⬜ Todo · [#80][80] · Blocked by: API-10, AUTH-8\
+47. **WEB-53** · [Privacy and cookies page](issues/WEB-53.md)\
+    ⬜ Todo · [#89][89] · Blocked by: WEB-54\
+    `/privacy`: what Dudesphere keeps and why, the cookie table and members' rights
+
+48. **WEB-45** · [Deploy to Vercel and a Docker host](issues/WEB-45.md)\
+    ⬜ Todo · [#80][80] · Blocked by: API-10, AUTH-8, WEB-53\
     Next on Vercel, Nest on Railway or Fly, Neon, production env
 
-48. **WEB-46** · [Playwright flows and instant() navigation tests](issues/WEB-46.md)\
+49. **WEB-46** · [Playwright flows and instant() navigation tests](issues/WEB-46.md)\
     ⬜ Todo · [#81][81] · Blocked by: AUTH-52, FEED-16, LANE-25\
     Browser flows for sign-in, feed, thread and Lane Night
 
-49. **WEB-47** · [Performance and accessibility pass](issues/WEB-47.md)\
+50. **WEB-47** · [Performance and accessibility pass](issues/WEB-47.md)\
     ⬜ Todo · [#82][82] · Blocked by: WEB-46\
     Partial Prefetching, budgets, keyboard, contrast, reduced motion everywhere
 
@@ -238,19 +242,19 @@ Deploy, browser tests, and a performance and accessibility pass.
 
 Tracked, not scheduled.
 
-50. **WORLD-48** · [React Three Fiber world](issues/WORLD-48.md)\
+51. **WORLD-48** · [React Three Fiber world](issues/WORLD-48.md)\
     ⬜ Todo · [#83][83] · Blocked by: WEB-47\
     Stations, HDRI backdrops, the yin-yang ball, the strike, quality tiers
 
-51. **LANE-49** · [Live Lane rooms](issues/LANE-49.md)\
+52. **LANE-49** · [Live Lane rooms](issues/LANE-49.md)\
     ⬜ Todo · [#84][84] · Blocked by: LANE-27, WEB-45\
     Nest WebSocket gateway, CORS for the web origin only
 
-52. **SPHERE-50** · [The globe and opt-in coarse location](issues/SPHERE-50.md)\
+53. **SPHERE-50** · [The globe and opt-in coarse location](issues/SPHERE-50.md)\
     ⬜ Todo · [#85][85] · Blocked by: FEED-17\
     Location modes, `GET /sphere/cells`, `GET /dudes/nearby`, the globe
 
-53. **ACHV-51** · [Fest Finder and Day of the Dude](issues/ACHV-51.md)\
+54. **ACHV-51** · [Fest Finder and Day of the Dude](issues/ACHV-51.md)\
     ⬜ Todo · [#86][86] · Blocked by: API-39, ACHV-40\
     Member-submitted fests and screenings; a March 6 event
 
@@ -327,4 +331,5 @@ Every story meets every line below before it says `Done`.
 [84]: https://github.com/craig-o-curtis/dudesphere/issues/84
 [85]: https://github.com/craig-o-curtis/dudesphere/issues/85
 [86]: https://github.com/craig-o-curtis/dudesphere/issues/86
+[89]: https://github.com/craig-o-curtis/dudesphere/issues/89
 [90]: https://github.com/craig-o-curtis/dudesphere/issues/90

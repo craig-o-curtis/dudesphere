@@ -18,7 +18,7 @@ Nest's throttler counts the caller's IP address. Behind the BFF, every request c
   - Otherwise use `super.getTracker(req)`, as today.
   - The account part is unchanged: `${account}|${ip}` where the body names an account.
 - The `ip` throttler count (`IP_THROTTLER`) uses the same IP choice.
-- `apps/web/src/lib/api.ts` (AUTH-7) sends `X-Bff-Secret: process.env.BFF_SECRET` and `X-Client-Ip`: the first address in `x-forwarded-for` on Vercel, or the socket address in development. `apps/web/.env.example` gains `BFF_SECRET=`.
+- `apps/web/src/lib/api.ts` (AUTH-7) already takes an optional `extraHeaders` argument on `apiFetch`, and merges it into the request. This story passes `X-Bff-Secret: process.env.BFF_SECRET` and `X-Client-Ip` through it: the first address in `x-forwarded-for` on Vercel, or the socket address in development. The first callers to change are `signIn` and `signUp` in `lib/actions/auth.ts`, then the `/api/auth` logout handlers. `apps/web/.env.example` gains `BFF_SECRET=`.
 - `context/overview.md`, "Rate limits": a paragraph on the header pair.
 
 ## Design notes
