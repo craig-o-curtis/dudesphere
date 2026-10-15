@@ -26,3 +26,13 @@ In `apps/web`:
 - Style with tokens, never raw values. Every shared part accepts `className`, its root element's native props and `ref`, and changes its look only through a `variant` or `tone` prop or its component tokens.
 - Base UI (`@base-ui/react`) is the only UI library. Only files in `src/components/ui/` import it.
 - Full rules: `.agents/skills/ui-composition/SKILL.md`. Current problems: `context/audits/frontend-audit.md`.
+
+## Topic standards
+
+The rules above apply to every task. Each topic below has its own file. Read a topic file when its "Read when" matches your task.
+
+| Topic   | File                          | Read when                                                                             |
+| ------- | ----------------------------- | ------------------------------------------------------------------------------------- |
+| Next.js | `context/standards/nextjs.md` | You plan, build or review routes, layouts, rendering, caching or modals in `apps/web` |
+
+To add a topic, make `context/standards/<topic>.md`, add a row here, and add the file to the "Read first" list of each agent that needs it.
