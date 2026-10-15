@@ -1,6 +1,6 @@
 # ABIDE-31: Take-It-Easy timer
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, AUTH-8, API-29.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Abide. Phase 3. Blocked by: WEB-5, API-29.
 
 **Scope:** A calm timer of 1 to 10 minutes with a breathing prompt runs in the browser, and finishing it saves a session through a Server Action and can post "abided for 5 min" to the feed.
 

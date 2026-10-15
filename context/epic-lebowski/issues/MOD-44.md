@@ -1,6 +1,6 @@
 # MOD-44: Walter's Rules UI and the "Calmer than you are" nudge
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Moderation. Phase 4. Blocked by: WEB-5, AUTH-8, API-43, FEED-14, FEED-19.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Moderation. Phase 4. Blocked by: WEB-5, API-43, FEED-14, FEED-19.
 
 **Scope:** A static "There are rules" guidelines page, a "This aggression will not stand" report button on every abiding, an admin moderation queue, visible "Over the line" and "Mark it zero" states, and a gentle "Calmer than you are?" nudge before a heated reply posts.
 

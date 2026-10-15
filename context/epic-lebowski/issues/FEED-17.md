@@ -1,6 +1,6 @@
 # FEED-17: Dude pages and edit forms
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, AUTH-8.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5.
 
 **Scope:** `/dudes/[id]` shows a member's profile and abidings, and `/dudes/me` adds forms that edit the member's own user and profile, with Nest's field errors shown under each input.
 
