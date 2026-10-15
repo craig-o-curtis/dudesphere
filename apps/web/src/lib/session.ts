@@ -1,13 +1,21 @@
 import "server-only";
-import type { TokenPair } from "@dudesphere/api-types";
+import type { TokenPair, UserResponse } from "@dudesphere/api-types";
+import { io } from "next/cache";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { cache } from "react";
 
-import { safeNextPath } from "@/lib/next-path";
+import { expiresWithin, readTokenExp } from "@/lib/access-token";
+import { apiFetch, ApiRequestError } from "@/lib/api";
+import { loginHref, safeNextPath } from "@/lib/next-path";
 
 // The one place that knows the sign-in cookies: their names, options and
 // lifetimes. Server Actions and Route Handlers call it; page scripts never see
-// a token, because both cookies are httpOnly. AUTH-8 adds verifySession,
-// getMe and requireSession here.
+// a token, because both cookies are httpOnly.
+//
+// It is also the Data Access Layer: verifySession, getMe and requireSession
+// are how every page, Server Action and Route Handler asks who is signed in.
+// Layouts never ask. Proxy's check is only an optimistic first step.
 //
 // Lifetimes go in `maxAge`, in seconds, and never as an end time.
 
@@ -36,10 +44,6 @@ export const REFRESH_COOKIE_PATH = "/api/auth";
  */
 export const REFRESH_MAX_AGE_SECONDS = 604_800;
 
-// Fifteen minutes, in seconds: Nest's documented JWT_EXPIRES_IN. Used only if
-// `expiresIn` is not a usable number. A bare number until gmt #308 lands.
-const FALLBACK_SESSION_MAX_AGE_SECONDS = 900;
-
 const SESSION_COOKIE_PATH = "/";
 
 /**
@@ -63,16 +67,6 @@ function cookieOptions(path: string, maxAge: number) {
   } as const;
 }
 
-// `expiresIn` comes from Nest, in whole seconds. The type alone doesn't prove
-// that, so anything that is not a finite number of at least one second gets
-// the documented 15 minutes, rather than a cookie that dies at once or never.
-function sessionMaxAge(expiresIn: unknown): number {
-  if (typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn < 1) {
-    return FALLBACK_SESSION_MAX_AGE_SECONDS;
-  }
-  return Math.floor(expiresIn);
-}
-
 // A JWT: three base64url parts, the last one (the signature) possibly empty.
 const ACCESS_TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/;
 
@@ -89,18 +83,29 @@ function tokenValue(value: string | undefined, shape: RegExp): string | null {
 }
 
 /**
- * Finishes every sign-in: saves Nest's token pair in the two cookies, and
- * returns where to send the member, which is `next` when it is a safe
- * same-origin path and "/" otherwise. `next` is `unknown` because it comes
- * from a form.
+ * Finishes every sign-in and every refresh: saves Nest's token pair in the
+ * two cookies, and returns where to send the member. That is `next` when it
+ * is a safe same-origin path, and `fallback` ("/" unless the caller names
+ * another) otherwise. `next` is `unknown` because it comes from a form or a
+ * query string.
+ *
+ * Both cookies live 7 days. The access token inside the session cookie still
+ * expires when Nest says, after 15 minutes. The cookie outlives it so that
+ * proxy can tell a member whose token ran out, who has a cookie, from an
+ * anonymous visitor, who has none. Proxy can't see the refresh cookie, which
+ * travels only to `/api/auth`.
  */
-export async function startSession(pair: TokenPair, next: unknown): Promise<string> {
+export async function startSession(
+  pair: TokenPair,
+  next: unknown,
+  fallback?: string,
+): Promise<string> {
   const cookieStore = await cookies();
 
   cookieStore.set(
     SESSION_COOKIE,
     pair.accessToken,
-    cookieOptions(SESSION_COOKIE_PATH, sessionMaxAge(pair.expiresIn)),
+    cookieOptions(SESSION_COOKIE_PATH, REFRESH_MAX_AGE_SECONDS),
   );
   cookieStore.set(
     REFRESH_COOKIE,
@@ -108,13 +113,15 @@ export async function startSession(pair: TokenPair, next: unknown): Promise<stri
     cookieOptions(REFRESH_COOKIE_PATH, REFRESH_MAX_AGE_SECONDS),
   );
 
-  return safeNextPath(next);
+  return safeNextPath(next, fallback);
 }
 
 /**
  * Tells the browser to drop both cookies. Each is cleared at its own path
- * with an empty value and `maxAge: 0`. `cookies().delete(name)` would only
- * clear a cookie at "/", and would leave the refresh cookie in place.
+ * with an empty value and `maxAge: 0`. The name-only `cookies().delete(name)`
+ * clears only the cookie at "/", so it would leave the refresh cookie in
+ * place. `delete({ name, path })` can clear another path; setting `maxAge: 0`
+ * does the same and keeps every write in one shape.
  */
 export async function clearSessionCookies(): Promise<void> {
   const cookieStore = await cookies();
@@ -137,4 +144,132 @@ export async function readSessionCookies(): Promise<SessionCookies> {
     accessToken: tokenValue(cookieStore.get(SESSION_COOKIE)?.value, ACCESS_TOKEN_SHAPE),
     refreshToken: tokenValue(cookieStore.get(REFRESH_COOKIE)?.value, REFRESH_TOKEN_SHAPE),
   };
+}
+
+/**
+ * True when the request's Cookie header holds `__Secure-refresh` more than
+ * once. Then neither value can be trusted, and no route under `/api/auth`
+ * may send either one to Nest.
+ *
+ * Why it happens: `__Secure-` allows a Domain attribute (`__Host-` doesn't),
+ * so a sibling subdomain can plant its own refresh cookie for the parent
+ * domain at path `/api/auth`. The browser then sends both. The planted one
+ * comes last (same path, newer), and Next's cookie store keeps only the
+ * last value, so readSessionCookies would hand back the attacker's token.
+ * This app can't clear the planted cookie: that takes a Set-Cookie with the
+ * attacker's Domain. It can refuse to use it.
+ *
+ * It reads the raw header, because the cookie store can't show a duplicate.
+ * Entries are split on ";", and each name is the text before its first "=",
+ * trimmed, matched exactly and with case. A name that only contains
+ * `__Secure-refresh`, a value that holds it, or an entry with no "=" (a
+ * cookie with an empty name) doesn't count.
+ */
+export function hasDuplicateRefreshCookie(request: Request): boolean {
+  return countCookies(request.headers.get("cookie") ?? "", REFRESH_COOKIE) > 1;
+}
+
+function countCookies(header: string, name: string): number {
+  return header.split(";").filter((entry) => {
+    const equals = entry.indexOf("=");
+    return equals !== -1 && entry.slice(0, equals).trim() === name;
+  }).length;
+}
+
+/** A live session: the access token and when it runs out, in epoch seconds. */
+export interface VerifiedSession {
+  accessToken: string;
+  exp: number;
+}
+
+/**
+ * The session in the request's cookies, or null when the access token is
+ * missing, malformed or already expired. It reads the token's `exp` without
+ * checking the signature and makes no network call; Nest checks the
+ * signature when the token is used.
+ *
+ * It gives no grace the other way: a token is good here until it has
+ * actually expired. Refreshing early is proxy's job.
+ *
+ * It authorizes nothing. A non-null answer means only that the cookie holds
+ * a JWT-shaped token whose unchecked `exp` hasn't passed. A forged token, or
+ * one Nest has revoked at sign-out, passes here too. Use it to choose what
+ * to try, such as which links to show, never to decide who may see what.
+ * Only data fetched from Nest with the Bearer is protected, because Nest
+ * checks the signature and the sign-in on every call.
+ *
+ * React's cache() runs it once per server render. It reads cookies(), so
+ * call it inside a `<Suspense>` boundary and never inside `'use cache'`.
+ *
+ * It awaits io() before it reads the clock. When Next renders a page's shell
+ * ahead of a navigation, cookies() can resolve, but reading the current time
+ * there is an error under Cache Components (Next logs "encountered the
+ * unstable value"). io() stops that render before the clock, and resolves at
+ * once on a real request, in a Route Handler and in a Server Action. The Next
+ * docs (functions/io.md) prefer it to connection(). With no token there is no
+ * clock to read, so an anonymous visitor still renders signed out in the
+ * shell.
+ */
+export const verifySession = cache(async function verifySession(): Promise<VerifiedSession | null> {
+  const { accessToken } = await readSessionCookies();
+  if (accessToken === null) {
+    return null;
+  }
+
+  const exp = readTokenExp(accessToken);
+  if (exp === null) {
+    return null;
+  }
+
+  await io();
+  if (expiresWithin(exp, 0)) {
+    return null;
+  }
+
+  return { accessToken, exp };
+});
+
+/**
+ * The signed-in member, from Nest's GET /users/me, or null when there is no
+ * live session or Nest answers 401. Any other failure is thrown, so a page's
+ * error boundary shows it rather than the page passing it off as signed out.
+ *
+ * The role comes from here, never from the token, which carries none on
+ * purpose. React's cache() makes it one call to Nest per server render, however
+ * many components ask.
+ */
+export const getMe = cache(async function getMe(): Promise<UserResponse | null> {
+  const session = await verifySession();
+  if (session === null) {
+    return null;
+  }
+
+  try {
+    return await apiFetch<UserResponse>("/users/me", { token: session.accessToken });
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      return null;
+    }
+    throw error;
+  }
+});
+
+/**
+ * The live session, or a redirect to sign-in that brings the member back to
+ * `next`. redirect() throws, so nothing after a failed check runs.
+ *
+ * It is not an authorization gate. It calls verifySession, which reads the
+ * token's `exp` without checking the signature or asking Nest, so a forged
+ * or revoked token gets past it. It only sends a visitor with no live-looking
+ * token to sign-in before the page does any work. Anything that must not be
+ * public has to come from Nest, fetched with the Bearer (getMe, for one), and
+ * the page must render it only when Nest answered. Never render private
+ * content just because requireSession returned.
+ */
+export async function requireSession(next: string): Promise<VerifiedSession> {
+  const session = await verifySession();
+  if (session === null) {
+    redirect(loginHref(next));
+  }
+  return session;
 }

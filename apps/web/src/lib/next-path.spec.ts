@@ -153,3 +153,44 @@ describe("safeNextPath", () => {
     });
   });
 });
+
+describe("safeNextPath with a fallback", () => {
+  // One value from each group above that gives "/". With a fallback, each
+  // gives the fallback instead.
+  const UNSAFE: [string, unknown][] = [
+    ["another origin", "https://evil.example.com"],
+    ["a protocol-relative URL", "//evil.example.com"],
+    ["a backslash trick", "/\\evil.example.com"],
+    ["an encoded slash", "/%2F/evil.example.com"],
+    ["a control character", "/\t/evil.example.com"],
+    ["a path under /api", "/api/auth/logout"],
+    ["an encoded path under /api", "/%61pi/auth/logout"],
+    ["a relative path", "dudes/1"],
+    ["a broken escape", "/dudes/%E0%A4%A"],
+    ["a value that is too long", `/${"a".repeat(MAX_NEXT_PATH_LENGTH)}`],
+    ["an empty string", ""],
+    ["null", null],
+    ["undefined", undefined],
+    ["a number", 42],
+  ];
+
+  it.each(UNSAFE)("gives the fallback for %s", (_name, value) => {
+    expect(safeNextPath(value, "/feed")).toBe("/feed");
+  });
+
+  it.each(UNSAFE)("gives / for %s when no fallback is passed", (_name, value) => {
+    expect(safeNextPath(value)).toBe("/");
+  });
+
+  it.each([
+    ["/", "/"],
+    ["/dudes/1?x=1#y", "/dudes/1?x=1#y"],
+    ["/dudes/../lanes", "/lanes"],
+  ])("keeps the safe path %j and ignores the fallback", (value, expected) => {
+    expect(safeNextPath(value, "/feed")).toBe(expected);
+  });
+
+  it("treats an explicit undefined fallback as /", () => {
+    expect(safeNextPath("https://evil.example.com", undefined)).toBe("/");
+  });
+});
