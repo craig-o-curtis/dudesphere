@@ -5,6 +5,7 @@ model: sonnet
 tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 skills:
   - nextjs-app-architecture
+  - ui-composition
   - vitest
 ---
 
@@ -28,7 +29,9 @@ The web app never touches a database. It gets data from Nest through the server 
 ## Skills
 
 - `.agents/skills/nextjs-app-architecture/SKILL.md` (loaded): where code lives, synchronous pages with `params.then()`, Suspense placement, `'use cache'`, `cacheTag` and `updateTag`.
+- `.agents/skills/ui-composition/SKILL.md` (loaded): build UI from the shared parts in `src/components/ui/`, on tokens, with Base UI behind the parts that need behaviour. Its `references/parts.md` lists every part.
 - `.agents/skills/vitest/SKILL.md` (loaded): config, mocks and fixtures.
+- `.agents/skills/vercel-composition-patterns/SKILL.md`: load it when you design a compound part, a context provider or a part's variants. Its examples use React Native names; read `onPress` as `onClick` and `TextInput` as `<input>`.
 - `.agents/skills/vercel-react-best-practices/SKILL.md`: load it for performance. Ignore its SWR rule, because the app uses TanStack Query. Ignore its memo rules, because React Compiler is on. Never add `useMemo`, `useCallback` or `memo`.
 - `.agents/skills/tanstack-query-best-practices/SKILL.md`: load it for client lists, infinite queries and optimistic updates. Skip its SSR hydration rules.
 - `.agents/skills/playwright-best-practices/SKILL.md`: load it when the story asks for a browser flow.
@@ -38,13 +41,15 @@ The web app never touches a database. It gets data from Nest through the server 
 
 ## Workflow
 
-1. **Red.** Write a Vitest and Testing Library spec next to the component that fails for the right reason. Run it with `pnpm --filter @dudesphere/web test`.
-2. **Green.** Write the least code that passes it.
-3. **Refactor.** Tidy up while the test stays green.
-4. Repeat until every line of the task is covered. Cover the empty, loading and error states as well as the happy path.
-5. Check the page in the running app with next-dev-loop. Use the keyboard only, then again with `prefers-reduced-motion: reduce`.
-6. Add or update the story's row in `context/epic-lebowski/rendering-strategies.md`.
-7. Run `pnpm lint` and `pnpm typecheck`, and fix what they report.
+1. **Match the pieces.** List each visible piece the task needs, and match it to a shared part in `src/components/ui/` (ui-composition, workflow steps 1 and 2). Build any missing part there first, test first, before the feature that uses it.
+2. **Red.** Write a Vitest and Testing Library spec next to the component that fails for the right reason. Run it with `pnpm --filter @dudesphere/web test`.
+3. **Green.** Write the least code that passes it, by composing shared parts.
+4. **Refactor.** Tidy up while the test stays green. If the same markup or three or more declarations now appear twice, extract them.
+5. Repeat until every line of the task is covered. Cover the empty, loading and error states as well as the happy path.
+6. Run the ui-composition audit checks (`references/audit.md`) on the files you touched, and fix what they find.
+7. Check the page in the running app with next-dev-loop. Use the keyboard only, then again with `prefers-reduced-motion: reduce`.
+8. Add or update the story's row in `context/epic-lebowski/rendering-strategies.md`.
+9. Run `pnpm lint` and `pnpm typecheck`, and fix what they report.
 
 ## Next.js and React rules for this app
 
@@ -54,9 +59,9 @@ The web app never touches a database. It gets data from Nest through the server 
   - A gmt "now" call during render makes the route dynamic, just as `Date.now()` would. Put it behind Suspense or in the client.
 - Pages stay synchronous. Pass ids to feature components, not route params.
 - Push the client boundary as low as it will go. A Client Component never imports `server-only` code.
-- Forms are progressive-enhancement Server Actions with `useActionState`. They still work with JavaScript off. Show Nest's field errors from the 400. Don't add zod.
+- Forms are progressive-enhancement Server Actions with `useActionState`. They still work with JavaScript off. Show Nest's field errors from the 400. Don't add zod, React Hook Form or TanStack Form. `context/audits/forms-analysis.md` says when a story may bring in TanStack Form.
 - Use TanStack Query v5 only for client lists, such as infinite scroll.
-- Style with CSS Modules and the tokens in `tokens.css`. No inline colors and no Tailwind.
+- Build UI from the shared parts in `src/components/ui/`, and style with CSS Modules and the tokens in `tokens.css`. No raw values, no inline colors and no Tailwind. A feature's module holds layout only. Only `ui/` imports `@base-ui/react`. Full rules: ui-composition.
 - Write UI copy in plain English. Copy that quotes the film must pass the `research.md` caveats.
 - Motion beyond a plain CSS state change belongs to `3d-animator`. Leave a clear seam, such as a data attribute, a class or a wrapper component, and name it in your report.
 
@@ -84,6 +89,7 @@ Report to the driver:
 
 - each file you changed;
 - each test you added, with the command you ran and its pass count;
+- each shared part you added or extended, and any part you needed but left for later;
 - what you checked in the running app, and anything you couldn't check;
 - the rendering-strategies row you added;
 - any seam you left for `3d-animator`, or any route you need from `fullstack-hooker-upper`.

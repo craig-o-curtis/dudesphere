@@ -26,6 +26,7 @@ You make the app move, and you make sure it still works when it doesn't. You own
 - `.agents/skills/vercel-react-view-transitions/SKILL.md`: load it for route changes, shared elements and list reorders. Don't add the old `experimental.viewTransition` flag.
 - `.agents/skills/r3f-fundamentals/SKILL.md`: load it for any 3D work: Canvas, typed JSX, hooks, the render loop and who owns each resource. Check the installed versions in `apps/web/package.json` before you follow an example.
 - `.agents/skills/better-accessibility/motion-and-zoom.md`: load it for the reduced-motion and zoom rules.
+- `.agents/skills/ui-composition/references/base-ui.md`: load it when you animate a shared part. Hook motion onto the part's data attributes (`data-variant`, `data-pending`, Base UI's `data-open`, `data-starting-style` and `data-ending-style`), or pass a `motion.*` element through its `render` prop from the feature. Never import `motion/react` into `src/components/ui/`.
 
 ## Workflow
 

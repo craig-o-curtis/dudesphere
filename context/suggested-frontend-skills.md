@@ -29,7 +29,7 @@ npx skills add https://github.com/<owner>/<repo> --skill <name>
 
 - Next.js 16.4 App Router with Cache Components, Turbopack, React Compiler and proxy.ts. Node runtime only.
 - React 19.3.
-- CSS Modules and CSS variables. No Tailwind. No component library.
+- CSS Modules and CSS variables. No Tailwind. Base UI (headless, no styles) behind the shared parts that need behaviour, from WEB-54.
 - motion (`motion/react`).
 - React Three Fiber, drei and rapier. Postprocessing later.
 - SVG and Canvas 2D, next/og and Web Audio.
@@ -60,20 +60,21 @@ npx skills add https://github.com/<owner>/<repo> --skill <name>
 
 Craig installed eleven of the twelve, by hand. `skills-lock.json` records each one.
 
-| Skill                             | Status                                                                                                                                                                      |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next-cache-components-adoption`  | Not installed. Snyk flagged it during install, so Craig left it out. Cache Components is already on in `apps/web`, so the optimizer and the Next docs cover the same ground |
-| `next-cache-components-optimizer` | Installed                                                                                                                                                                   |
-| `next-dev-loop`                   | Installed                                                                                                                                                                   |
-| `vercel-react-view-transitions`   | Installed                                                                                                                                                                   |
-| `nextjs-app-architecture`         | Installed                                                                                                                                                                   |
-| `vercel-react-best-practices`     | Installed                                                                                                                                                                   |
-| `r3f-fundamentals`                | Installed. `@r3f-physics`, `@r3f-postprocessing` and `@r3f-animation` are not, and can wait for WORLD-48                                                                    |
-| `animate`                         | Installed. `@review-animations` is not                                                                                                                                      |
-| `better-accessibility`            | Installed                                                                                                                                                                   |
-| `playwright-best-practices`       | Installed                                                                                                                                                                   |
-| `vitest`                          | Installed                                                                                                                                                                   |
-| `tanstack-query-best-practices`   | Installed. Skip its SSR hydration rules: the app uses TanStack Query for client lists only                                                                                  |
+| Skill                             | Status                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next-cache-components-adoption`  | Not installed. Snyk flagged it during install, so Craig left it out. Cache Components is already on in `apps/web`, so the optimizer and the Next docs cover the same ground           |
+| `next-cache-components-optimizer` | Installed                                                                                                                                                                             |
+| `next-dev-loop`                   | Installed                                                                                                                                                                             |
+| `vercel-react-view-transitions`   | Installed                                                                                                                                                                             |
+| `nextjs-app-architecture`         | Installed                                                                                                                                                                             |
+| `vercel-react-best-practices`     | Installed                                                                                                                                                                             |
+| `r3f-fundamentals`                | Installed. `@r3f-physics`, `@r3f-postprocessing` and `@r3f-animation` are not, and can wait for WORLD-48                                                                              |
+| `animate`                         | Installed. `@review-animations` is not                                                                                                                                                |
+| `better-accessibility`            | Installed                                                                                                                                                                             |
+| `playwright-best-practices`       | Installed                                                                                                                                                                             |
+| `vitest`                          | Installed                                                                                                                                                                             |
+| `tanstack-query-best-practices`   | Installed. Skip its SSR hydration rules: the app uses TanStack Query for client lists only                                                                                            |
+| `vercel-composition-patterns`     | Installed 2026-10-15, from the "React and design" list below. Its examples use React Native names (`onPress`, `TextInput`); read them as DOM. Our `ui-composition` skill builds on it |
 
 ## Useful but overlapping or partial
 
@@ -166,7 +167,7 @@ These clash with the stack.
 
 No skill on skills.sh covers these well:
 
-- CSS Modules and design tokens.
+- CSS Modules and design tokens. Now covered by our own `ui-composition` skill (2026-10-15).
 - Canvas 2D.
 - next/og `ImageResponse`.
 - oxfmt.

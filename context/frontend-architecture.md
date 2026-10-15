@@ -29,20 +29,21 @@ as it is on npm, before any page ships.
 
 ## Decisions
 
-| Choice           | Pick                                                                                         | Why                                                                                                                   |
-| ---------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Framework        | Next.js 16.4, React 19.3, App Router, Turbopack, Node runtime only                           | Every rendering strategy in one framework, on the newest Next and React. Cache Components and React Compiler are on   |
-| Why Next now     | Nuxt 4 was the plan until 2026-10-14                                                         | Craig reversed it: the web app is now a lesson in Next's rendering strategies. The Nuxt plan was never built          |
-| Language         | TypeScript, strict                                                                           | Same as the API. The base options come from `packages/config/tsconfig.base.json`                                      |
-| Styling          | CSS Modules, CSS variables in `src/styles/tokens.css`, `motion/react` for movement           | Plain CSS per component, tokens for light and dark. No Tailwind                                                       |
-| 3D               | React Three Fiber, `@react-three/drei`, `@react-three/rapier`, `@react-three/postprocessing` | After the MVP, as WORLD-48. The React renderer for three.js has the largest set of examples                           |
-| Server state     | Server Components fetch on the server. TanStack Query 5 on the client                        | Server Components render the first page. `useInfiniteQuery` pages on `links.next`. `refetchInterval` polls live games |
-| Global state     | None in the MVP                                                                              | The URL, Server Components and the query cache hold everything the MVP needs                                          |
-| Forms            | `<form action={serverAction}>` with `useActionState`                                         | Field errors come straight from Nest's 400 body. No zod and no client validation library                              |
-| Auth storage     | httpOnly cookies set by Next (the BFF)                                                       | Page scripts never see a token. The browser never calls Nest. See "Auth as a BFF"                                     |
-| Images and fonts | `next/image`, `next/font`                                                                    | Resizing, modern formats and self-hosted fonts with no layout shift                                                   |
-| Dates            | `@northguild/gmt`                                                                            | The zero-`Date` rule covers `apps/web`. The root oxlint config enforces it                                            |
-| Tests            | Vitest with `@testing-library/react`, Playwright with `instant()` from `@next/playwright`    | Vitest matches the API. Playwright drives the real browser that View Transitions and the lane canvas need             |
+| Choice           | Pick                                                                                                  | Why                                                                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework        | Next.js 16.4, React 19.3, App Router, Turbopack, Node runtime only                                    | Every rendering strategy in one framework, on the newest Next and React. Cache Components and React Compiler are on                                                  |
+| Why Next now     | Nuxt 4 was the plan until 2026-10-14                                                                  | Craig reversed it: the web app is now a lesson in Next's rendering strategies. The Nuxt plan was never built                                                         |
+| Language         | TypeScript, strict                                                                                    | Same as the API. The base options come from `packages/config/tsconfig.base.json`                                                                                     |
+| Styling          | CSS Modules, CSS variables in `src/styles/tokens.css`, `motion/react` for movement                    | Plain CSS per component, tokens for light and dark. No Tailwind                                                                                                      |
+| UI parts         | Shared parts in `components/ui/`, with Base UI (`@base-ui/react`) behind the ones that need behaviour | Each look written once. Base UI ships no styles, so our tokens drive it. Rules in the `ui-composition` skill; chosen 2026-10-15 (`context/audits/frontend-audit.md`) |
+| 3D               | React Three Fiber, `@react-three/drei`, `@react-three/rapier`, `@react-three/postprocessing`          | After the MVP, as WORLD-48. The React renderer for three.js has the largest set of examples                                                                          |
+| Server state     | Server Components fetch on the server. TanStack Query 5 on the client                                 | Server Components render the first page. `useInfiniteQuery` pages on `links.next`. `refetchInterval` polls live games                                                |
+| Global state     | None in the MVP                                                                                       | The URL, Server Components and the query cache hold everything the MVP needs                                                                                         |
+| Forms            | `<form action={serverAction}>` with `useActionState`                                                  | Field errors come straight from Nest's 400 body. No zod and no form library. Compared with React Hook Form and TanStack Form in `context/audits/forms-analysis.md`   |
+| Auth storage     | httpOnly cookies set by Next (the BFF)                                                                | Page scripts never see a token. The browser never calls Nest. See "Auth as a BFF"                                                                                    |
+| Images and fonts | `next/image`, `next/font`                                                                             | Resizing, modern formats and self-hosted fonts with no layout shift                                                                                                  |
+| Dates            | `@northguild/gmt`                                                                                     | The zero-`Date` rule covers `apps/web`. The root oxlint config enforces it                                                                                           |
+| Tests            | Vitest with `@testing-library/react`, Playwright with `instant()` from `@next/playwright`             | Vitest matches the API. Playwright drives the real browser that View Transitions and the lane canvas need                                                            |
 
 ## Layout of `apps/web/src`
 
@@ -69,7 +70,10 @@ apps/web/src/
   lib/actions/*.ts    Server Actions (lib/actions/theme.ts sets the theme cookie)
   lib/theme.ts        theme cookie name and value check
   lib/motion.ts       motion/react presets that copy the --dur-* tokens
-  components/*        each with a .module.css beside it
+  components/ui/*     shared parts (Button, Text, Field, Stack, Dialog...), each with a .module.css
+                      and a spec. They know nothing about the app. Only these import @base-ui/react (WEB-54)
+  components/*        feature components that compose the shared parts, each with a .module.css
+                      for layout only
   styles/tokens.css   CSS variables, light and dark
   styles/globals.css  reset and base rules
   styles/motion.css   motion rules: .enter, reduced-motion View Transitions

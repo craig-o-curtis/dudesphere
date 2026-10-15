@@ -21,6 +21,8 @@ Ensure you use the plain-english skill for all prose, commit messages, PR titles
 - frontend-architecture: `./context/frontend-architecture.md`
 - fullstack-architecture: `./context/fullstack-architecture.md`
 - suggested-frontend-skills: `./context/suggested-frontend-skills.md`
+- frontend-audit: `./context/audits/frontend-audit.md`. What to fix in `apps/web` (WEB-54)
+- forms-analysis: `./context/audits/forms-analysis.md`. Why forms use Next.js form actions, not React Hook Form or TanStack Form
 
 ## Current epic
 
@@ -36,6 +38,8 @@ Epic Lebowski is the work in progress. Start at `./context/epic-lebowski/index.m
 
 For `apps/web` (see `./context/suggested-frontend-skills.md`):
 
+- ui-composition: `.agents/skills/ui-composition`. Our own skill: shared parts in `src/components/ui/`, tokens, Base UI. `fe-tdd-dev` preloads it
+- vercel-composition-patterns: `.agents/skills/vercel-composition-patterns`. Compound parts, explicit variants, no boolean props
 - nextjs-app-architecture: `.agents/skills/nextjs-app-architecture`
 - next-cache-components-optimizer: `.agents/skills/next-cache-components-optimizer`
 - next-dev-loop: `.agents/skills/next-dev-loop`
