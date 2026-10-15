@@ -276,10 +276,11 @@ test.describe("sign up", () => {
       secure: true,
       sameSite: "Lax",
     });
-    // Both cookies are set in one response, so the gap between their expiry
-    // times is the gap between their Max-Age values: 604800 - 900.
+    // Both cookies are set in one response and both last seven days (the
+    // session cookie lives as long as the refresh cookie, so proxy can see a
+    // dying token), so their expiry times match.
     const gap = (refresh?.expires ?? 0) - (session?.expires ?? 0);
-    expect(Math.abs(gap - (604800 - 900))).toBeLessThanOrEqual(1);
+    expect(Math.abs(gap)).toBeLessThanOrEqual(1);
     expect(session?.expires ?? 0).toBeGreaterThan(0);
 
     // Page scripts see neither cookie.

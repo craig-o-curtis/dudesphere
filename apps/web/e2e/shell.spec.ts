@@ -255,7 +255,7 @@ test.describe("early and stale presses", () => {
     await darkButton(page).click({ force: true, noWaitAfter: true });
     await page.waitForTimeout(500);
 
-    await expect(page.getByRole("heading", { name: "The Dudesphere" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dudesphere" })).toBeVisible();
     await expect(page.getByRole("contentinfo")).toBeVisible();
     expect(posts).toBe(0);
     expect(await themeCookie(page)).toBeUndefined();
@@ -403,11 +403,13 @@ test.describe("early and stale presses", () => {
     expect(held).not.toBe("");
     await expect(page.locator("[data-theme-toggle][inert]")).toHaveCount(1);
 
-    // Skip link, then the session corner's fallback links (Sign in, Sign up),
-    // which are real links and may be focused. After them Tab must pass the
-    // inert theme placeholder.
+    // Skip link, then the header's wordmark, then the session corner's fallback
+    // links (Sign in, Sign up), which are real links and may be focused. After
+    // them Tab must pass the inert theme placeholder.
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Dudesphere" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Sign in" })).toBeFocused();
     await page.keyboard.press("Tab");
@@ -635,12 +637,14 @@ test.describe("skip link", () => {
 test.describe("tab order once the page is live", () => {
   test.use({ colorScheme: "light" });
 
-  test("skip link, Sign in, Sign up, Light, then Dark", async ({ page }) => {
+  test("skip link, wordmark, Sign in, Sign up, Light, then Dark", async ({ page }) => {
     await page.goto("/");
     await waitForHydration(page);
 
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Dudesphere" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Sign in" })).toBeFocused();
     await page.keyboard.press("Tab");
