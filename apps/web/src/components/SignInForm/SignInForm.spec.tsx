@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { AUTH_MESSAGES, initialAuthFormState, type AuthFormState } from "@/lib/actions/auth-state";
 
@@ -9,16 +10,15 @@ vi.mock("@/lib/actions/auth", () => ({ signIn }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("") }));
 
 function renderForm() {
-  return render(<SignInForm />);
+  const user = userEvent.setup();
+  return { user, ...render(<SignInForm />) };
 }
 
-// jsdom checks the required fields, so fill them before submitting.
-function submit(form: HTMLFormElement) {
-  form.querySelector<HTMLInputElement>('[name="identifier"]')!.value = "e2e-dude@example.com";
-  form.querySelector<HTMLInputElement>('[name="password"]')!.value = "not-a-real-password";
-  return act(async () => {
-    form.requestSubmit();
-  });
+// The required fields are filled by typing, as a member would.
+async function submit(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Email"), "e2e-dude@example.com");
+  await user.type(screen.getByLabelText("Password"), "not-a-real-password");
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
 }
 
 beforeEach(() => {
@@ -37,21 +37,21 @@ describe("SignInForm", () => {
     expect(email).toHaveAttribute("maxlength", "100");
   });
 
-  it("refuses an email with no dot in its domain, as Nest does", () => {
-    renderForm();
+  it("refuses an email with no dot in its domain, as Nest does", async () => {
+    const { user } = renderForm();
     const email = screen.getByLabelText<HTMLInputElement>("Email");
-    email.value = "e2e-dude@example";
+    await user.type(email, "e2e-dude@example");
     expect(email.checkValidity()).toBe(false);
-    email.value = "e2e-dude@example.com";
+    await user.type(email, ".com");
     expect(email.checkValidity()).toBe(true);
   });
 
-  it("needs a top-level domain of two or more characters", () => {
-    renderForm();
+  it("needs a top-level domain of two or more characters", async () => {
+    const { user } = renderForm();
     const email = screen.getByLabelText<HTMLInputElement>("Email");
-    email.value = "a@b.c";
+    await user.type(email, "a@b.c");
     expect(email.checkValidity()).toBe(false);
-    email.value = "a@b.co";
+    await user.type(email, "o");
     expect(email.checkValidity()).toBe(true);
   });
 
@@ -60,18 +60,20 @@ describe("SignInForm", () => {
       ...initialAuthFormState,
       fieldErrors: { password: ["password should not be empty"] },
     });
-    const { container } = renderForm();
+    const { user } = renderForm();
     expect(screen.getByLabelText("Password")).not.toHaveFocus();
-    await submit(container.querySelector("form")!);
-    expect(screen.getByLabelText("Password")).toHaveFocus();
+    await submit(user);
+    // Form moves focus in an effect after the state arrives, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText("Password")).toHaveFocus());
   });
 
   it("leaves focus alone when only a form error comes back", async () => {
     signIn.mockResolvedValue({ ...initialAuthFormState, formError: AUTH_MESSAGES.badCredentials });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(document.body).toHaveFocus();
+    // Focus stays on the button the member pressed.
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveFocus();
   });
 
   it("has a Password field with no length rule beyond required", () => {
@@ -111,8 +113,8 @@ describe("SignInForm", () => {
       formError: AUTH_MESSAGES.badCredentials,
       values: { identifier: "e2e-walter@example.com" },
     } satisfies AuthFormState);
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     expect(await screen.findByRole("alert")).toHaveTextContent(AUTH_MESSAGES.badCredentials);
   });
 
@@ -122,8 +124,8 @@ describe("SignInForm", () => {
       formError: AUTH_MESSAGES.badCredentials,
       values: { identifier: "e2e-walter@example.com" },
     });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     await screen.findByRole("alert");
     expect(screen.getByLabelText("Email")).toHaveValue("e2e-walter@example.com");
     expect(screen.getByLabelText("Password")).toHaveValue("");
@@ -137,10 +139,13 @@ describe("SignInForm", () => {
         password: ["password should not be empty"],
       },
     });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
-    const email = await screen.findByLabelText("Email");
-    expect(email).toHaveAttribute("aria-invalid", "true");
+    const { user } = renderForm();
+    await submit(user);
+    // The errors arrive after the action resolves, so wait for them.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true"),
+    );
+    const email = screen.getByLabelText("Email");
     const emailError = document.getElementById(email.getAttribute("aria-describedby")!);
     expect(emailError).toHaveTextContent("identifier must be shorter");
     const password = screen.getByLabelText("Password");
@@ -153,9 +158,9 @@ describe("SignInForm", () => {
   it("reads Signing in… while pending and the button stays focusable", async () => {
     let finish: (state: AuthFormState) => void = () => {};
     signIn.mockReturnValue(new Promise<AuthFormState>((resolve) => (finish = resolve)));
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
-    const button = screen.getByRole("button", { name: "Signing in…" });
+    const { user } = renderForm();
+    await submit(user);
+    const button = await screen.findByRole("button", { name: "Signing in…" });
     expect(button).not.toBeDisabled();
     expect(button).toHaveAttribute("aria-disabled", "true");
     button.focus();

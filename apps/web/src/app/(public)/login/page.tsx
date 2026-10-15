@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { SignInForm } from "@/components/SignInForm/SignInForm";
-
-import styles from "./page.module.css";
+import { Heading } from "@/components/ui/Heading/Heading";
+import { PageShell } from "@/components/ui/PageShell/PageShell";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -11,9 +11,11 @@ export const metadata: Metadata = { title: "Sign in" };
 // holds the heading and the whole form.
 export default function LoginPage() {
   return (
-    <section className={styles.main}>
-      <h1 className={styles.title}>Sign in</h1>
+    <PageShell.Root width="form" gap="l">
+      <Heading level={1} size="3xl">
+        Sign in
+      </Heading>
       <SignInForm />
-    </section>
+    </PageShell.Root>
   );
 }

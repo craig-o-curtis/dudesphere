@@ -88,6 +88,34 @@ describe("SessionCorner", () => {
       expect(button).toHaveAccessibleDescription("Signs you out on every device.");
     });
 
+    it("gives two corners on one page different hint ids, each its own", async () => {
+      vi.mocked(readSessionCookies).mockResolvedValue({
+        accessToken: TOKEN,
+        refreshToken: REFRESH,
+      });
+      const first = await SessionCorner({ searchParams: Promise.resolve({}) });
+      const second = await SessionCorner({ searchParams: Promise.resolve({}) });
+      render(
+        <>
+          <div data-testid="first">{first}</div>
+          <div data-testid="second">{second}</div>
+        </>,
+      );
+      const buttons = screen.getAllByRole("button", { name: "Sign out everywhere" });
+      expect(buttons).toHaveLength(2);
+      const ids = buttons.map((button) => button.getAttribute("aria-describedby"));
+      expect(ids[0]).toBeTruthy();
+      expect(ids[1]).toBeTruthy();
+      expect(ids[0]).not.toBe(ids[1]);
+      expect(ids[0]).not.toBe("sign-out-everywhere-hint");
+      for (const [index, button] of buttons.entries()) {
+        const corner = screen.getByTestId(index === 0 ? "first" : "second");
+        expect(corner).toContainElement(button);
+        expect(button).toHaveAccessibleDescription("Signs you out on every device.");
+        expect(corner.querySelectorAll(`[id="${ids[index]}"]`)).toHaveLength(1);
+      }
+    });
+
     it("renders no token", async () => {
       const { container } = await renderCorner(TOKEN);
       expect(container.innerHTML).not.toContain(TOKEN);

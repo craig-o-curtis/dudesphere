@@ -1,6 +1,6 @@
 # FEED-19: Admin users and hashtags tables
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, AUTH-8, API-18, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, AUTH-8, API-18.
 
 **Scope:** `/admin/users` and `/admin/hashtags` let an admin list, soft-delete and restore users and hide and restore tags, behind `forbidden()` for everyone else, with an audit line written after each action.
 

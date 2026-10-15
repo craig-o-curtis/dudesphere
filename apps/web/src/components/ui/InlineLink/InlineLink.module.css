@@ -1,0 +1,13 @@
+.root {
+  /* Set this token from a class to colour the link. By default it follows its context. */
+  --link-fg: inherit;
+
+  display: inline-block;
+  min-block-size: var(--target-min);
+  color: var(--link-fg);
+  text-decoration: underline;
+}
+
+.root[data-tone="accent"] {
+  --link-fg: var(--color-accent);
+}

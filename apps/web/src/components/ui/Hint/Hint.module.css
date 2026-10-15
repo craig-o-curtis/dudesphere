@@ -1,0 +1,7 @@
+.root {
+  --hint-fg: var(--color-text-muted);
+  --hint-size: var(--text-sm);
+
+  color: var(--hint-fg);
+  font-size: var(--hint-size);
+}

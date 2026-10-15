@@ -1,6 +1,6 @@
 # WEB-53: Privacy and cookies page
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 5. Blocked by: WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 5. Blocked by: none.
 
 **Scope:** A static `/privacy` page tells members, in a clear and relaxed voice, what Dudesphere keeps about them, why, for how long, and what rights they have. It includes a table of the app's cookies. It must be live before real people can sign up, so it blocks the WEB-45 deploy.
 

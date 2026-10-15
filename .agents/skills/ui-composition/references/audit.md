@@ -4,6 +4,13 @@ Use this to review a diff, and to refresh `context/audits/frontend-audit.md`. Ru
 
 `qa-skeptic` runs this on every web diff, under its standards axis. A finding cites `ui-composition › audit › <check number>`.
 
+## Written exceptions
+
+Two exceptions are accepted, and a check that finds only these is clean.
+
+- **SiteFooter's band.** `components/SiteFooter/SiteFooter.module.css` keeps `background: var(--color-surface)` and `border-block-start` in its own module (check 3). The band is a one-off page region, not a part another feature would reuse. The story that adds a second band should extract it. Everything else in that module is layout.
+- **`1px` in `VisuallyHidden`.** The clip rule needs it (check 1). No other module should write it.
+
 ## 1. Raw values in modules
 
 ```sh
@@ -44,7 +51,7 @@ grep -rnE '<(button|input|select|textarea|dialog|h[1-6])[ >]' --include='*.tsx' 
   apps/web/src/components apps/web/src/app | grep -v '/components/ui/' | grep -v '\.spec\.tsx'
 ```
 
-Every hit outside `ui/` is a finding once the matching part is built. Fix: use `Button`, `Field`, `Heading` or `Dialog`.
+Every hit outside `ui/` is a finding once the matching part is built. Fix: use `Button`, `TextField` (or another composed field), `Heading` or `Dialog`. A hidden input that carries a value, such as `NextPathField`'s `next`, is not a control the member sees. Note it and move on.
 
 ## 5. Hand-wired accessibility
 
@@ -53,7 +60,7 @@ grep -rnE 'aria-describedby=|aria-invalid=|role="alert"|<output' --include='*.ts
   apps/web/src/components apps/web/src/app | grep -v '/components/ui/' | grep -v '\.spec\.tsx'
 ```
 
-Fix: `Field` wires the description and the invalid state. `FormAlert` and `Notice` own the live regions.
+Fix: the composed fields (through `useField`) wire the description and the invalid state. `FormAlert` and `Notice` own the live regions. An `aria-describedby` that points a button at a hint outside any field, as in SessionCorner and ThemeToggle, is not field wiring. Check that its id comes from `useId`, then note it.
 
 ## 6. Base UI outside `ui/`
 

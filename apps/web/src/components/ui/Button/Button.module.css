@@ -1,0 +1,55 @@
+/*
+ * Shared by Button and ButtonLink. The variants below set component tokens
+ * only; the rules at the bottom read those tokens and nothing else.
+ */
+.button {
+  --button-bg: var(--color-surface-raised);
+  --button-fg: var(--color-text);
+  --button-border: var(--color-border-strong);
+  --button-padding-inline: var(--space-4);
+  --button-decoration: none;
+  --button-border-width: var(--border-width);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--control-min-height);
+  min-inline-size: var(--target-min);
+  padding: var(--space-2) var(--button-padding-inline);
+  border: var(--button-border-width) solid var(--button-border);
+  border-radius: var(--radius-m);
+  background: var(--button-bg);
+  color: var(--button-fg);
+  font-weight: var(--font-weight-bold);
+  text-decoration: var(--button-decoration);
+  cursor: pointer;
+}
+
+.button[data-variant="primary"] {
+  --button-bg: var(--color-accent);
+  --button-fg: var(--color-on-accent);
+  --button-border: var(--color-on-accent);
+}
+
+.button[data-variant="quiet"] {
+  --button-bg: transparent;
+  --button-border: transparent;
+  --button-border-width: 0;
+  --button-padding-inline: var(--space-3);
+}
+
+/* A quiet link reads as a link, so it keeps its underline. */
+a.button[data-variant="quiet"] {
+  --button-decoration: underline;
+}
+
+.button[aria-disabled="true"] {
+  cursor: progress;
+  opacity: var(--opacity-pending);
+}
+
+@media (forced-colors: active) {
+  .button:not([data-variant="quiet"]) {
+    border-color: ButtonText;
+  }
+}

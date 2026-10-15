@@ -6,20 +6,23 @@ import {
   SessionCornerSkeleton,
   type SignoutParams,
 } from "@/components/SessionCorner/SessionCorner";
-
-import styles from "./page.module.css";
+import { Heading } from "@/components/ui/Heading/Heading";
+import { PageShell } from "@/components/ui/PageShell/PageShell";
+import { Text } from "@/components/ui/Text/Text";
 
 // A placeholder until FEED-12 builds the splash. The corner reads
 // cookies behind Suspense, so the rest is prerendered into the static shell.
 export default function Home({ searchParams }: { searchParams: Promise<SignoutParams> }) {
   return (
-    <section className={styles.main}>
-      <h1 className={styles.title}>The Dudesphere</h1>
-      <p className={styles.tagline}>The Dude abides. The lanes open soon.</p>
-      <p className={styles.note}>{FRAMES_PER_GAME} frames, no hurry. Take it easy, man.</p>
+    <PageShell.Root width="fit" align="center" text="center">
+      <Heading level={1} size="3xl">
+        The Dudesphere
+      </Heading>
+      <Text size="xl">The Dude abides. The lanes open soon.</Text>
+      <Text tone="muted">{FRAMES_PER_GAME} frames, no hurry. Take it easy, man.</Text>
       <Suspense fallback={<SessionCornerSkeleton />}>
         <SessionCorner searchParams={searchParams} />
       </Suspense>
-    </section>
+    </PageShell.Root>
   );
 }

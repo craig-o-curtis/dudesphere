@@ -1,6 +1,6 @@
 # WEB-11: Rendering strategies guide and the /lab page
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 0. Blocked by: WEB-5, WEB-6, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 0. Blocked by: WEB-5, WEB-6.
 
 **Scope:** `context/epic-lebowski/rendering-strategies.md` maps every route to its rendering strategy, the Next or React API it teaches and why it fits, and `/lab` lists the same rows with a link to each page.
 

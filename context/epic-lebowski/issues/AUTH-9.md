@@ -1,6 +1,6 @@
 # AUTH-9: Forgot and reset password pages
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 0. Blocked by: AUTH-7, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 0. Blocked by: AUTH-7.
 
 **Scope:** `/forgot-password` asks Nest to email a reset link, `/reset-password?token=` sets the new password, and Nest's `FRONTEND_URL` points at the web origin so the emailed link opens the Next page.
 
@@ -27,6 +27,7 @@ Nest already sends reset links to `<FRONTEND_URL>/reset-password?token=<token>`,
 - **The token stays out of logs.** The Server Action reads it from the form, not from the URL. The page renders a hidden input with it.
 - **A reset ends every sign-in.** Nest stamps `passwordChangedAt` and ends every sign-in in one transaction. Any cookies this browser still holds stop working, so the success path calls `clearSessionCookies()` from AUTH-7's `lib/session.ts` before the redirect. That clears each cookie at its own path: `__Host-session` at `/` and `__Secure-refresh` at `/api/auth`.
 - **New passwords are 12 to 128 characters.** The input carries `minLength={12}` and `maxLength={128}` as a hint; Nest is the rule.
+- **Show a visible "required" cue on every auth form (WEB-54 A11Y-1, WCAG 3.3.2).** The sign-in and sign-up labels give no visible sign that a field is required. Only the native `required` tells screen readers. WEB-54 kept their copy word for word, so it left this to AUTH-9. Add one cue in the shared `AuthForm` so all four forms get it, such as a single "All fields are required." line above the fields. Build both new pages on `AuthForm` and the composed fields (`EmailField`, `PasswordField`).
 
 ## Rendering strategy
 

@@ -1,4 +1,16 @@
-import { MAX_NEXT_PATH_LENGTH, safeNextPath } from "./next-path";
+import { loginHref, MAX_NEXT_PATH_LENGTH, safeNextPath } from "./next-path";
+
+describe("loginHref", () => {
+  it.each([
+    ["null", null, "/login"],
+    ["the root path", "/", "/login"],
+    ["an empty string", "", "/login"],
+    ["a plain path", "/dudes/1", "/login?next=%2Fdudes%2F1"],
+    ["a path with ?, & and #", "/dudes?a=1&b=2#top", "/login?next=%2Fdudes%3Fa%3D1%26b%3D2%23top"],
+  ])("%s", (_name, next, expected) => {
+    expect(loginHref(next)).toBe(expected);
+  });
+});
 
 describe("safeNextPath", () => {
   describe("keeps a same-origin path", () => {

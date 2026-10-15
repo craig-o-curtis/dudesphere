@@ -8,7 +8,9 @@ This is a pnpm workspace with two apps and some shared packages:
 
 Run an API script from the repo root with `pnpm --filter @dudesphere/api <script>`, for example `pnpm --filter @dudesphere/api migration:run`. The root `package.json` lists the scripts that run from the root, such as `pnpm dev`, `pnpm lint` and `pnpm db:up`.
 
-`@northguild/gmt` and the zero-Date rule apply to `apps/web` as well as `apps/api`. Use gmt for every date, and never a JavaScript `Date`.
+`@northguild/gmt` and the zero-Date rule apply to `apps/web` as well as `apps/api`. Use gmt for every date, and never a JavaScript `Date`. Never install or import another date library: no `date-fns`, `date-fns-tz`, `moment`, `dayjs`, `luxon` or similar, not even as an optional peer. See `context/coding-standards.md`.
+
+Nothing created by e2e stays in the dev databases. Everything e2e creates uses the e2e shapes: `e2e-` users with `e2e-...@example.com` emails, and hashtags of `e2e` plus 12 hex characters. `pnpm e2e:cleanup` wipes those rows, and both the API and the web e2e suites run it before and after every run. `pnpm e2e:check` fails if any are left. Run it before a PR.
 
 ## Language
 
@@ -17,7 +19,8 @@ Ensure you use the plain-english skill for all prose, commit messages, PR titles
 ## Context files
 
 - overview: `./context/overview.md`
-- coding-standards: `./context/coding-standards.md`
+- coding-standards: `./context/coding-standards.md`. Rules for every task, and an index of the topic files in `./context/standards/`
+- nextjs-standards: `./context/standards/nextjs.md`. Rendering strategies, `'use cache'`, parallel routes and intercepting routes in `apps/web`
 - frontend-architecture: `./context/frontend-architecture.md`
 - fullstack-architecture: `./context/fullstack-architecture.md`
 - suggested-frontend-skills: `./context/suggested-frontend-skills.md`

@@ -1,6 +1,6 @@
 # FEED-12: Splash page
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-6, AUTH-8, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-6, AUTH-8.
 
 **Scope:** `/` is a static shell with hero copy and calls to action, a cached ticker of recent abidings and a cached hashtag list, and a small "who is signed in" corner that streams in through Suspense.
 
@@ -39,6 +39,7 @@ The web app has no front door. A visitor who lands on `/` sees the WEB-5 placeho
 - **Decision needed: the CI build has no API.** `next build` prerenders the cached ticker and tags, so it calls Nest at build time, and the CI `web` job (REPO-4) runs no API. Option 1 (recommended): the `web` job starts a small fixture server that answers `GET /abidings` and `GET /hashtags` with a fixed page. Option 2: each cached function returns an empty page on a network error. Option 2 is simpler but can cache an empty ticker for minutes in production. Settle it in this story; every later cached page follows the choice.
 - **Profanity stays out.** The ticker shows member text as written; the page's own copy has none.
 - **The hero copy is original.** "The Dude abides" is a short phrase; no longer quote, no still, no clip.
+- **The sign-out message on `/` (AUTH-7 A11Y-4).** A sign-out message shown on `/` at load, such as `?signout=partial` or `?signout=ended`, sits in an `<output>` that is already filled. Screen readers may not announce it. Decide where the message lives when the corner is rebuilt, for example as plain text early in the page. WEB-54's `Notice` is for messages that arrive after load.
 
 ## Rendering strategy
 

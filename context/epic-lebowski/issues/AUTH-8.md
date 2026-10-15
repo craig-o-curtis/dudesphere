@@ -50,6 +50,7 @@ The access token lasts 15 minutes. After that every page would render as signed 
 - **Layouts never check auth.** Pages call `requireSession()` or `getMe()`. Every Server Action and Route Handler re-checks.
 - **With Cache Components, `cookies()` is read only inside Suspense and never inside `'use cache'`.** `verifySession` and `getMe` are called from components that sit under a Suspense boundary.
 - **`cache()` dedupes per request.** Five components that ask `getMe()` make one call to Nest.
+- **`cookies().delete(name)` clears only path `/`.** That holds for the name-only form. `delete` also takes an options object with `path`, so `clearSessionCookies` can clear `__Secure-refresh` at `/api/auth` that way. Make `session.ts`, `frontend-architecture.md` and this spec say so precisely.
 
 ## Rendering strategy
 

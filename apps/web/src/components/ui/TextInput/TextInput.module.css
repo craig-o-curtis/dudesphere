@@ -1,0 +1,33 @@
+.root {
+  --input-bg: var(--color-surface-raised);
+  --input-border: var(--color-border-strong);
+  --input-border-invalid: var(--color-danger);
+  --input-radius: var(--radius-m);
+  --input-min-height: var(--control-min-height);
+  --input-padding-inline-end: var(--space-3);
+
+  min-block-size: var(--input-min-height);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3) var(--input-padding-inline-end);
+  border: var(--border-width) solid var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-bg);
+  color: var(--color-text);
+}
+
+.root[aria-invalid="true"] {
+  border-color: var(--input-border-invalid);
+}
+
+/* Colour alone can't show the invalid state in forced colours. */
+@media (forced-colors: active) {
+  .root {
+    --input-border: FieldText;
+    --input-border-invalid: Highlight;
+  }
+
+  .root[aria-invalid="true"] {
+    border-width: calc(var(--border-width) * 3);
+    border-style: double;
+  }
+}

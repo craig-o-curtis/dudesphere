@@ -1,26 +1,17 @@
 .footer {
-  border-block-start: 1px solid var(--color-border);
+  border-block-start: var(--border-width) solid var(--color-border);
   background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-family: var(--font-text);
-  font-size: var(--text-sm);
 }
 
 .inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4) var(--space-8);
   padding: var(--space-6) var(--space-4);
 }
 
 .disclaimer {
-  flex: 1 1 20rem;
+  flex: 1 1 var(--measure-narrow);
   min-inline-size: 0;
-  margin: 0;
-  max-inline-size: 60ch;
-  overflow-wrap: anywhere; /* this rule controls whether the browser is allowed to break a long word onto a new line to prevent it from overflowing its container */
+  max-inline-size: var(--measure-content);
+  overflow-wrap: anywhere; /* lets the browser break a long word onto a new line instead of overflowing */
 }
 
 .theme {

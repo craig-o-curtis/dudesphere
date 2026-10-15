@@ -2,7 +2,7 @@
 
 Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 0. Blocked by: AUTH-7.
 
-**Scope:** Build the first set of shared UI parts in `apps/web/src/components/ui/`, on the WEB-6 tokens, with Base UI behind Field and Form. Then move every existing component and page onto them. After this story, each look in the app is written once, and later stories build by composing parts instead of copying CSS.
+**Scope:** Build the first set of shared UI parts in `apps/web/src/components/ui/`, on the WEB-6 tokens, as native HTML. Base UI comes later, with Dialog in FEED-16. Then move every existing component and page onto the parts. After this story, each look in the app is written once, and later stories build by composing parts instead of copying CSS.
 
 ## Gap
 
@@ -20,9 +20,9 @@ The rules for the parts are in `.agents/skills/ui-composition/`. This story is t
 
 ## Scope
 
-**Dependency:** add `@base-ui/react` to `apps/web`. Check the current version and API with `npx ctx7@latest docs /mui/base-ui` before you use it.
+**Dependency:** none new. `@base-ui/react` arrives with Dialog in FEED-16.
 
-**Tokens** (`src/styles/tokens.css`): add `--control-min-height`, `--target-min`, `--border-width`, `--font-weight-bold`, `--tracking-tight`, `--leading-tight`, `--leading-body`, `--measure-form`, `--measure-content`, `--opacity-pending` and `--z-skip`, as listed in `ui-composition/references/tokens.md`. Replace every raw use. Add the `themeColor` hex in `app/layout.tsx` to `tokens.spec.ts`. Decide which of the 8 unused tokens to keep.
+**Tokens** (`src/styles/tokens.css`): add `--control-min-height`, `--target-min`, `--border-width`, `--font-weight-bold`, `--tracking-tight`, `--leading-tight`, `--leading-body`, `--measure-form`, `--measure-content`, `--opacity-pending` and `--z-skip`, as listed in `ui-composition/references/tokens.md`. Replace every raw use. Keep all 8 unused tokens. The new parts and `lib/motion.ts` read them, and `--color-accent-2` waits for RUG and LANE.
 
 **Helper:** `src/lib/cx.ts`, with a spec.
 
@@ -30,35 +30,47 @@ The rules for the parts are in `.agents/skills/ui-composition/`. This story is t
 
 - `Text`, `Heading`, `InlineLink`, `VisuallyHidden`
 - `Button`, `ButtonLink`
-- `Field` (Root, Label, Control, Hint, Error) and `FormAlert`, on Base UI Field and Form
+- `Form` and `FormAlert`, native
+- Field building blocks: `Label`, `Hint`, `ErrorMessage`, `TextInput`, `EmailInput`, `PasswordInput`, `CheckboxInput` and `SwitchInput`. `PasswordInput` has a show-or-hide button with an eye icon (inline SVG). It is unusable until the page hydrates, turns off spell check, autocorrect and autocapitalize, and hides the password again when the form submits.
+- Composed fields, which wire the building blocks through one shared `useField` hook: `TextField`, `EmailField`, `PasswordField`, `CheckboxField` and `SwitchField`. Each takes `name`, `label`, an optional `hint`, and its input's native props.
 - `Stack`, `Cluster`, `PageShell`, `Notice`
+- `ToggleGroup` (Root, Item)
+- `SkipLink`
 
 **Refactor** onto the parts, with no change to what members see or hear:
 
 - `SignInForm` and `SignUpForm`, including a shared `AuthForm` layout component for their common frame (alert, `NextPathField`, the alt line and `CookieNote`)
-- `SessionCorner`, `ThemeToggle`, `CookieNote`, `SiteFooter`, `SkipLink`
+- `SessionCorner`, `ThemeToggle`, `CookieNote`, `SiteFooter`
+- `SkipLink`, which moves into `ui/SkipLink`
 - `app/page.tsx`, `app/(public)/login/page.tsx`, `app/(public)/signup/page.tsx`
 
-**Smaller fixes** from the audit:
+**Smaller fixes** from the audit and from AUTH-7's review:
 
 - Move `EMAIL_PATTERN` and its `title` text into `lib/`, defined once.
 - Use `AuthField` instead of the retyped field-name union.
 - Move `loginHref` into `lib/next-path.ts`.
-- Give `hooks/useFocusFirstInvalid.ts` a spec.
+- Move the behaviour of `hooks/useFocusFirstInvalid.ts` into the `Form` part, with a spec, and delete the hook.
+- The composed fields clear a field's server error when its value changes (AUTH-7 A11Y-3).
+- The inputs show the invalid state with a forced-colours border (AUTH-7 A11Y-2).
+- The two JavaScript-off success e2e tests also assert the 303.
 - Make the SessionCorner comment match the `<output>` it uses, and stop using a fixed id for its hint.
 - Delete the `margin: 0` and `font: inherit` lines that repeat the global reset.
 
 ## Not in scope
 
 - `Card`, `Dialog`, `AlertDialog`, `Popover`, `Menu`, `Toast`, `Tooltip`, `Select` and `Combobox`. The first story that needs each one builds it under the same rules. FEED-13's abiding will most likely need `Card`, and FEED-16's thread modal `Dialog`.
-- Any visual redesign. Every page should look the same before and after, apart from small fixes the audit names, such as the missing forced-colours border on the SessionCorner button.
+- `@base-ui/react`. FEED-16 adds it with Dialog.
+- Any visual redesign. Every page should look the same before and after, apart from small fixes the audit names. Those are the missing forced-colours border on the SessionCorner button, and page titles moving to `--leading-tight` (1.1). The password show-or-hide button is a new feature the user asked for.
 - Motion. Parts expose data attributes. `3d-animator` uses them later.
 
 ## Design notes
 
-- **Forms stay on Next.js form actions.** Each form is a Server Action with `useActionState`, as in AUTH-7. Add no form library. `context/audits/forms-analysis.md` compares React Hook Form, Next.js form actions and TanStack Form, and says when TanStack Form may come in. `Field` takes `state.errors` through Base UI `<Form errors>`, and also accepts `invalid` and `errors` props directly, so a form library could drive it later without changing the part.
-- **Native first.** Only `Field` and `FormAlert` touch Base UI in this story. `Button`, `Text`, `Heading` and the layout parts are plain HTML and stay safe for Server Components.
-- **Forms must keep working with JavaScript off.** They must still submit and still show Nest's field errors. Base UI's docs don't say whether `Form` errors render on the server. Prove it with a Playwright test that turns JavaScript off. If they don't render, `Field.Error` falls back to rendering the server error itself.
+- **Forms stay on Next.js form actions.** Each form is a Server Action with `useActionState`, as in AUTH-7. Add no form library. `context/audits/forms-analysis.md` compares React Hook Form, Next.js form actions and TanStack Form, and says when TanStack Form may come in. The composed fields take `state.fieldErrors` through our native `Form`'s `errors` prop. They also accept `invalid` and `errors` props directly, so a form library could drive them later without changing the parts.
+- **Every part in this story is native.** Base UI's Form always renders `noValidate`, and its Field links hint and error ids only after hydration, so neither is used (see `forms-analysis.md`). `Button`, `Text`, `Heading` and the layout parts stay safe for Server Components.
+- **Forms must keep working with JavaScript off.** With JavaScript off, Next bug vercel/next.js#99756 blanks any error page. A server-render spec proves the errors and links are in the HTML. The known-bug e2e test and the browser's-own-rules e2e tests stay green.
+- **The field design changed mid-build.** The user replaced the planned compound `Field` with separate building blocks and composed fields with a `Field` suffix (2026-10-15). No zustand: the parts keep their state in `useState`.
+- **Component tests act like a member.** They use `@testing-library/user-event`, never `fireEvent`, and a lint rule blocks `fireEvent` (`context/coding-standards.md`).
+- **The SiteFooter band keeps its background and top border**, as the one exception written in `audit.md`.
 - **Specs stay green.** Existing specs query by role and text, so they should pass with few changes. `ThemeToggle.spec.tsx:347` checks a class name and will need rewriting.
 - **`references/parts.md` is updated in the same change.** Mark each part "built (WEB-54)".
 
@@ -69,17 +81,22 @@ No change. Each page keeps its current strategy and row in `rendering-strategies
 ## Verification
 
 - `pnpm --filter @dudesphere/web test` passes, including a spec for every new part and for `cx`.
-- The `ui-composition` audit checks 1 to 5 and 9 find nothing outside `components/ui/`.
+- A server-render spec shows both auth forms' server errors, `aria-invalid` and the hint and error links in the HTML.
+- The `ui-composition` audit checks 1 to 5 and 9 find nothing outside `components/ui/`, except the SiteFooter band written in `audit.md`.
 - `diff` of any two feature modules shows no shared block of three or more declarations.
-- Sign up, sign in, sign out and sign out everywhere still work in the browser, by keyboard only, with JavaScript off, and with `prefers-reduced-motion: reduce`.
+- Sign up, sign in, sign out and sign out everywhere still work in the browser:
+  - by keyboard only;
+  - with JavaScript off, for the success paths;
+  - with `prefers-reduced-motion: reduce`.
 - The axe scan in the AUTH-7 Playwright flows still passes, in light and dark.
 - `next build` reports the same static and dynamic routes as before.
+- No `@base-ui/react`, Tailwind, Tailwind helpers or date library in any `package.json`.
 
 ## Done when
 
-- [ ] `@base-ui/react` added, and the new tokens in `tokens.css`
+- [ ] The new tokens in `tokens.css`
 - [ ] `lib/cx.ts` and every part in the Scope list built in `components/ui/`, each with a spec
 - [ ] Every component and page in the Scope list moved onto the parts
 - [ ] The smaller fixes done
-- [ ] Playwright check that the auth forms show server errors with JavaScript off
-- [ ] `ui-composition/references/parts.md` and `context/audits/frontend-audit.md` updated to show what is fixed
+- [ ] A server-render spec shows both auth forms' server errors, `aria-invalid` and hint and error links in the HTML, and the JavaScript-off e2e tests stay green
+- [ ] `ui-composition/references/parts.md`, `context/audits/frontend-audit.md` and `context/audits/forms-analysis.md` updated to show what is fixed

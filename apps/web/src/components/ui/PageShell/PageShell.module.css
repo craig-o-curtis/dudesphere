@@ -1,0 +1,59 @@
+.root {
+  --shell-measure: var(--measure-content);
+  --shell-columns: min(100%, var(--shell-measure));
+  --shell-content: center;
+  --shell-items: center;
+  --shell-align: start;
+  --shell-gap: var(--space-4);
+  --shell-text-align: start;
+
+  display: grid;
+  flex: 1;
+  grid-template-columns: var(--shell-columns);
+  align-content: var(--shell-align);
+  justify-content: var(--shell-content);
+  justify-items: var(--shell-items);
+  gap: var(--shell-gap);
+  padding: var(--space-8) var(--space-4);
+  text-align: var(--shell-text-align);
+}
+
+/* The cap sits on the column, inside the padding, so the content keeps its full measure. */
+.root[data-width="form"] {
+  --shell-measure: var(--measure-form);
+}
+.root[data-width="content"] {
+  --shell-measure: var(--measure-content);
+}
+.root[data-width="fit"] {
+  --shell-columns: auto;
+  --shell-items: stretch;
+}
+
+.root[data-align="start"] {
+  --shell-align: start;
+}
+.root[data-align="center"] {
+  --shell-align: center;
+}
+
+.root[data-gap="m"] {
+  --shell-gap: var(--space-4);
+}
+.root[data-gap="l"] {
+  --shell-gap: var(--space-6);
+}
+
+.root[data-text="start"] {
+  --shell-text-align: start;
+}
+.root[data-text="center"] {
+  --shell-text-align: center;
+}
+
+.header {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  text-align: center;
+}

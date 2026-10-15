@@ -121,7 +121,7 @@ E2E, `lanes.e2e-spec.ts`, e2e users only:
 - Play the USBC 180 rolls for A and 20 zeros for B through `recordRoll`: `status: finished`, A's `total` 180, B's 0, `seed` visible.
 - Rematch: new game, same players, `rematchOfId` set.
 - Soft-delete B: B's games drop out of A's list.
-- `apps/api/test/global-setup.ts` deletes `lane_roll`, `lane_player` and `lane_game` rows of e2e users (the cascade covers them when the users go; add the explicit deletes so the counts are logged).
+- the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts` deletes and counts `lane_roll`, `lane_player` and `lane_game` rows of e2e users (the cascade covers them when the users go; add the explicit deletes so the counts are logged, and add them to the count so `pnpm e2e:check` sees them).
 
 ## Done when
 

@@ -2,7 +2,7 @@
 
 Audited on 2026-10-15, against the AUTH-7 branch (`41-auth-7-bff-sign-up-sign-in-and-sign-out-with`) with its uncommitted work. AUTH-7 was still changing during the audit, so line numbers may drift by a few lines. Paths are relative to `apps/web/src/`.
 
-The rules these findings are judged against are in `.agents/skills/ui-composition/`. Story WEB-54 fixes them.
+The rules these findings are judged against are in `.agents/skills/ui-composition/`. Story WEB-54 fixed them, and each culprit below carries a **Fixed in WEB-54** line that says how. One culprit is only partly fixed, and says so.
 
 ## Summary
 
@@ -20,6 +20,8 @@ The fix is a small set of shared parts in `components/ui/`, a few new tokens, an
 
 **Fix:** `Field`, `Button`, `FormAlert`, `Stack` and `InlineLink`. Each form's module then holds only its layout, or goes away.
 
+**Fixed in WEB-54:** `SignInForm.module.css` and `SignUpForm.module.css` are deleted. Both forms compose `AuthForm`, the composed fields, `Button`, `FormAlert` and `InlineLink`.
+
 ### 2. Field markup is copied six times, wired two ways
 
 - `components/SignInForm/SignInForm.tsx:41` and `:66`: identifier and password.
@@ -31,6 +33,8 @@ Each copy builds its own label, input, hint and error, and its own `aria-invalid
 - SignUpForm writes three helpers, `describedBy()`, `invalid()` and `errorFor()` (`SignUpForm.tsx:54-68`). Each one retypes `"email" | "displayName" | "username" | "password"` instead of using `AuthField` from `lib/actions/auth-state.ts:9`.
 
 **Fix:** a `Field` compound part on Base UI `Field` and `Form`. It wires the ids and ARIA itself, and takes the server's field errors through the form's `errors` prop.
+
+**Fixed in WEB-54, with a different design.** The fields are native, not Base UI: `TextField`, `EmailField` and `PasswordField` sit on small building blocks (`Label`, `Hint`, `ErrorMessage`, `TextInput`, `EmailInput`, `PasswordInput`) and one shared hook, `useField`. The `describedBy()`, `invalid()` and `errorFor()` helpers are gone, and the retyped `"email" | "displayName" | ...` union with them. The fields take a plain `name` string, so `AuthField` does not type it. Typing `name` as `AuthField` in the forms is a possible follow-up. See `forms-analysis.md`, "Re-checked for WEB-54".
 
 ### 3. The button is written three times
 
@@ -56,6 +60,8 @@ Also:
 
 **Fix:** `Button` with `variant` and `pending`, and `ButtonLink`. The forced-colours rule is then written once, inside the part.
 
+**Fixed in WEB-54:** `Button` and `ButtonLink` own the look, the pending guard and the forced-colours border. SessionCorner's buttons now have the border, and "Sign in" and "Sign up" are `ButtonLink variant="quiet"`.
+
 ### 4. The page layout and title are written three times
 
 ```css
@@ -77,6 +83,8 @@ line-height: 1;
 
 **Fix:** `PageShell` and `Heading`.
 
+**Fixed in WEB-54:** `/`, `/login` and `/signup` use `PageShell` and `Heading`. The three page modules are deleted. Page titles use `--leading-tight` (1.1) in place of `line-height: 1`, which is a named change.
+
 ### 5. Muted helper text is written four or five times
 
 `margin: 0; color: var(--color-text-muted); font-size: var(--text-sm);` appears in:
@@ -89,6 +97,8 @@ line-height: 1;
 A near copy is in `app/page.module.css:20` (`.note`).
 
 **Fix:** `Text` with `tone="muted"` and `size`.
+
+**Fixed in WEB-54:** CookieNote, SessionCorner, SignUpForm, ThemeToggle and the home page use `Text tone="muted"` or a field's `hint` prop. Their muted-text rules are deleted.
 
 ### 6. Values with no token
 
@@ -108,6 +118,8 @@ A near copy is in `app/page.module.css:20` (`.note`).
 
 **Fix:** add the tokens (`ui-composition/references/tokens.md`) and replace every raw use.
 
+**Partly fixed in WEB-54.** All the new tokens are in `tokens.css` with a spec, and every use of `44px`, `24px`, `1px solid`, weight 700, `-0.02em`, `28rem`, `0.8` and `100` reads a token. The `themeColor` copy is checked by `tokens.spec.ts`. Four raw measures are left outside `ui/`: `max-inline-size: 28ch` and `40ch` in `ThemeToggle.module.css`, and `flex: 1 1 20rem` and `max-inline-size: 60ch` in `SiteFooter.module.css`. The `60ch` equals `--measure-content`. They are for a follow-up, and audit check 1 lists them.
+
 ### 7. The form scaffolding is repeated
 
 - The form-level alert: `<p role="alert" className={styles.formError}>` at `SignInForm.tsx:36` and `SignUpForm.tsx:78`.
@@ -117,6 +129,8 @@ A near copy is in `app/page.module.css:20` (`.note`).
 
 **Fix:** `FormAlert`; an `AuthForm` layout component in `components/` for the shared frame of the two auth forms; and `EMAIL_PATTERN` moved into `lib/`, next to the other auth form rules.
 
+**Fixed in WEB-54:** `FormAlert`, `AuthForm` (one `<Suspense>` around `NextPathField`, with a comment saying why) and `lib/auth-rules.ts` (`EMAIL_PATTERN`, `EMAIL_TITLE` and every DTO limit). `loginHref` moved to `lib/next-path.ts`.
+
 ### 8. Live regions are built by hand
 
 - `role="alert"` paragraphs in both forms.
@@ -124,6 +138,8 @@ A near copy is in `app/page.module.css:20` (`.note`).
 - `SessionCorner.tsx:44` and `:48` use the fixed id `sign-out-everywhere-hint`. SessionCorner is an async Server Component, so it can't call `useId()`. The id will collide if the corner ever renders twice.
 
 **Fix:** `FormAlert` and `Notice`. Pass the hint id in from a part that can generate it, or link the hint without an id.
+
+**Fixed in WEB-54:** `FormAlert` and `Notice` own the live regions. SessionCorner's hint id comes from `useId`, in a small synchronous child, and a spec checks that two corners get different ids. The comment now says `<output>`.
 
 ### 9. Small helpers live in one component, and resets are repeated
 
@@ -133,6 +149,8 @@ A near copy is in `app/page.module.css:20` (`.note`).
 
 **Fix:** `VisuallyHidden`, and delete the repeated resets.
 
+**Fixed in WEB-54:** `VisuallyHidden` exists, and ThemeToggle uses it through `ToggleGroup`. The repeated `margin: 0` and `font: inherit` are gone from feature modules. Two small repeats remain inside `ui/`: `PasswordInput.module.css` copies the visually-hidden rule for its button name, and `ToggleGroup.module.css` and `Button.module.css` write `font: inherit` that `globals.css` already sets.
+
 ### 10. Tokens and classes nothing uses
 
 - Eight tokens are never read: `--color-accent-2`, `--color-success`, `--dur-fast`, `--dur-slow`, `--space-5`, `--space-7`, `--text-lg` and `--text-2xl`.
@@ -140,29 +158,31 @@ A near copy is in `app/page.module.css:20` (`.note`).
 
 **Fix:** decide in WEB-54. Keep the ones a planned story needs, such as `--color-success` for Toast and `--text-2xl` for `Heading`. Remove the rest.
 
+**Fixed in WEB-54:** all 8 tokens stay. The parts read `--space-5`, `--space-7`, `--text-lg`, `--text-2xl` and `--color-success`. `lib/motion.ts` copies `--dur-fast` and `--dur-slow`. `--color-accent-2` is the rug red the RUG and LANE stories plan to use. The `.enter` class and the `motion/react` presets wait for `3d-animator`.
+
 ## Smaller findings
 
-- **SignUpForm does too much.** At 211 lines, it mixes the form, copies of the DTO rules, and `?next=` URL logic (`loginHref` and `SignInLinkWithNext`, `SignUpForm.tsx:38-46`). `loginHref` belongs in `lib/next-path.ts`, next to `safeNextPath`.
-- **A shared hook has no spec.** `hooks/useFocusFirstInvalid.ts` breaks the rule that shared code has a unit test. It sat in `components/` when the audit started, and AUTH-7 moved it to `hooks/` during the audit. It still needs a spec.
-- **A comment doesn't match the code.** `SessionCorner.tsx:18` says "a `role=\"status\"` line", but the code uses `<output>`. `<output>` has the status role, so it works, but the comment should say what the code does.
-- **ThemeToggle is long but holds together.** At 192 lines, it handles optimistic state, cross-tab sync and the server action. Its markup should move onto shared parts, but its logic can stay.
+- **SignUpForm does too much.** At 211 lines, it mixes the form, copies of the DTO rules, and `?next=` URL logic (`loginHref` and `SignInLinkWithNext`, `SignUpForm.tsx:38-46`). `loginHref` belongs in `lib/next-path.ts`, next to `safeNextPath`. **Fixed in WEB-54:** SignUpForm is 116 lines, and `loginHref` lives in `lib/next-path.ts`.
+- **A shared hook has no spec.** `hooks/useFocusFirstInvalid.ts` breaks the rule that shared code has a unit test. It sat in `components/` when the audit started, and AUTH-7 moved it to `hooks/` during the audit. It still needs a spec. **Fixed in WEB-54:** the hook is deleted. `Form` does the same job and has a spec.
+- **A comment doesn't match the code.** `SessionCorner.tsx:18` says "a `role=\"status\"` line", but the code uses `<output>`. `<output>` has the status role, so it works, but the comment should say what the code does. **Fixed in WEB-54.**
+- **ThemeToggle is long but holds together.** At 192 lines, it handles optimistic state, cross-tab sync and the server action. Its markup should move onto shared parts, but its logic can stay. **Fixed in WEB-54:** the markup is on `ToggleGroup`, `Text` and `Notice`, and its logic is unchanged.
 
 ## What is fine
 
 - No raw colours anywhere in the CSS Modules.
 - The tokens have a spec that checks the two dark blocks and contrast.
-- Specs query by role and text, not by class, so moving markup into shared parts won't break them. The one exception is `ThemeToggle.spec.tsx:347`.
+- Specs query by role and text, not by class, so moving markup into shared parts won't break them. The one exception was `ThemeToggle.spec.tsx:347`, which WEB-54 rewrote to check visibility and role.
 - `"use client"` appears only where it is needed.
 - Every component has its own folder with its module and spec beside it, which `components/ui/` can copy.
 
 ## The fix plan
 
-Story **WEB-54** (`context/epic-lebowski/issues/WEB-54.md`) carries it out, in this order:
+Story **WEB-54** (`context/epic-lebowski/issues/WEB-54.md`) carried it out, in this order (`ToggleGroup` and `SkipLink` were added to the list while building):
 
 1. Add the missing tokens and `lib/cx.ts`.
 2. Build `Text`, `Heading`, `InlineLink` and `VisuallyHidden`.
 3. Build `Button` and `ButtonLink`.
-4. Add `@base-ui/react`, then build `Field` and `FormAlert`. Forms stay on Next.js form actions with no form library (`context/audits/forms-analysis.md`).
+4. Build `Form`, `FormAlert`, the form building blocks and the composed fields, as native parts. Forms stay on Next.js form actions with no form library (`context/audits/forms-analysis.md`). The plan to add `@base-ui/react` here changed: Base UI arrives with Dialog in FEED-16.
 5. Build `Stack`, `Cluster`, `PageShell` and `Notice`.
 6. Move SignInForm, SignUpForm, SessionCorner, ThemeToggle, CookieNote, SiteFooter and the three pages onto the parts.
 7. Fix the smaller findings.
@@ -172,12 +192,12 @@ Story **WEB-54** (`context/epic-lebowski/issues/WEB-54.md`) carries it out, in t
 
 ## Library choice
 
-**Base UI** (`@base-ui/react`, v1.9.0 at the time of the audit) backs the parts that need real behaviour: Field and Form, and later Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast and Tooltip. Buttons, text and layout stay plain HTML.
+**Base UI** (`@base-ui/react`, v1.9.0 at the time of the audit) backs the parts that need real behaviour: Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast and Tooltip. **It is not installed yet. Base UI arrives with Dialog in FEED-16.** Buttons, text, layout, and Form and Field stay plain HTML: WEB-54 found that Base UI's `Form` always sets `noValidate` and that its `Field` links the hint and error in a layout effect, and both break a form with JavaScript off (`forms-analysis.md`, "Re-checked for WEB-54").
 
 Why Base UI:
 
 - **It ships no styles.** Parts are styled with CSS Modules through `[data-*]` state attributes, so our tokens drive every look and nothing fights them.
-- **It covers what we need,** including Field and Form, which take Server Action errors directly through `errors`.
+- **It covers what we need** for the behaviour parts: focus handling, the inert background, positioning and the live regions.
 - **Its composition model matches ours.** It uses compound parts, and a `render` prop that lets our own `Button` act as a trigger.
 - **Its motion hooks are documented.** It uses `data-starting-style` and `data-ending-style` for CSS, and `keepMounted` with `AnimatePresence` for `motion/react`.
 - **It is actively maintained.** It has been stable since 2025-12-11 and releases monthly. MUI builds it, with former Radix and Floating UI maintainers, and it has been shadcn's default base since July 2026.

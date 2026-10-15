@@ -455,9 +455,12 @@ in `apps/api/.env`, which are your dev databases. There is no separate test data
 Two things are set for you:
 
 - **The suites refuse to start unless both databases are on this machine.**
-  They write rows and then hard-delete them, so `apps/api/test/global-setup.ts` checks
-  `PG_HOST` and `MONGO_URI` first and stops the run if either names another
-  host. The check is in `apps/api/test/local-databases.ts`.
+  They write rows and then hard-delete them, so the cleanup in
+  `apps/api/test/e2e-cleanup.ts` checks `PG_HOST` and `MONGO_URI` first and
+  stops the run if either names another host. It also refuses a Mongo address
+  with an option that can send the connection past the host it names, such as
+  `proxyHost`, `replicaSet` or `loadBalanced`. The check is in
+  `apps/api/test/local-databases.ts`.
 - **The suites run in the `Asia/Tokyo` time zone.** `apps/api/vitest.config.e2e.ts`
   sets it. CI machines run in UTC, where a timestamp read in "the machine's
   zone" happens to be right, so a time zone bug cannot show there.
@@ -476,10 +479,22 @@ the cleanup only removes `e2e-` users.
 
 ### How the cleanup works
 
-`apps/api/test/global-setup.ts` deletes what the suites wrote. `apps/api/vitest.config.e2e.ts`
-registers it as `globalSetup`, so vitest runs it once before the first suite
-and once after the last one. Both runs do the same cleanup. A run that was
-killed halfway is cleaned up by the start of the next one.
+`apps/api/test/e2e-cleanup.ts` deletes what the e2e runs wrote. Three things
+run it:
+
+- **The API suites.** `apps/api/vitest.config.e2e.ts` registers
+  `apps/api/test/global-setup.ts` as `globalSetup`, so vitest runs the
+  cleanup once before the first suite and once after the last one.
+- **The web Playwright suite.** `apps/web/playwright.config.ts` runs
+  `apps/web/e2e/global-setup.ts` before the first test and
+  `apps/web/e2e/global-teardown.ts` after the last. Each runs
+  `pnpm --filter @dudesphere/api e2e:cleanup` from the repo root, because
+  `apps/web` never touches a database itself. If the cleanup fails, the web
+  run fails too, so start the databases with `pnpm db:up` first.
+- **You**, with `pnpm e2e:cleanup`. See "Clean up and check by hand" below.
+
+Each run does the same cleanup before and after, so a run that was killed
+halfway is cleaned up by the start of the next one.
 
 It finds e2e data by its shape, in this order:
 
@@ -489,8 +504,12 @@ It finds e2e data by its shape, in this order:
    those ids.
 3. **Hashtags (Mongo).** It deletes every hashtag whose slug is `e2e` followed
    by exactly 12 hex characters, such as `e2e3f7af56bef13`.
-4. **Profiles, then users (Postgres).** It deletes the `profile` rows for those
-   ids, then the `user` rows.
+4. **Profiles (Postgres).** It deletes the `profile` rows for those ids.
+5. **Sign-in state (Postgres).** It deletes the `refresh_tokens`,
+   `email_tokens` and `sessions` rows whose `user_id` is one of those ids.
+   These tables have no foreign key to `user`, so nothing else would remove
+   them.
+6. **Users (Postgres).** Last, it deletes the `user` rows.
 
 These are real deletes, not soft deletes. The seeded admin and your own dev
 data match none of the shapes, so the cleanup leaves them alone.
@@ -500,15 +519,41 @@ as e2e data except its `userId`, and the `user` row is the only place that id
 can be read from. If the Mongo step fails, the users are still there, so the
 next run finds the same abidings and tries again.
 
-Each cleanup prints one line:
+Each cleanup prints one line, with a count for every table and collection, in
+the order it deletes them:
 
 ```text
-[e2e before] removed 0 users, 0 profiles, 0 abidings, 0 hashtags
-[e2e after] removed 6 users, 6 profiles, 4 abidings, 1 hashtags
+[e2e before] removed 0 abidings, 0 hashtags, 0 profiles, 0 refresh tokens, 0 email tokens, 0 sessions, 0 users
+[e2e after] removed 4 abidings, 1 hashtags, 6 profiles, 9 refresh tokens, 0 email tokens, 0 sessions, 6 users
 ```
 
-A `before` line with numbers above zero means the last run did not finish. That
-is fine: this run has now cleaned up after it.
+The web suite labels its lines `web before` and `web after`.
+
+A `before` line with numbers above zero means the last run did not finish, or
+something else made e2e users since, such as a script you ran by hand. That is
+fine: this run has now cleaned up after it.
+
+### Clean up and check by hand
+
+```bash
+pnpm e2e:cleanup   # deletes every e2e row, as the suites do
+pnpm e2e:check     # deletes nothing: counts the e2e rows left
+```
+
+Both run from the repo root, and both refuse to run unless both databases are
+on this machine.
+
+`pnpm e2e:check` prints how many e2e rows each table and collection holds. It
+exits with code 1 if any count is above zero, so a script can use it:
+
+```text
+[e2e check] found 0 abidings, 0 hashtags, 0 profiles, 0 refresh tokens, 0 email tokens, 0 sessions, 0 users
+[e2e check] clean: no e2e rows are left
+```
+
+Use `pnpm e2e:cleanup` after a script of your own that signed up `e2e-` users
+against the dev API. Do not run it while someone else's e2e run is going: it
+deletes the users that run is using.
 
 ### Rules for a new suite
 
@@ -528,8 +573,15 @@ these rules leaves rows behind on every run.
   `hashtags.e2e-spec.ts`. A slug cannot hold a hyphen, so there is no `e2e-`
   prefix to match on. The cleanup matches the whole shape so that it cannot
   delete a real tag such as `#e2etesting`.
-- **If a suite writes to a new table or collection, add it to
-  `apps/api/test/global-setup.ts`** in the same change.
+- **If a suite writes to a new table or collection, add it to `E2E_TARGETS`
+  in `apps/api/test/e2e-cleanup.ts`** in the same change. The cleanup,
+  `pnpm e2e:check` and the web suite all read that one list. Give a Postgres
+  table its user-id column, and a Mongo collection the filter that finds its
+  e2e documents, and put it before `user`. A table that can never hold e2e
+  data goes in `NEVER_E2E` in `apps/api/test/e2e-cleanup.spec.ts`, with the
+  reason. That spec reads the table names from the migrations and entities
+  and the collection names from the Mongoose schemas, and fails on any that
+  neither list covers, so a table you forget fails `pnpm test`.
 
 ### Tips
 
@@ -549,9 +601,10 @@ these rules leaves rows behind on every run.
   not be on page 1 of the dev database. To check that a row is on a list, or
   is not, follow `links.next` to the end, as `listEverySlug` does in
   `apps/api/test/hashtags.e2e-spec.ts`.
-- **Do not delete e2e users by hand.** Once the `user` row is gone, nothing
-  links its abidings to the e2e run, and no later run removes them. If that
-  happens, delete the stranded abidings in Mongo Express.
+- **Do not delete e2e users by hand in a database tool.** Run
+  `pnpm e2e:cleanup` instead. Once the `user` row is gone, nothing links its
+  abidings and sign-in rows to the e2e run, and no later run removes them. If
+  that happens, delete the stranded abidings in Mongo Express.
 - **Guards can only be tested here.** The guards of `AuthenticationModule`
   and `AuthorizationModule` are registered in `AppModule`, and a unit
   controller spec never loads them. A 401 or 403 test belongs in an e2e

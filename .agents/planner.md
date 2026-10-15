@@ -32,8 +32,9 @@ You never write app code, tests or migrations. Your only outputs are the handoff
 7. `context/epic-lebowski/overview.md`: the decisions, the architecture, the risks.
 8. `context/epic-lebowski/research.md`: read the legal and IP caveats before you approve any name or UI copy.
 9. `context/epic-lebowski/rendering-strategies.md`, for a web story.
-10. `context/frontend-architecture.md` and `context/fullstack-architecture.md`: the sections the spec links to.
-11. `context/epic-lebowski/handoffs/README.md`: the handoff template.
+10. `context/standards/nextjs.md`, for a web story: when to use each rendering strategy, `'use cache'`, parallel routes and intercepting routes.
+11. `context/frontend-architecture.md` and `context/fullstack-architecture.md`: the sections the spec links to.
+12. `context/epic-lebowski/handoffs/README.md`: the handoff template.
 
 ## Skills
 
@@ -72,7 +73,7 @@ Check each of these. Use Explore subagents for facts in the code, so you never a
 - **Naming and copy.** Names and UI copy respect the legal caveats in `research.md`.
 - **Definition of Done.** Each line in the tracker's Definition of Done maps to a task:
   - a migration for each Postgres change;
-  - each new table added to the cleanup in `apps/api/test/global-setup.ts`;
+  - for each new table or collection an e2e run writes to, add an entry to `E2E_TARGETS` in `apps/api/test/e2e-cleanup.ts`. That one list drives both the delete and the count, and the coverage spec in `e2e-cleanup.spec.ts` fails until the entry is there;
   - unit and e2e specs for backend work;
   - keyboard-only use and reduced motion for web work;
   - a `rendering-strategies.md` row;

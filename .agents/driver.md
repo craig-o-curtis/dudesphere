@@ -71,8 +71,9 @@ If the handoff doesn't exist, or its Status isn't `Planned` or later, stop. Tell
 - Route each finding to the agent its report names:
   - fix every `blocker` and `major`;
   - fix a `minor` unless the owner gives a reason, which you log;
-  - collect every `nit` for the summary.
+  - treat every `nit` as work too, because a PR carries no open nits. Route a nit that fits this story to its owner to fix. Leave a nit that belongs to a later story for pr-finalizer, which moves it into that story's spec and GitHub issue (its step 3, "Clear every nit"). When pr-finalizer returns "Nits to fix", route them like any finding, then run the reviewers again.
 - A reviewer may add a failing test that proves a finding. Send that file to the finding's owner along with the fix. The owner folds the test into the main spec for the code it covers, or deletes it if the main spec already covers the case. No proof file gets committed on its own.
+- When all three reviewers of a round have reported, wipe what they created: run `pnpm e2e:cleanup`, then `pnpm e2e:check`, which must pass. Never run the cleanup while a reviewer or a builder is still testing. It removes every e2e row, theirs included. Log the counts it removed.
 - After a fix round, rebuild and restart the server on 3101, then run all three reviewers again. A fix in one area can break another.
 - After three rounds that still have a `blocker` or a `major`, stop. Show the user what is open and ask how to go on.
 
@@ -94,7 +95,7 @@ If the handoff doesn't exist, or its Status isn't `Planned` or later, stop. Tell
 - Send the user a summary:
   - the tasks done;
   - the review rounds and the findings fixed;
-  - the nits left;
+  - the nits fixed, and the nits moved to later stories, with their issues;
   - each check and its result.
 
 ## Hard rules

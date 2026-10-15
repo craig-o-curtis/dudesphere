@@ -47,6 +47,25 @@
   --text-2xl: clamp(1.5rem, 1.2rem + 1.4vw, 2.25rem);
   --text-3xl: clamp(1.875rem, 1.3rem + 2.6vw, 3.25rem);
 
+  /* Controls, borders and type details */
+  --control-min-height: 44px;
+  --target-min: 24px;
+  --border-width: 1px;
+  --glyph-width: 1em; /* a glyph box that follows the font size of its element */
+  --font-weight-bold: 700;
+  --tracking-tight: -0.02em;
+  --leading-tight: 1.1;
+  --leading-body: 1.5;
+
+  /* Measures, states and layers */
+  --measure-form: 28rem;
+  --measure-content: 60ch;
+  --measure-hint: 28ch;
+  --measure-status: 40ch;
+  --measure-narrow: 20rem;
+  --opacity-pending: 0.8;
+  --z-skip: 100;
+
   /* Motion */
   --dur-fast: 150ms;
   --dur-base: 200ms;

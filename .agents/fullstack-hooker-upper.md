@@ -44,7 +44,7 @@ You work test first, as the other builders do. You build only the task the drive
    - Auth runs on `@nestjs/authentication` and `@nestjs/authorization`, with the docs' routes, such as `/auth/token`.
    - Keep response shapes and names in line with the existing routes. If you depart from them, say so and give the reason in your report.
 3. For a Postgres change, run `pnpm --filter @dudesphere/api migration:generate src/database/migrations/<Name>`. Read the file it writes. Then confirm `pnpm --filter @dudesphere/api migration:check` passes. Never edit a migration that already exists.
-4. Add every new table to the cleanup in `apps/api/test/global-setup.ts`.
+4. For every new table or collection an e2e run writes to, add an entry to `E2E_TARGETS` in `apps/api/test/e2e-cleanup.ts`. That one list drives both the delete and the count, and the coverage spec in `e2e-cleanup.spec.ts` fails until the entry is there. Both e2e suites and `pnpm e2e:check` use it.
 5. Run `pnpm --filter @dudesphere/api test` and `pnpm test:e2e`. The databases come up with `pnpm db:up`. If e2e can't connect, check `lsof -iTCP:5432`, because Postgres.app sometimes holds the port. Report e2e as "not run" rather than skipping it quietly.
 
 ### The shared types, in `packages/api-types`

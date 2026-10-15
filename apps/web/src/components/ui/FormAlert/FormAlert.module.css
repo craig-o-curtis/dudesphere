@@ -1,0 +1,26 @@
+.root {
+  --alert-border: var(--color-danger);
+  --alert-fg: var(--color-danger);
+  --alert-padding: var(--space-3);
+  --alert-radius: var(--radius-m);
+
+  padding: var(--alert-padding);
+  border: var(--border-width) solid var(--alert-border);
+  border-radius: var(--alert-radius);
+  color: var(--alert-fg);
+  font-size: var(--text-sm);
+}
+
+/* A link inside the message keeps the text colour and a 24 px target. */
+.root a {
+  display: inline-block;
+  min-block-size: var(--target-min);
+  color: inherit;
+  text-decoration: underline;
+}
+
+@media (forced-colors: active) {
+  .root {
+    --alert-border: CanvasText;
+  }
+}

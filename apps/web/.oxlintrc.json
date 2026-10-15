@@ -6,5 +6,24 @@
     "browser": true,
     "node": true
   },
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@testing-library/react",
+            "importNames": ["fireEvent"],
+            "message": "Use @testing-library/user-event instead. See context/coding-standards.md, \"Tests that act like a member\"."
+          },
+          {
+            "name": "@testing-library/dom",
+            "importNames": ["fireEvent"],
+            "message": "Use @testing-library/user-event instead. See context/coding-standards.md, \"Tests that act like a member\"."
+          }
+        ]
+      }
+    ]
+  },
   "ignorePatterns": [".next/**", "next-env.d.ts"]
 }

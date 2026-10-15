@@ -89,7 +89,7 @@ E2E with e2e users:
 - `POST /timer-sessions` with 5 minutes and a 5-minute span: 201. With 5 minutes and a 2-minute span: 400. With `minutes: 11`: 400.
 - `PATCH /profiles/me` with `timeZone: "Mars/Olympus"`: 400. With `quietWeekday: 8`: 400. With `laneCertifiedAt`: 400 (unknown field).
 - `POST /profiles/me/lane-certificate` with 6 check-ins: 409 `CERTIFICATE_NOT_EARNED`. With 7 and an alignment: 200 and the date set.
-- `checkins` and `timer_sessions` rows of e2e users are in `apps/api/test/global-setup.ts`.
+- `checkins` and `timer_sessions` rows of e2e users are deleted and counted in the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts`, so `pnpm e2e:check` sees them.
 
 ## Done when
 

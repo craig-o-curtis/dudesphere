@@ -82,7 +82,7 @@ E2E with e2e users (slugs start `e2e-`):
 - B edits the group as organizer: 200. C edits: 403.
 - Admin deletes, then restores: the group is hidden, then back.
 - `GET /groups/mine` for B lists the group.
-- `achiever_group` rows with an `e2e-` slug and `group_member` rows of e2e users are in `apps/api/test/global-setup.ts`.
+- `achiever_group` rows with an `e2e-` slug and `group_member` rows of e2e users are deleted and counted in the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts`, so `pnpm e2e:check` sees them.
 
 ## Done when
 

@@ -1,6 +1,6 @@
 # AUTH-52: Passwordless sign-in
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 1. Blocked by: AUTH-7, AUTH-8, API-10, WEB-54.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Auth. Phase 1. Blocked by: AUTH-7, AUTH-8, API-10.
 
 **Scope:** A fullstack story: members sign up and sign in with an emailed link, a passkey, or Google or GitHub, from one "Roll in" screen, while existing members keep their password as a fallback.
 
@@ -175,7 +175,7 @@ Social:
 
 E2E housekeeping:
 
-- `apps/api/test/global-setup.ts` deletes `passkey`, `passkey_challenge` and `oidc_identity` rows for e2e users.
+- the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts` deletes and counts `passkey`, `passkey_challenge` and `oidc_identity` rows for e2e users, so `pnpm e2e:check` sees them.
 
 ## Done when
 

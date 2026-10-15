@@ -1,7 +1,7 @@
 // Decides whether the e2e suites may run against the databases .env names.
 //
-// The suites write rows through the app, and test/global-setup.ts then
-// hard-deletes them. Both are only safe on a database that lives on this
+// The suites write rows through the app, and the cleanup in
+// test/e2e-cleanup.ts then hard-deletes them. Both are only safe on a database that lives on this
 // machine: a developer's own, or the throwaway one CI starts. If .env ever
 // points anywhere else, the run has to stop before a single row is written.
 
@@ -22,11 +22,54 @@ export function mongoHosts(uri: string): string[] {
   return match[1].split(",").map((entry) => entry.replace(/:\d+$/, ""));
 }
 
+// Options in a Mongo address that send the connection past the hosts it
+// lists, so a local host proves nothing. The driver reads option names in any
+// case, so they are kept here in lower case.
+// - proxyHost and the other proxy options: every connection goes through a
+//   SOCKS5 proxy, which resolves "localhost" on its own machine.
+// - replicaSet: the driver follows the set's member list, which can name
+//   remote hosts.
+// - loadBalanced: the listed host is a load balancer that forwards elsewhere.
+//   The e2e cleanup connects with directConnection, which the driver refuses
+//   to combine with it anyway.
+// directConnection=false is refused too: it turns on the same discovery as
+// replicaSet. srvHost needs no entry: only a mongodb+srv address sets it, and
+// that is refused already.
+const ROUTING_OPTIONS = new Map([
+  ["proxyhost", "proxyHost"],
+  ["proxyport", "proxyPort"],
+  ["proxyusername", "proxyUsername"],
+  ["proxypassword", "proxyPassword"],
+  ["replicaset", "replicaSet"],
+  ["loadbalanced", "loadBalanced"],
+]);
+
+/** The options in a Mongo address that could route it off the hosts it lists. */
+export function mongoRoutingOptions(uri: string): string[] {
+  const start = uri.indexOf("?");
+  if (start === -1) {
+    return [];
+  }
+  const found: string[] = [];
+  for (const [key, value] of new URLSearchParams(uri.slice(start + 1))) {
+    const name = ROUTING_OPTIONS.get(key.toLowerCase());
+    if (name) {
+      found.push(name);
+    } else if (key.toLowerCase() === "directconnection" && value.toLowerCase() !== "true") {
+      found.push(`directConnection=${value}`);
+    }
+  }
+  return found;
+}
+
 /**
  * Throws unless Postgres and every Mongo host are on this machine.
  *
  * A `mongodb+srv://` address always fails: it names a cluster looked up
- * through DNS, never a local server.
+ * through DNS, never a local server. So does a Mongo address with an option
+ * that can route the connection past the hosts it lists, such as proxyHost or
+ * replicaSet (see ROUTING_OPTIONS). This only refuses: it never changes how
+ * the app connects.
  */
 export function assertLocalDatabases(pgHost: string, mongoUri: string): void {
   const remote: string[] = [];
@@ -36,6 +79,10 @@ export function assertLocalDatabases(pgHost: string, mongoUri: string): void {
   const hosts = mongoHosts(mongoUri);
   if (hosts.length === 0 || !hosts.every(isLocalHost)) {
     remote.push(`Mongo at "${hosts.join(",") || "an address this check cannot read"}"`);
+  }
+  const routing = mongoRoutingOptions(mongoUri);
+  if (routing.length > 0) {
+    remote.push(`Mongo with ${routing.join(", ")}, which can route the connection elsewhere`);
   }
   if (remote.length > 0) {
     throw new Error(

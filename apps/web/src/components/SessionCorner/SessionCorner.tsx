@@ -1,5 +1,10 @@
-import Link from "next/link";
+import { useId } from "react";
 
+import { Button } from "@/components/ui/Button/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink/ButtonLink";
+import { Cluster } from "@/components/ui/Cluster/Cluster";
+import { Notice } from "@/components/ui/Notice/Notice";
+import { Text } from "@/components/ui/Text/Text";
 import { readSessionCookies } from "@/lib/session";
 
 import styles from "./SessionCorner.module.css";
@@ -29,28 +34,30 @@ export async function SessionCorner({ searchParams }: { searchParams: Promise<Si
   }
 
   return (
-    <div className={styles.corner} data-session-corner>
-      <p className={styles.status}>You&apos;re signed in.</p>
-      <div className={styles.forms}>
+    <Cluster gap={3} columnGap={4} justify="center" className={styles.corner} data-session-corner>
+      <Text>You&apos;re signed in.</Text>
+      <Cluster gap={3} columnGap={4} align="start" justify="center">
         <form method="post" action="/api/auth/logout" className={styles.form}>
-          <button type="submit" className={styles.button}>
-            Sign out
-          </button>
+          <Button type="submit">Sign out</Button>
         </form>
-        <form method="post" action="/api/auth/logout-everywhere" className={styles.form}>
-          <button
-            type="submit"
-            className={styles.button}
-            aria-describedby="sign-out-everywhere-hint"
-          >
-            Sign out everywhere
-          </button>
-          <p id="sign-out-everywhere-hint" className={styles.hint}>
-            Signs you out on every device.
-          </p>
-        </form>
-      </div>
-    </div>
+        <SignOutEverywhereForm />
+      </Cluster>
+    </Cluster>
+  );
+}
+
+/** Its own component so `useId` gives each corner on a page its own hint id. */
+function SignOutEverywhereForm() {
+  const hintId = useId();
+  return (
+    <form method="post" action="/api/auth/logout-everywhere" className={styles.form}>
+      <Button type="submit" aria-describedby={hintId}>
+        Sign out everywhere
+      </Button>
+      <Text id={hintId} tone="muted" size="sm">
+        Signs you out on every device.
+      </Text>
+    </form>
   );
 }
 
@@ -67,15 +74,15 @@ function noticeFor(signout: string | string[] | undefined): string | null {
 
 function SignedOutLinks({ notice = null }: { notice?: string | null }) {
   return (
-    <div className={styles.corner} data-session-corner>
-      {notice ? <output className={styles.status}>{notice}</output> : null}
-      <Link href="/login" className={styles.link}>
+    <Cluster gap={3} columnGap={4} justify="center" className={styles.corner} data-session-corner>
+      {notice ? <Notice>{notice}</Notice> : null}
+      <ButtonLink href="/login" variant="quiet">
         Sign in
-      </Link>
-      <Link href="/signup" className={styles.link}>
+      </ButtonLink>
+      <ButtonLink href="/signup" variant="quiet">
         Sign up
-      </Link>
-    </div>
+      </ButtonLink>
+    </Cluster>
   );
 }
 

@@ -4,7 +4,7 @@ import localFont from "next/font/local";
 
 import { MotionProvider } from "@/components/MotionProvider/MotionProvider";
 import { SiteFooter } from "@/components/SiteFooter/SiteFooter";
-import { SkipLink } from "@/components/SkipLink/SkipLink";
+import { SkipLink } from "@/components/ui/SkipLink/SkipLink";
 import { themeInitScript } from "@/lib/theme";
 
 import "../styles/globals.css";
@@ -60,7 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </noscript>
       </head>
       <body>
-        <SkipLink />
+        <SkipLink href="#main">Skip to content</SkipLink>
         <MotionProvider>
           <main id="main" tabIndex={-1} className={styles.main}>
             {children}

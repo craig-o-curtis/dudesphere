@@ -1,6 +1,6 @@
 ---
 name: ui-composition
-description: Build or audit UI in apps/web from small shared parts (Button, Text, Field, Card, Stack, Dialog and so on) styled with CSS Modules and the WEB-6 design tokens, with Base UI behind the parts that need real behaviour. Use whenever you add or change a component, page or .module.css in apps/web, before you write a button, input, heading, surface, layout wrapper or dialog by hand, and whenever you review web code for duplication, raw CSS values or components that can't be adjusted from outside.
+description: Build or audit UI in apps/web from small shared parts (Button, Text, TextField, Card, Stack, Dialog and so on) styled with CSS Modules and the WEB-6 design tokens, with Base UI behind the parts that need real behaviour. Use whenever you add or change a component, page or .module.css in apps/web, before you write a button, input, heading, surface, layout wrapper or dialog by hand, and whenever you review web code for duplication, raw CSS values or components that can't be adjusted from outside.
 ---
 
 # UI composition for apps/web
@@ -29,8 +29,8 @@ This skill works alongside:
    Change a part's look in one of two ways only. Either pass a `variant` or `tone` prop, which the part renders as `data-variant` or `data-tone`, or pass a class that sets the part's component tokens. Never target a part's inner classes from outside.
 
 6. **Explicit variants, not boolean piles.** Write `variant="primary" | "secondary" | "quiet"`, not `primary`, `outline` and `small` booleans. When variants differ in structure, not just look, make separate components that share inner parts (`vercel-composition-patterns` › `patterns-explicit-variants`).
-7. **Compound parts for structure.** Anything with more than one region is a compound component whose parts share context: `Card.Root`, `Card.Header`, `Card.Body`; `Dialog.Root`, `Dialog.Trigger`, `Dialog.Popup`; `Field.Root`, `Field.Label`, `Field.Control`, `Field.Error`. Parts take `children`, not `renderX` props. Read context with `use()`, not `useContext()`.
-8. **Native first, Base UI for behaviour.** Buttons, links, text, headings and layout are plain HTML and stay safe to render in Server Components. Use Base UI (`@base-ui/react`) only where the behaviour is hard to get right: Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast, Tooltip, and Field and Form for error wiring. Wrap each Base UI part once, in `ui/`. Feature code never imports `@base-ui/react`. See `references/base-ui.md`.
+7. **Compound parts for structure.** Anything with more than one region is a compound component whose parts share context: `Card.Root`, `Card.Header`, `Card.Body`; `Dialog.Root`, `Dialog.Trigger`, `Dialog.Popup`; `ToggleGroup.Root`, `ToggleGroup.Item`. Forms are not compound: they use small building blocks (`Label`, `TextInput`, `ErrorMessage`) and composed fields (`EmailField`) that take props. Parts take `children`, not `renderX` props. Read context with `use()`, not `useContext()`.
+8. **Native first, Base UI for behaviour.** Buttons, links, text, headings, layout, and Form and Field are plain HTML and stay native. Form and Field are native because Base UI's `Form` always sets `noValidate` and its `Field` links the hint and error in a layout effect, which both break the form with JavaScript off (`references/base-ui.md`). Use Base UI (`@base-ui/react`) only where the behaviour is hard to get right: Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast and Tooltip. The dependency is not installed yet. FEED-16 adds it with Dialog. Wrap each Base UI part once, in `ui/`. Feature code never imports `@base-ui/react`. See `references/base-ui.md`.
 9. **Keep the client boundary low.** A shared part gets `"use client"` only when it needs state, effects or Base UI. Server Components render native parts directly.
 10. **Each part owns its accessibility.** The part handles focus styles, the 24 px minimum target, the control height, forced-colours borders, `aria-invalid` and `aria-describedby` wiring, pending states, and live regions. A feature using the part can't forget them. An accessibility fix goes in the part, never in the feature.
 11. **Motion attaches at the seams.** Parts expose state as data attributes (`data-variant`, `data-pending`, and Base UI's `data-open`, `data-starting-style`, `data-ending-style`). `3d-animator` hangs motion on those. Shared parts never import `motion/react`. When a part needs to animate, Base UI's `render` prop accepts a `motion.*` element from the feature.
@@ -64,11 +64,11 @@ Follow these steps for every UI task.
 
 ## References
 
-| File                        | Read it when                                                                       |
-| --------------------------- | ---------------------------------------------------------------------------------- |
-| `references/parts.md`       | You need a part: the catalogue, each part's props, variants, tokens and status     |
-| `references/tokens.md`      | You add or change a token, or a part needs a value that has no token               |
-| `references/base-ui.md`     | You wrap a Base UI part: styling, the `render` prop, Field and Form errors, motion |
-| `references/css-modules.md` | You write a part's `.module.css`                                                   |
-| `references/testing.md`     | You write a part's spec, or a feature spec that uses parts                         |
-| `references/audit.md`       | You review a diff, or refresh `context/audits/frontend-audit.md`                   |
+| File                        | Read it when                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `references/parts.md`       | You need a part: the catalogue, each part's props, variants, tokens and status             |
+| `references/tokens.md`      | You add or change a token, or a part needs a value that has no token                       |
+| `references/base-ui.md`     | You wrap a Base UI part: styling, the `render` prop, why Field and Form are native, motion |
+| `references/css-modules.md` | You write a part's `.module.css`                                                           |
+| `references/testing.md`     | You write a part's spec, or a feature spec that uses parts                                 |
+| `references/audit.md`       | You review a diff, or refresh `context/audits/frontend-audit.md`                           |

@@ -2,14 +2,14 @@
 
 Base UI (`@base-ui/react`) gives us behaviour and accessibility with no styles. We style it with CSS Modules and our tokens. Its docs: https://base-ui.com. Before you rely on any detail below, check it against the installed version with `npx ctx7@latest docs /mui/base-ui/<version> "<question>"`. These notes were checked against v1.9.0.
 
-WEB-54 adds the dependency. Until then, no part uses it.
+**Base UI is not installed yet.** FEED-16 adds `@base-ui/react` with Dialog, the first part that needs real behaviour. WEB-54 built every shared part on native HTML, so no part uses it today. Check `apps/web/package.json` before you follow anything below.
 
 ## Where it is allowed
 
 - Only files in `src/components/ui/` import `@base-ui/react`.
 - Import each component from its own path, which keeps the bundle small: `import { Dialog } from "@base-ui/react/dialog";`.
 - Any file that imports Base UI starts with `"use client"`.
-- Use it only where behaviour is hard: Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast, Tooltip, and Field and Form. Plain buttons, links, text and layout stay native.
+- Use it only where behaviour is hard: Dialog, Alert Dialog, Popover, Menu, Select, Combobox, Toast and Tooltip. Plain buttons, links, text, layout, and Form and Field stay native.
 
 ## Styling
 
@@ -45,31 +45,18 @@ Each part's attributes are listed in its API reference. The common ones are `dat
 
 Use it to put our own `Button` inside a trigger, so there is one button style. If the rendered element isn't a `<button>`, set `nativeButton={false}` where the part has that prop.
 
-## Field and Form with Server Actions
+## Field and Form are native
 
-Our forms are Server Actions with `useActionState` that show Nest's field errors from the 400. We use no form library: `context/audits/forms-analysis.md` explains why, and when TanStack Form may come in. Base UI's `Form` takes those errors directly:
+Our forms are Server Actions with `useActionState` that show Nest's field errors from the 400. We use no form library: `context/audits/forms-analysis.md` explains why, and when TanStack Form may come in. `Form` and the composed fields (`TextField`, `EmailField` and the rest) are our own native parts. See `parts.md` section 3. Base UI 1.9.0's `Form` and `Field` were checked on 2026-10-15 and rejected, for two findings:
 
-```tsx
-"use client";
-import { Form } from "@base-ui/react/form";
-import { Field } from "@base-ui/react/field";
+- **`Form` always renders `noValidate`** (`form/Form.js:95`). That turns off the browser's own checks (`required`, `pattern`, `minlength`) with JavaScript off. Our `Form` never sets it.
+- **`Field.Description` and `Field.Error` add their ids in a layout effect** (`FieldDescription.js:41`, `FieldError.js:71`). The server HTML then has no `aria-describedby` link to the hint or the error. Our fields make their ids with `useId` during render, so the links are in the server HTML.
 
-const [state, formAction] = useActionState(signIn, initialState);
+Base UI's `Form` also selects the first invalid input's text after a failed submit. Ours moves focus there and leaves the text alone.
 
-<Form action={formAction} errors={state.fieldErrors}>
-  <Field.Root name="password">
-    <Field.Label>Password</Field.Label>
-    <Field.Control type="password" />
-    <Field.Error />
-  </Field.Root>
-</Form>;
-```
+A Vitest spec renders the forms with `renderToString` and checks the server HTML. This proves what a Playwright test can't yet, because Next bug vercel/next.js#99756 gives a blank page with JavaScript off.
 
-- `errors` is keyed by each `Field.Root`'s `name`.
-- Our `AuthFieldErrors` holds `string[]` for each field. Check whether `errors` accepts an array or needs a string, and adapt it in one place: our `Field` wrapper or a helper in `lib/`. Never adapt it in each form.
-- `Field.Error match="valueMissing"` (and the other `ValidityState` keys) shows a message for one browser check. `match={true}` always shows it, for errors we control ourselves.
-
-**Prove the forms work with JavaScript off.** A form must still submit, and show the server's field errors, with JavaScript off. Base UI's docs don't say whether `Form` errors are in the server-rendered HTML. WEB-54 must show this with a Playwright test that turns JavaScript off. If the errors don't render, our `Field.Error` falls back to rendering the server error itself.
+If a later Base UI part needs form wiring, do not bring Base UI's `Form` back in. Build it on `useField` (`ui/Field/useField.ts`).
 
 ## Motion
 

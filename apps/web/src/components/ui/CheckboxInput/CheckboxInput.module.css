@@ -1,0 +1,35 @@
+.root {
+  --checkbox-size: var(--target-min);
+  --checkbox-accent: var(--color-accent);
+  --checkbox-outline-invalid: var(--color-danger);
+
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  accent-color: var(--checkbox-accent);
+  cursor: pointer;
+}
+
+.root[aria-invalid="true"] {
+  box-shadow: 0 0 0 calc(var(--border-width) * 2) var(--checkbox-outline-invalid);
+}
+
+@media (forced-colors: active) {
+  /* Shadows are dropped in forced colours, so the outline carries the cue. */
+  .root[aria-invalid="true"] {
+    outline-style: solid;
+    outline-offset: var(--border-width);
+    outline-width: calc(var(--border-width) * 3);
+    outline-color: Highlight;
+  }
+
+  /*
+   * One outline can't be both the cue and the focus ring. A focused invalid
+   * checkbox gets a wider double outline: it is still the focus ring (it keeps
+   * the global offset), and its two lines tell it from a valid one's solid ring.
+   */
+  .root[aria-invalid="true"]:focus-visible {
+    outline-style: double;
+    outline-offset: calc(var(--border-width) * 3);
+    outline-width: calc(var(--border-width) * 6);
+  }
+}
