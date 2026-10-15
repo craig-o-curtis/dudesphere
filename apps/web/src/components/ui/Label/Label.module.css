@@ -1,0 +1,7 @@
+.root {
+  --label-size: var(--text-sm);
+  --label-weight: var(--font-weight-bold);
+
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+}

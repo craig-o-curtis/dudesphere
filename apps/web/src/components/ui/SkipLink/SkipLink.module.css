@@ -1,0 +1,19 @@
+.root {
+  --skip-bg: var(--color-surface);
+  --skip-fg: var(--color-text);
+
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-2);
+  z-index: var(--z-skip);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-s);
+  background: var(--skip-bg);
+  color: var(--skip-fg);
+  font-weight: var(--font-weight-bold);
+  transform: translateY(-200%);
+}
+
+.root:focus-visible {
+  transform: none;
+}

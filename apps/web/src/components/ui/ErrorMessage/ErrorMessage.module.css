@@ -1,0 +1,7 @@
+.root {
+  --error-fg: var(--color-danger);
+  --error-size: var(--text-sm);
+
+  color: var(--error-fg);
+  font-size: var(--error-size);
+}

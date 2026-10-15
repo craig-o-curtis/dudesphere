@@ -1,0 +1,16 @@
+.root {
+  --heading-size: var(--text-xl);
+
+  font-family: var(--font-display);
+  font-size: var(--heading-size);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.root[data-size="2xl"] {
+  --heading-size: var(--text-2xl);
+}
+
+.root[data-size="3xl"] {
+  --heading-size: var(--text-3xl);
+}

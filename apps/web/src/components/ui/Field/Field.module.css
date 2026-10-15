@@ -1,0 +1,14 @@
+/* Layout shared by the composed fields. */
+.root {
+  --field-gap: var(--space-1);
+
+  display: grid;
+  gap: var(--field-gap);
+}
+
+/* Checkbox and switch fields: the control and its label on one row. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

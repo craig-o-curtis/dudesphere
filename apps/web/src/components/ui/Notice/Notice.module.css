@@ -1,0 +1,37 @@
+.root {
+  --notice-fg: var(--color-text);
+
+  display: block;
+  min-block-size: 1lh;
+  color: var(--notice-fg);
+}
+
+.root[data-tone="muted"] {
+  --notice-fg: var(--color-text-muted);
+}
+.root[data-tone="danger"] {
+  --notice-fg: var(--color-danger);
+}
+.root[data-tone="success"] {
+  --notice-fg: var(--color-success);
+}
+
+.root[data-size="xs"] {
+  font-size: var(--text-xs);
+}
+
+.root[data-size="sm"] {
+  font-size: var(--text-sm);
+}
+
+.root[data-size="lg"] {
+  font-size: var(--text-lg);
+}
+
+.root[data-size="xl"] {
+  font-size: var(--text-xl);
+}
+
+.root[data-size="base"] {
+  font-size: var(--text-base);
+}
