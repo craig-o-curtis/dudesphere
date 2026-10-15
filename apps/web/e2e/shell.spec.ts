@@ -403,9 +403,15 @@ test.describe("early and stale presses", () => {
     expect(held).not.toBe("");
     await expect(page.locator("[data-theme-toggle][inert]")).toHaveCount(1);
 
-    // Skip link, then #main has nothing focusable, so Tab must pass the placeholder.
+    // Skip link, then the session corner's fallback links (Sign in, Sign up),
+    // which are real links and may be focused. After them Tab must pass the
+    // inert theme placeholder.
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Sign up" })).toBeFocused();
     await page.keyboard.press("Tab");
     expect(await page.evaluate(() => document.activeElement?.closest("[data-theme-toggle]"))).toBe(
       null,
@@ -421,13 +427,10 @@ test.describe("early and stale presses", () => {
     await expect(page.locator("[data-theme-toggle]:not([inert])")).toHaveCount(1);
     await expect(page.locator("[data-theme-toggle][inert]")).toHaveCount(0);
 
-    // Focus may have left the page after the last Tab, so the first Tab here can
-    // land on the skip link again. Light is the first stop after it.
-    const skipLink = page.getByRole("link", { name: "Skip to content" });
+    // The swap replaced the corner's links, so focus was lost. Put it on Sign up
+    // (the last stop before the footer); the next Tab must reach Light.
+    await page.getByRole("link", { name: "Sign up" }).focus();
     await page.keyboard.press("Tab");
-    if (await skipLink.evaluate((el) => el === document.activeElement)) {
-      await page.keyboard.press("Tab");
-    }
     await expect(lightButton(page)).toBeFocused();
 
     // We add no inline script of our own beyond the theme init script. Next's
