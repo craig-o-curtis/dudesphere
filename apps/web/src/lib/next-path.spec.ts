@@ -1,0 +1,143 @@
+import { MAX_NEXT_PATH_LENGTH, safeNextPath } from "./next-path";
+
+describe("safeNextPath", () => {
+  describe("keeps a same-origin path", () => {
+    it.each([
+      ["/", "/"],
+      ["/?welcome=1", "/?welcome=1"],
+      ["/dudes/1?x=1#y", "/dudes/1?x=1#y"],
+      ["/dudes/1", "/dudes/1"],
+      ["/login?next=%2Fdudes", "/login?next=%2Fdudes"],
+      ["/apiary", "/apiary"],
+      ["/dudes/api/1", "/dudes/api/1"],
+      ["/#top", "/#top"],
+    ])("%j gives %j", (value, expected) => {
+      expect(safeNextPath(value)).toBe(expected);
+    });
+  });
+
+  describe("gives back the parsed form, not the raw text", () => {
+    it.each([
+      ["/dudes/./1", "/dudes/1"],
+      ["/dudes/../lanes", "/lanes"],
+      ["/a b", "/a%20b"],
+    ])("%j gives %j", (value, expected) => {
+      expect(safeNextPath(value)).toBe(expected);
+    });
+  });
+
+  describe("turns another origin into /", () => {
+    it.each([
+      "//evil.example.com",
+      "///evil.example.com",
+      "/\\evil.example.com",
+      "\\/evil.example.com",
+      "/\\/evil.example.com",
+      "https://evil.example.com",
+      "http://evil.example.com/dudes",
+      "HTTPS://evil.example.com",
+      "//evil.example.com/dudes?x=1",
+      "evil.example.com",
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "?welcome=1",
+      "#top",
+      "dudes/1",
+    ])("%j", (value) => {
+      expect(safeNextPath(value)).toBe("/");
+    });
+  });
+
+  describe("turns encoded slashes and backslashes into /", () => {
+    it.each([
+      "/%2F/evil.example.com",
+      "/%2f/evil.example.com",
+      "/%5C/evil.example.com",
+      "/%5c/evil.example.com",
+      "/%2F%2Fevil.example.com",
+      "/dudes%2F..%2F..%2Fapi",
+      "/dudes/..%2fapi",
+      "/dudes/%2e%2e%2fapi",
+      "/%252F/evil.example.com",
+    ])("%j", (value) => {
+      expect(safeNextPath(value)).toBe("/");
+    });
+  });
+
+  describe("turns control characters and whitespace tricks into /", () => {
+    it.each([
+      ["a tab after the slash", "/\t/evil.example.com"],
+      ["a backslash and t", String.raw`/\t/evil`],
+      ["a newline", "/\n/evil.example.com"],
+      ["a carriage return", "/dudes\r\nSet-Cookie: x=1"],
+      ["a NUL", "/dudes\u0000"],
+      ["a DEL", "/dudes\u007F"],
+      ["a C1 control", "/dudes\u0085"],
+      ["a leading space", " /dudes"],
+      ["a leading tab", "\t/dudes"],
+      ["a leading newline", "\n//evil.example.com"],
+      ["a leading no-break space", " /dudes"],
+      ["a trailing newline", "/dudes\n"],
+      ["an encoded tab", "/%09/evil.example.com"],
+      ["an encoded newline", "/dudes%0D%0ASet-Cookie:%20x=1"],
+      ["a broken escape", "/dudes/%E0%A4%A"],
+    ])("%s", (_name, value) => {
+      expect(safeNextPath(value)).toBe("/");
+    });
+  });
+
+  describe("turns any path under /api into /", () => {
+    it.each([
+      "/api/auth/logout",
+      "/api/auth/logout-everywhere",
+      "/api",
+      "/api/",
+      "/api?x=1",
+      "/api#x",
+      "/API/auth/logout",
+      "/Api/auth/logout",
+      "/%61pi/auth/logout",
+      "/%41PI/auth/logout",
+      "/api%2Fauth%2Flogout",
+      "/dudes/../api/auth/logout",
+      "/dudes/%2e%2e/api/auth/logout",
+      "/dudes/%2E%2E/API/auth/logout",
+      "/%2e%2e/%2e%2e/api/auth/logout",
+      "/./api/auth/logout",
+      "/%2e/api/auth/logout",
+    ])("%j", (value) => {
+      expect(safeNextPath(value)).toBe("/");
+    });
+  });
+
+  describe("turns a value that is too long into /", () => {
+    it("keeps a path at the limit", () => {
+      const value = `/${"a".repeat(MAX_NEXT_PATH_LENGTH - 1)}`;
+      expect(safeNextPath(value)).toBe(value);
+    });
+
+    it("drops a path one past the limit", () => {
+      expect(safeNextPath(`/${"a".repeat(MAX_NEXT_PATH_LENGTH)}`)).toBe("/");
+    });
+
+    it("drops a very long value", () => {
+      expect(safeNextPath(`/${"a".repeat(1_000_000)}`)).toBe("/");
+    });
+  });
+
+  describe("turns a value that isn't a string into /", () => {
+    it.each([
+      ["an empty string", ""],
+      ["null", null],
+      ["undefined", undefined],
+      ["a number", 42],
+      ["an array", ["/dudes"]],
+      ["an object", { toString: () => "/dudes" }],
+      ["a boolean", true],
+      ["a URL", new URL("http://localhost/dudes")],
+    ])("%s", (_name, value) => {
+      expect(safeNextPath(value)).toBe("/");
+    });
+  });
+});
