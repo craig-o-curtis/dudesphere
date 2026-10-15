@@ -1,34 +1,32 @@
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { AUTH_MESSAGES, initialAuthFormState, type AuthFormState } from "@/lib/actions/auth-state";
 
 import { SignUpForm } from "./SignUpForm";
 
-const { signUp, search } = vi.hoisted(() => ({ signUp: vi.fn(), search: { value: "" } }));
+const { signUp, search } = vi.hoisted(() => ({ signUp: vi.fn(), search: { query: "" } }));
 vi.mock("@/lib/actions/auth", () => ({ signUp }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(search.value) }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(search.query) }));
 
 function renderForm() {
-  return render(<SignUpForm />);
+  const user = userEvent.setup();
+  return { user, ...render(<SignUpForm />) };
 }
 
-function submit(form: HTMLFormElement) {
-  const set = (name: string, value: string) => {
-    form.querySelector<HTMLInputElement>(`[name="${name}"]`)!.value = value;
-  };
-  set("email", "e2e-walter@example.com");
-  set("displayName", "Walter");
-  set("username", "e2e-walter");
-  set("password", "not-a-real-password");
-  return act(async () => {
-    form.requestSubmit();
-  });
+// The required fields are filled by typing, as a member would.
+async function submit(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Email"), "e2e-walter@example.com");
+  await user.type(screen.getByLabelText("Display name"), "Walter");
+  await user.type(screen.getByLabelText("Username"), "e2e-walter");
+  await user.type(screen.getByLabelText("Password"), "not-a-real-password");
+  await user.click(screen.getByRole("button", { name: "Sign up" }));
 }
 
 beforeEach(() => {
   signUp.mockReset();
   signUp.mockResolvedValue(initialAuthFormState);
-  search.value = "";
+  search.query = "";
 });
 
 describe("SignUpForm", () => {
@@ -72,32 +70,34 @@ describe("SignUpForm", () => {
     expect(password).toHaveAttribute("maxlength", "128");
   });
 
-  it("refuses an email with no dot in its domain, as Nest does", () => {
-    renderForm();
+  it("refuses an email with no dot in its domain, as Nest does", async () => {
+    const { user } = renderForm();
     const email = screen.getByLabelText<HTMLInputElement>("Email");
-    email.value = "e2e-0123456789ab@example";
+    await user.type(email, "e2e-0123456789ab@example");
     expect(email.checkValidity()).toBe(false);
-    email.value = "e2e-0123456789ab@example.com";
+    await user.type(email, ".com");
     expect(email.checkValidity()).toBe(true);
   });
 
-  it("needs a top-level domain of two or more characters", () => {
-    renderForm();
+  it("needs a top-level domain of two or more characters", async () => {
+    const { user } = renderForm();
     const email = screen.getByLabelText<HTMLInputElement>("Email");
-    email.value = "a@b.c";
+    await user.type(email, "a@b.c");
     expect(email.checkValidity()).toBe(false);
-    email.value = "a@b.co";
+    await user.type(email, "o");
     expect(email.checkValidity()).toBe(true);
   });
 
-  it("refuses a display name of only spaces", () => {
-    renderForm();
+  it("refuses a display name of only spaces", async () => {
+    const { user } = renderForm();
     const name = screen.getByLabelText<HTMLInputElement>("Display name");
-    name.value = "    ";
+    await user.type(name, "    ");
     expect(name.checkValidity()).toBe(false);
-    name.value = " a ";
+    await user.clear(name);
+    await user.type(name, " a ");
     expect(name.checkValidity()).toBe(false);
-    name.value = "Walter S";
+    await user.clear(name);
+    await user.type(name, "Walter S");
     expect(name.checkValidity()).toBe(true);
   });
 
@@ -116,18 +116,19 @@ describe("SignUpForm", () => {
       ...initialAuthFormState,
       fieldErrors: { username: ["taken"], password: ["too short"] },
     } satisfies AuthFormState);
-    const { container } = renderForm();
+    const { user } = renderForm();
     expect(screen.getByLabelText("Email")).not.toHaveFocus();
-    await submit(container.querySelector("form")!);
+    await submit(user);
     expect(screen.getByLabelText("Username")).toHaveFocus();
   });
 
   it("leaves focus alone when only a form error comes back", async () => {
     signUp.mockResolvedValue({ ...initialAuthFormState, formError: AUTH_MESSAGES.badCredentials });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(document.body).toHaveFocus();
+    // Focus stays on the button the member pressed.
+    expect(screen.getByRole("button", { name: "Sign up" })).toHaveFocus();
   });
 
   it("links the hints with aria-describedby", () => {
@@ -154,7 +155,7 @@ describe("SignUpForm", () => {
   });
 
   it("carries next on the sign-in link and a hidden field when ?next= is set", () => {
-    search.value = "next=/abidings/new";
+    search.query = "next=/abidings/new";
     const { container } = renderForm();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
@@ -173,8 +174,8 @@ describe("SignUpForm", () => {
         password: ["password must be longer than or equal to 12 characters"],
       },
     } satisfies AuthFormState);
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     const expected: [string, string][] = [
       ["Email", "That email already has an account. Sign in instead."],
       ["Display name", AUTH_MESSAGES.displayNameTaken],
@@ -200,8 +201,8 @@ describe("SignUpForm", () => {
       formError: AUTH_MESSAGES.unavailable,
       values: { email: "e2e-walter@example.com", displayName: "Walter", username: "e2e-walter" },
     });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     expect(await screen.findByRole("alert")).toHaveTextContent(AUTH_MESSAGES.unavailable);
     expect(screen.getByLabelText("Email")).toHaveValue("e2e-walter@example.com");
     expect(screen.getByLabelText("Display name")).toHaveValue("Walter");
@@ -215,8 +216,8 @@ describe("SignUpForm", () => {
       formError: AUTH_MESSAGES.accountReady,
       accountReady: true,
     });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(AUTH_MESSAGES.accountReady);
     const link = alert.querySelector("a")!;
@@ -231,8 +232,8 @@ describe("SignUpForm", () => {
       accountReady: true,
       next: "/abidings/new",
     });
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     const alert = await screen.findByRole("alert");
     expect(alert.querySelector("a")).toHaveAttribute("href", "/login?next=%2Fabidings%2Fnew");
   });
@@ -240,8 +241,8 @@ describe("SignUpForm", () => {
   it("reads Signing up… while pending and the button stays focusable", async () => {
     let finish: (state: AuthFormState) => void = () => {};
     signUp.mockReturnValue(new Promise<AuthFormState>((resolve) => (finish = resolve)));
-    const { container } = renderForm();
-    await submit(container.querySelector("form")!);
+    const { user } = renderForm();
+    await submit(user);
     const button = screen.getByRole("button", { name: "Signing up…" });
     expect(button).not.toBeDisabled();
     expect(button).toHaveAttribute("aria-disabled", "true");

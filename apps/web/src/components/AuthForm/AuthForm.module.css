@@ -1,0 +1,4 @@
+/* The page column centres its items, so the form asks for the whole column. */
+.root {
+  inline-size: 100%;
+}

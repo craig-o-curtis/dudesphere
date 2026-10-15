@@ -2,6 +2,9 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { Notice } from "@/components/ui/Notice/Notice";
+import { Text } from "@/components/ui/Text/Text";
+import { ToggleGroup } from "@/components/ui/ToggleGroup/ToggleGroup";
 import { setTheme } from "@/lib/actions/theme";
 import { themeFromCookieHeader, type Theme } from "@/lib/theme";
 
@@ -162,31 +165,29 @@ export function ThemeToggle({ current, pending = false }: ThemeToggleProps) {
 
   return (
     <div className={styles.toggle} data-theme-toggle inert={pending}>
-      <fieldset className={styles.group}>
-        <legend className={styles.legend}>Theme</legend>
+      <ToggleGroup.Root legend="Theme">
         {CHOICES.map(({ theme, label }) => {
           const isPressed = shown === theme;
           return (
-            <button
+            <ToggleGroup.Item
               key={theme}
-              type="button"
               aria-pressed={isPressed}
               aria-disabled={disabled ? true : undefined}
               aria-describedby={isPressed ? hintId : undefined}
-              className={styles.button}
               onClick={() => void choose(theme)}
             >
               {label}
-            </button>
+            </ToggleGroup.Item>
           );
         })}
-      </fieldset>
-      <span id={hintId} className={styles.hint}>
+      </ToggleGroup.Root>
+      <Text as="span" id={hintId} tone="muted" size="xs" className={styles.hint}>
         Press the selected button again to use your device setting.
-      </span>
-      <output className={styles.status}>
+      </Text>
+      {/* Always present, with one line reserved, so a failure message shifts nothing. */}
+      <Notice size="xs" className={styles.status}>
         {failed ? "Could not save your theme. Try again." : ""}
-      </output>
+      </Notice>
     </div>
   );
 }
