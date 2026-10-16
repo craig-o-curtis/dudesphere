@@ -1,0 +1,5 @@
+/* Layout only: the wrapper is the grid item, and starts at the heading's left edge. */
+.noscript {
+  justify-self: stretch;
+  text-align: start;
+}
