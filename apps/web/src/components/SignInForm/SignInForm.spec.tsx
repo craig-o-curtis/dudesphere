@@ -7,7 +7,8 @@ import { SignInForm } from "./SignInForm";
 
 const { signIn } = vi.hoisted(() => ({ signIn: vi.fn() }));
 vi.mock("@/lib/actions/auth", () => ({ signIn }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("") }));
+let mockSearch = "";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mockSearch) }));
 
 function renderForm() {
   const user = userEvent.setup();
@@ -94,10 +95,66 @@ describe("SignInForm", () => {
     expect(screen.getByText(/New here\?/)).toBeInTheDocument();
   });
 
-  it("has the cookie note and no forgot-password link", () => {
+  it("has the cookie note", () => {
     renderForm();
     expect(screen.getByText(/Signing in sets two cookies/)).toBeInTheDocument();
-    expect(screen.queryByText(/forgot/i)).toBeNull();
+  });
+
+  it("says all fields are required", () => {
+    renderForm();
+    expect(screen.getByText("All fields are required.")).toBeVisible();
+  });
+
+  it("links to forgot password right after the password field, before the button", () => {
+    renderForm();
+    const link = screen.getByRole("link", { name: "Forgot password?" });
+    expect(link).toHaveAttribute("href", "/forgot-password");
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(screen.getByLabelText("Password").compareDocumentPosition(link) & follows).toBeTruthy();
+    expect(
+      link.compareDocumentPosition(screen.getByRole("button", { name: "Sign in" })) & follows,
+    ).toBeTruthy();
+  });
+
+  describe("the next path", () => {
+    afterEach(() => {
+      mockSearch = "";
+      window.history.replaceState(null, "", "/");
+    });
+
+    async function submitFormData() {
+      const { user } = renderForm();
+      await submit(user);
+      return signIn.mock.calls[0][1] as FormData;
+    }
+
+    it("puts a hidden next field in the form from ?next=", () => {
+      mockSearch = "next=/x";
+      const { container } = renderForm();
+      expect(container.querySelector('input[name="next"]')).toHaveValue("/x");
+    });
+
+    it("adds next from the address when the field is not in the form yet", async () => {
+      window.history.replaceState(null, "", "/login?next=%2Fabidings%2Fnew");
+      expect((await submitFormData()).get("next")).toBe("/abidings/new");
+    });
+
+    it("keeps the field's value over the address", async () => {
+      mockSearch = "next=/x";
+      window.history.replaceState(null, "", "/login?next=%2Fother");
+      expect((await submitFormData()).getAll("next")).toEqual(["/x"]);
+    });
+
+    it("adds nothing when there is no next anywhere", async () => {
+      expect((await submitFormData()).has("next")).toBe(false);
+    });
+
+    it("removes the added input, so it does not pile up", async () => {
+      window.history.replaceState(null, "", "/login?next=%2Fabidings%2Fnew");
+      const { container } = renderForm();
+      await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      await waitFor(() => expect(container.querySelector('input[name="next"]')).toBeNull());
+    });
   });
 
   it("posts a form action with no alert at first", () => {

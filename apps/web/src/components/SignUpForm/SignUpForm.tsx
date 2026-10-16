@@ -4,9 +4,12 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useActionState } from "react";
 
 import { AuthForm } from "@/components/AuthForm/AuthForm";
+import { carryNextPath } from "@/components/AuthForm/carryNextPath";
+import { NEW_PASSWORD_TITLE, NewPasswordField } from "@/components/AuthForm/NewPasswordField";
+import { NextPathSlot } from "@/components/AuthForm/NextPathSlot";
+import { CookieNote } from "@/components/CookieNote/CookieNote";
 import { EmailField } from "@/components/ui/EmailField/EmailField";
 import { InlineLink } from "@/components/ui/InlineLink/InlineLink";
-import { PasswordField } from "@/components/ui/PasswordField/PasswordField";
 import { TextField } from "@/components/ui/TextField/TextField";
 import { signUp } from "@/lib/actions/auth";
 import { initialAuthFormState, type AuthField } from "@/lib/actions/auth-state";
@@ -17,9 +20,6 @@ import {
   EMAIL_MAX_LENGTH,
   EMAIL_PATTERN,
   EMAIL_TITLE,
-  PASSWORD_MAX_LENGTH,
-  PASSWORD_MIN_LENGTH,
-  PASSWORD_PATTERN,
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
   USERNAME_PATTERN,
@@ -58,6 +58,8 @@ export function SignUpForm() {
         ) : null
       }
       pending={pending}
+      onSubmit={carryNextPath}
+      footer={<CookieNote />}
       submitLabel="Sign up"
       pendingLabel="Signing up…"
       alt={
@@ -110,17 +112,12 @@ export function SignUpForm() {
         title="No @ or spaces."
         defaultValue={state.values.username ?? ""}
       />
-      <PasswordField
+      <NewPasswordField
         name={"password" satisfies AuthField}
         label="Password"
-        hint="12 to 128 characters."
-        autoComplete="new-password"
-        required
-        minLength={PASSWORD_MIN_LENGTH}
-        maxLength={PASSWORD_MAX_LENGTH}
-        pattern={PASSWORD_PATTERN}
-        title="12 to 128 characters."
+        hint={NEW_PASSWORD_TITLE}
       />
+      <NextPathSlot />
     </AuthForm>
   );
 }
