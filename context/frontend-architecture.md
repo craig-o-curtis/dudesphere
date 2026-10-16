@@ -65,7 +65,7 @@ apps/web/src/
                                              the root layout holds the skip link, SiteHeader, <main> and SiteFooter
     (public)/page.tsx                        splash (FEED-12's planned place; home is app/page.tsx today)
     (public)/login, signup                   AUTH-7 (static shell, client form)
-    (public)/forgot-password, reset-password  AUTH-9
+    (public)/forgot-password, forgot-password/sent, reset-password  AUTH-9
     (app)/feed/page.tsx                      AUTH-8 placeholder (FEED-13 replaces the body and adds loading.tsx)
     (app)/@modal/(.)abidings/[id]/page.tsx   intercepting route: the thread as a modal
     (app)/abidings/[id]/page.tsx             the thread as a full page
@@ -81,7 +81,7 @@ apps/web/src/
   proxy.ts            AUTH-8: refreshes a session about to run out, before the page renders
   lib/api.ts          'server-only' typed fetch to Nest: apiFetch, ApiRequestError, maps 400 field errors
   lib/session.ts      'server-only', the Data Access Layer: cookie names and options, startSession,
-                      clearSessionCookies, readSessionCookies, verifySession, getMe, requireSession
+                      clearSessionCookies, endOldSignIn, readSessionCookies, verifySession, getMe, requireSession
   lib/access-token.ts readTokenExp and expiresWithin. Pure, no 'server-only', so proxy.ts can import it
   lib/refresh.ts      'server-only': refreshOnce, one refresh per refresh token (AUTH-8)
   lib/bff-paths.ts    bffTarget and the allow-list for /api/bff. Pure
@@ -214,6 +214,11 @@ to `/api/auth/refresh?next=<path and query>`. Everything else passes through:
   then `/login`, then refresh again.
 - **Any other method.** A Server Action POST passes through, and re-checks the
   session itself.
+- **The password pages.** `/forgot-password`, `/forgot-password/sent` and
+  `/reset-password` (exact paths, `NO_SESSION_PATHS` in `proxy.ts`) pass through
+  untouched (AUTH-9, SEC-1). They need no session. Without the skip, a live
+  session cookie with a dead refresh token would send the reset link through
+  refresh to `/login?next=...`, and the token would go with it.
 - **Prefetches.** Proxy cannot see the `next-router-prefetch` header: Next 16.4
   strips it from `request.headers`. So the matcher keeps prefetches out with
   `missing: [{ type: 'header', key: 'next-router-prefetch' }]`. That relies on
@@ -516,11 +521,14 @@ Public. What a visitor sees first. Story FEED-12.
 Stories AUTH-7, AUTH-9 and AUTH-52.
 
 - Route files: `app/(public)/login/page.tsx`, `signup/page.tsx`,
-  `forgot-password/page.tsx` and `reset-password/page.tsx`.
+  `forgot-password/page.tsx`, `forgot-password/sent/page.tsx` and
+  `reset-password/page.tsx`.
 - Strategy: a static shell with a client form. Each form is a client component
   (`SignInForm`, `SignUpForm`) that uses `useActionState` with a Server Action in
   `lib/actions/auth.ts`. The form sits in the static shell, never in a Suspense
-  hole, because a hole shows only its fallback with JavaScript off. `NextPathField`
+  hole, because a hole shows only its fallback with JavaScript off. The one
+  exception is `/reset-password`, whose form sits in the `ResetPasswordFromLink`
+  hole (see the accepted limit below). `NextPathField`
   reads `?next=` through `useSearchParams()` inside its own
   `<Suspense fallback={null}>` and writes a hidden `next` input. With JavaScript
   off there is no `next`, and sign-in lands on `/`. `reset-password` reads
@@ -553,18 +561,71 @@ Stories AUTH-7, AUTH-9 and AUTH-52.
 - The sign up form also asks for a display name, and says that it is the name
   other members see. It posts `profile: { displayName }`. The API answers 409 `DISPLAY_NAME_TAKEN` for a
   name in use, in any letter case, and the form shows that under the input.
-- AUTH-9 adds "Forgot password?" to the login page (AUTH-7 leaves it out, because
-  the page does not exist yet). The link opens `/forgot-password`: one email input.
-  Its Server Action calls `POST /auth/password/forgot`. The API answers 202
-  whether or not the address has an account, so the page always says "If that
-  address has an account, we sent it a link."
+- `AuthForm` is a plain shell. It always shows "All fields are required." above
+  the fields, and takes an optional `onSubmit` and `footer`. The `?next=` slot
+  (`NextPathSlot`, which holds `NextPathField` in its `<Suspense>`) and the
+  `carryNextPath` helper live beside it in `components/AuthForm/`. `SignInForm`
+  and `SignUpForm` compose them, and pass `CookieNote` as the footer.
+- AUTH-9 adds a "Forgot password?" link to `SignInForm`, right after the password
+  field. It opens `/forgot-password`: one email input. Its Server Action,
+  `requestReset` in `lib/actions/password.ts`, calls `POST /auth/password/forgot`.
+  The API answers 202 whether or not the address has an account. On 202 the action
+  redirects (303) to `/forgot-password/sent`, a separate page that always says "If
+  that address has an account, we sent it a link." A 400 shows under Email, a 429
+  shows how long to wait, and any other failure shows the "unavailable" message.
+  `apiFetch` returns `undefined` for an empty body on a 202 or a 204 only, so the
+  202 is not an error. An empty 200 or 201 still throws.
 - The emailed link opens `/reset-password?token=...`. Nest builds the link from
-  `FRONTEND_URL`, which now points at the web origin (3001 locally). The page
-  reads `token` from the URL and asks for the new password twice, and checks
-  the two match itself. Its Server Action calls `POST /auth/password/reset` with
-  `{ token, password }`; the API takes no `confirmPassword`. On 204 it sends the
-  visitor to `/login`. On 400 `RESET_TOKEN_INVALID` it says the link no longer
-  works and offers `/forgot-password` again.
+  `FRONTEND_URL`, which defaults to the web origin (`http://localhost:3001`), so no
+  env change was needed. The page has its `h1` in the static shell.
+  `ResetPasswordFromLink` reads `searchParams` inside `<Suspense>` and passes the
+  token to `ResetPasswordForm`. The form keeps the token in `useState`, sends it in
+  a hidden input, and strips it from the address bar with
+  `window.history.replaceState(null, "", "/reset-password")` after mount. It passes
+  no state on purpose: Next's patched `replaceState` ignores any state with `__NA`
+  and keeps the old URL, so the Server Action would post to `?token=...`. With no
+  state, Next copies its own fields and updates its URL. Next still copies its
+  router tree into `history.state`, and that tree names the page segment with the
+  query, so the token stays in `history.state` for that entry. Clearing it needs
+  the token kept out of the URL, for example with a Route Handler that sets a
+  cookie, which was not built. This is an accepted limit: only a script on that
+  page can read it, the token works once, and it dies after 30 minutes. When the token is refused, focus moves to the
+  invalid-link message (`LinkInvalid`, `tabIndex={-1}`), because the form that held
+  focus has gone. The new-password rules live in `NewPasswordField` (in
+  `components/AuthForm/`), used by sign-up and both reset fields. `next.config.ts` sets
+  `Referrer-Policy: strict-origin` on `/reset-password`. It never sends a path or
+  query, so the token does not leak in a `Referer` header. `no-referrer` is not
+  used, because a plain HTML form post would then send `Origin: null`, and
+  Next refuses the Server Action with a 500.
+- Accepted limit: with JavaScript off, the reset form never shows. It reads
+  `?token=`, so Cache Components forces it into a `<Suspense>` hole, and React's
+  streaming renderer sends each streamed hole as `<div hidden id="S:n">`, which
+  only its inline script reveals. The hole's fallback is in the static shell and has a `<noscript>`
+  line: "Turn on JavaScript to set a new password." The `/login?reset=1` notice
+  is hidden the same way, which is harmless. After a reset, `FocusedNotice` focuses
+  that notice so a screen reader reads it, but only when nothing else has focus,
+  so a member already typing in the sign-in form is not interrupted. Forgot still works with JavaScript
+  off. See "Known limit" in `rendering-strategies.md`.
+- `resetPassword` (also in `lib/actions/password.ts`) asks for the new password
+  twice and checks the two match first, with no call to Nest. Nest takes no
+  `confirmPassword`: the action posts `{ token, password }` to
+  `POST /auth/password/reset`. On 204 it ends this browser's own sign-in with
+  `endOldSignIn("Reset password")` (in `lib/session.ts`, shared with `signIn` and
+  `signUp`; it calls `POST /auth/sign-out` with the access token), then calls
+  `clearSessionCookies()`, then redirects to `/login?reset=1` (SEC-3). A reset
+  already ended every sign-in of the link's owner, so that sign-out may answer 401. `endOldSignIn` logs it by method, path and status, and the reset goes on.
+  Accepted limit, like AUTH-8's QA-4: if this browser's access token has expired
+  but its refresh token is live, the sign-out gets a 401, and that sign-in stays
+  live at Nest until it expires, up to 7 days. Its only cookie here is cleared, so
+  nothing can use it. A 400 about the token, or `RESET_TOKEN_INVALID`,
+  gives `linkInvalid`; other 400s show under New password. A missing token, or
+  `linkInvalid`, shows "That link no longer works." with a link to
+  `/forgot-password` and no fields.
+- `/login` shows `LoginNotice` in its own `<Suspense>`. Only `?reset=1` makes it
+  say "Password changed. Roll in with the new one."
+- The action state and copy are in `lib/actions/password-state.ts`. Helpers the
+  actions share are in `lib/actions/form-errors.ts`, which is `server-only` and
+  not a `'use server'` file.
 - A 429 from login or forgot password carries `Retry-After`, in seconds. The form
   shows how long to wait.
 - A 400 from Nest carries the field messages. `lib/api.ts` maps them to a
@@ -1062,7 +1123,8 @@ story and lands before the story that needs it.
 | Image upload                            | none yet  | later                         | today `imageUrl` and `profileImageUrl` are plain URLs                                                            |
 
 The web app takes a URL field for images until upload exists. `FRONTEND_URL` on
-Nest also moves to the web origin, so reset links open the Next page (AUTH-9).
+Nest already defaults to the web origin (`http://localhost:3001`), so reset links
+open the Next page (AUTH-9). An empty `FRONTEND_URL` falls back to that default.
 
 ## Costs accepted
 

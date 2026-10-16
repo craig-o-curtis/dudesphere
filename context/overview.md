@@ -339,6 +339,13 @@ A reset stores the hash, stamps `passwordChangedAt` and ends every sign-in
 of the member, in one transaction in `PasswordResetMailer.updatePassword`.
 So every refresh token and every access token they held stops.
 
+The web pages (AUTH-9) are `/forgot-password`, which asks for the email and
+redirects to `/forgot-password/sent`, and `/reset-password?token=...`, which
+asks for the new password twice. A successful reset redirects to
+`/login?reset=1`, which shows "Password changed. Roll in with the new one."
+`FRONTEND_URL` already defaults to `http://localhost:3001`, the web origin, so
+the emailed link opens the Next page.
+
 ### Rate limits
 
 | Route                               | Limit           | Counted per                                                   |

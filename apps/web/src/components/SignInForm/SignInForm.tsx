@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 
 import { AuthForm } from "@/components/AuthForm/AuthForm";
+import { carryNextPath } from "@/components/AuthForm/carryNextPath";
+import { NextPathSlot } from "@/components/AuthForm/NextPathSlot";
+import { CookieNote } from "@/components/CookieNote/CookieNote";
 import { EmailField } from "@/components/ui/EmailField/EmailField";
 import { InlineLink } from "@/components/ui/InlineLink/InlineLink";
 import { PasswordField } from "@/components/ui/PasswordField/PasswordField";
@@ -19,6 +22,8 @@ export function SignInForm() {
       fieldErrors={state.fieldErrors}
       formError={state.formError}
       pending={pending}
+      onSubmit={carryNextPath}
+      footer={<CookieNote />}
       submitLabel="Sign in"
       pendingLabel="Signing in…"
       alt={
@@ -46,6 +51,10 @@ export function SignInForm() {
         autoComplete="current-password"
         required
       />
+      <InlineLink href="/forgot-password" tone="accent">
+        Forgot password?
+      </InlineLink>
+      <NextPathSlot />
     </AuthForm>
   );
 }

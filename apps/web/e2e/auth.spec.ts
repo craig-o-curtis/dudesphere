@@ -633,11 +633,14 @@ test.describe("with JavaScript off", () => {
     await expect(eye).toHaveJSProperty("inert", true);
     await expect(page.getByRole("button", { name: "Show password" })).toHaveCount(0);
 
-    // Tab goes from the password straight to the submit button.
+    // Tab goes from the password to "Forgot password?", then to the submit
+    // button. The show-password button is not a stop in between.
     await page.getByLabel("Email").fill(dude.email);
     const password = page.getByLabel("Password", { exact: true });
     await password.fill(dude.password);
     await expect(password).toHaveAttribute("type", "password");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Forgot password?" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
 

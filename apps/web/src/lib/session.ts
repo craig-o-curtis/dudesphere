@@ -8,6 +8,7 @@ import { cache } from "react";
 import { expiresWithin, readTokenExp } from "@/lib/access-token";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { loginHref, safeNextPath } from "@/lib/next-path";
+import { logFailure } from "@/lib/route-responses";
 
 // The one place that knows the sign-in cookies: their names, options and
 // lifetimes. Server Actions and Route Handlers call it; page scripts never see
@@ -128,6 +129,36 @@ export async function clearSessionCookies(): Promise<void> {
 
   cookieStore.set(SESSION_COOKIE, "", cookieOptions(SESSION_COOKIE_PATH, 0));
   cookieStore.set(REFRESH_COOKIE, "", cookieOptions(REFRESH_COOKIE_PATH, 0));
+}
+
+/**
+ * Ends the sign-in already in this browser's cookies, if there is one, so
+ * new cookies, or none, don't hide a sign-in that Sign out could then never
+ * reach. signIn and signUp call it once the new pair is in hand (QA-2), and
+ * resetPassword once Nest has taken the new password (SEC-3). So a failed
+ * attempt never signs the member out of the sign-in they have.
+ *
+ * Only the access token can do this: the refresh cookie is sent to
+ * /api/auth paths only, so a Server Action never sees it. Nest ends the
+ * token's sign-in and its whole refresh family. Any answer from Nest that
+ * isn't a success, or none at all, is logged by method, path and status
+ * (logFailure, never a token), and the caller goes on: a 401 means there was
+ * nothing left to end. A plain Error, such as API_URL unset, is a bug in the
+ * app and is thrown again. It writes no cookie.
+ *
+ * It lives here, not in a 'use server' file, because every async function a
+ * 'use server' file exports becomes a Server Action anyone can call.
+ */
+export async function endOldSignIn(label: string): Promise<void> {
+  const { accessToken } = await readSessionCookies();
+  if (!accessToken) return;
+
+  try {
+    await apiFetch<void>("/auth/sign-out", { method: "POST", token: accessToken });
+  } catch (error) {
+    if (!(error instanceof ApiRequestError)) throw error;
+    logFailure(label, error);
+  }
 }
 
 /**

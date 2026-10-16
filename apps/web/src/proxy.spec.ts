@@ -325,6 +325,30 @@ describe("proxy", () => {
     expect(response.headers.get("location")).toBe(`${ORIGIN}/api/auth/refresh?next=%2F`);
   });
 
+  // SEC-1 (AUTH-9 review round 1). The forgot and reset pages need no
+  // session. A refresh that fails lands on /login?next=..., which would put
+  // the reset token in /login's address bar and history, and send a member
+  // who forgot their password to sign in.
+  describe("the pages that need no session", () => {
+    const expired = sessionCookie(tokenExpiringIn(-1));
+
+    it.each([
+      "/reset-password?token=made-up-reset-token-0123456789abcdefghijklmn",
+      "/reset-password",
+      "/forgot-password",
+      "/forgot-password/sent",
+    ])("lets GET %s through with an expired token", (path) => {
+      expectPassedThrough(proxy(requestFor(path, { cookie: expired })));
+    });
+
+    it.each(["/reset-password-help", "/forgot-password/sent/more", "/reset-passwords"])(
+      "still refreshes %s, which isn't one of them",
+      (path) => {
+        expect(passedThrough(proxy(requestFor(path, { cookie: expired })))).toBe(false);
+      },
+    );
+  });
+
   it("refreshes before /login renders, so a second sign-in can end the old one", () => {
     const response = proxy(
       requestFor("/login?next=%2Ffeed", { cookie: sessionCookie(tokenExpiringIn(-1)) }),

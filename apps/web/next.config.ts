@@ -23,6 +23,18 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
         ],
       },
+      // The reset page's URL holds the token from the email (AUTH-9).
+      // strict-origin sends only the origin in a Referer, never the path or
+      // query, so no link or resource on the page can carry the token to
+      // another site. Not no-referrer: under it, a plain HTML form post sends
+      // `Origin: null`, and Next refuses the Server Action because null
+      // doesn't match the host. strict-origin keeps Origin real for any
+      // plain post.
+      // Matching ignores the query string, so this covers "?token=".
+      {
+        source: "/reset-password",
+        headers: [{ key: "Referrer-Policy", value: "strict-origin" }],
+      },
     ];
   },
 };

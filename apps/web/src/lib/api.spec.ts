@@ -235,6 +235,66 @@ describe("apiFetch: a 2xx answer", () => {
     ).resolves.toBeUndefined();
   });
 
+  // Nest's POST /auth/password/forgot answers 202 with no body at all.
+  it("answers undefined on 202 with an empty body", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 202 }));
+
+    await expect(
+      apiFetch<void>("/auth/password/forgot", {
+        method: "POST",
+        body: { email: "e2e-0a1b2c3d4e5f@example.com" },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("answers the parsed JSON on a 202 with a body", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(202, { queued: true }));
+
+    await expect(apiFetch("/auth/password/forgot", { method: "POST", body: {} })).resolves.toEqual({
+      queued: true,
+    });
+  });
+
+  // QA-3 (AUTH-9 review round 1). A 200 route answers JSON, such as the pair
+  // from POST /auth/token/refresh. An empty one must stay an ApiRequestError
+  // the caller handles, not an undefined it reads `accessToken` from.
+  it.each([
+    ["an empty", ""],
+    ["a null", null],
+  ])(
+    "throws an ApiRequestError with the real status on a 200 with %s body",
+    async (_label, body) => {
+      fetchMock.mockResolvedValue(new Response(body, { status: 200 }));
+
+      const error = await caught(
+        apiFetch<TokenPair>("/auth/token/refresh", {
+          method: "POST",
+          body: { refreshToken: pair.refreshToken },
+        }),
+      );
+
+      expect(error).toBeInstanceOf(ApiRequestError);
+      expect(error.status).toBe(200);
+      expect(error.body).toBeNull();
+    },
+  );
+
+  it("throws an ApiRequestError on a 201 with an empty body", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 201 }));
+
+    const error = await caught(apiFetch<TokenPair>("/auth/token", { method: "POST", body: {} }));
+
+    expect(error.status).toBe(201);
+  });
+
+  it("throws an ApiRequestError on a 202 whose body isn't JSON", async () => {
+    fetchMock.mockResolvedValue(new Response("accepted", { status: 202 }));
+
+    const error = await caught(apiFetch("/auth/password/forgot", { method: "POST", body: {} }));
+
+    expect(error.status).toBe(202);
+  });
+
   it("throws an ApiRequestError with the real status when a 200 body isn't JSON", async () => {
     fetchMock.mockResolvedValue(new Response("<html>oops</html>", { status: 200 }));
 
