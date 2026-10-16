@@ -13,6 +13,7 @@ import { apiFetch, ApiRequestError } from "@/lib/api";
 
 import {
   clearSessionCookies,
+  endOldSignIn,
   getMe,
   hasDuplicateRefreshCookie,
   readSessionCookies,
@@ -296,6 +297,79 @@ describe("clearSessionCookies", () => {
 
     expect(cookieStore.get).not.toHaveBeenCalled();
     expect(cookieStore.set).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Used by signIn, signUp and resetPassword (QA-2 in AUTH-7, SEC-3 in AUTH-9).
+describe("endOldSignIn", () => {
+  const signOutCall = (token: string) => ["/auth/sign-out", { method: "POST", token }];
+
+  function signOutFailure(status: number): ApiRequestError {
+    return new ApiRequestError(`POST /auth/sign-out answered ${status}`, { status });
+  }
+
+  it("calls nothing when there is no session cookie", async () => {
+    await endOldSignIn("Reset password");
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("calls nothing with only the refresh cookie, which a Server Action never gets", async () => {
+    savedCookies({ "__Secure-refresh": pair.refreshToken });
+
+    await endOldSignIn("Reset password");
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("posts the cookie's token to /auth/sign-out, even expired, and logs nothing", async () => {
+    const warn = vi.spyOn(console, "warn");
+    const token = accessTokenWith(NOW - 1);
+    savedCookies({ "__Host-session": token });
+    vi.mocked(apiFetch).mockResolvedValue(undefined);
+
+    await endOldSignIn("Reset password");
+
+    expect(vi.mocked(apiFetch).mock.calls).toEqual([signOutCall(token)]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("writes no cookie, so the caller decides what to set or clear", async () => {
+    savedCookies({ "__Host-session": accessTokenWith(NOW + 600) });
+    vi.mocked(apiFetch).mockResolvedValue(undefined);
+
+    await endOldSignIn("Sign in");
+
+    expect(cookieStore.set).not.toHaveBeenCalled();
+    expect(cookieStore.delete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a 401, the sign-in already ended", 401],
+    ["a 429", 429],
+    ["a 500", 500],
+    ["no answer", 0],
+  ])("on %s, logs the method, path and status only, and resolves", async (_label, status) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const token = accessTokenWith(NOW + 600);
+    savedCookies({ "__Host-session": token });
+    vi.mocked(apiFetch).mockRejectedValue(signOutFailure(status));
+
+    await expect(endOldSignIn("Reset password")).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(`Reset password: POST /auth/sign-out answered ${status}.`);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(token);
+    warn.mockRestore();
+  });
+
+  it("throws again an error that isn't an ApiRequestError", async () => {
+    savedCookies({ "__Host-session": accessTokenWith(NOW + 600) });
+    const error = new Error("API_URL is not set.");
+    vi.mocked(apiFetch).mockRejectedValue(error);
+
+    await expect(endOldSignIn("Reset password")).rejects.toBe(error);
   });
 });
 

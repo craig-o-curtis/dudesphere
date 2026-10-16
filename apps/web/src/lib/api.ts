@@ -13,6 +13,10 @@ import type { ApiError, ApiErrorCode } from "@dudesphere/api-types";
  */
 export const API_TIMEOUT_MS = 15_000;
 
+// The 2xx statuses whose answer may have no body: 204 No Content, and 202
+// Accepted, which Nest's POST /auth/password/forgot sends with none.
+const EMPTY_BODY_STATUSES: ReadonlySet<number> = new Set([202, 204]);
+
 /** The form fields a Nest validation message can belong to. */
 export type ApiFieldName = "username" | "email" | "password" | "identifier" | "displayName";
 
@@ -83,11 +87,14 @@ export class ApiRequestError extends Error {
 
 /**
  * Calls the API at `${API_URL}${path}` and answers the parsed JSON, or
- * undefined on 204.
+ * undefined when a 204 or a 202 has an empty body. Nest's 202, from
+ * POST /auth/password/forgot, has none.
  *
- * Throws ApiRequestError when Nest answers outside 2xx, and when there is no
- * answer at all, with status 0. Throws a plain Error when API_URL is unset or
- * the path isn't a path, since both are bugs in the app, not answers.
+ * Throws ApiRequestError when Nest answers outside 2xx, when any other 2xx
+ * body isn't JSON (an empty 200 included, since its caller expects JSON), and
+ * when there is no answer at all, with status 0. Throws a plain Error when
+ * API_URL is unset or the path isn't a path, since both are bugs in the app,
+ * not answers.
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const url = `${apiBaseUrl()}${checkedPath(path)}`;
@@ -117,12 +124,15 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     });
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
+  // Only a 204 or a 202 may come with no body. Every other 2xx is a route
+  // that answers JSON, so an empty one throws below, as JSON.parse("") does,
+  // rather than handing its caller undefined.
   try {
-    return (await response.json()) as T;
+    const text = await response.text();
+    if (text === "" && EMPTY_BODY_STATUSES.has(response.status)) {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   } catch (cause) {
     throw new ApiRequestError(`${route} answered ${response.status} with a body that isn't JSON`, {
       status: response.status,
