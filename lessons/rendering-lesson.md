@@ -6,6 +6,7 @@ This file teaches how Next.js 16.4 makes a page's HTML in Dudesphere, and how lo
 
 - [AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies](#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies): A visitor can now sign up at `/signup` and sign in at `/login`, and both forms work with JavaScript off.
 - [AUTH-8: proxy.ts refresh and the Data Access Layer](#auth-8-proxyts-refresh-and-the-data-access-layer): A member's session now refreshes before a page renders, whether they load the page or click a link inside the app.
+- [AUTH-9: Forgot and reset password pages](#auth-9-forgot-and-reset-password-pages): A member who forgot their password can now ask for a link at `/forgot-password` and set a new password at `/reset-password`.
 
 ## AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies
 
@@ -186,3 +187,97 @@ export const verifySession = cache(async function verifySession(): Promise<Verif
 - [`cache`, React docs](https://react.dev/reference/react/cache)
 - [rendering-strategies.md: the `proxy.ts`, Route Handlers, Data Access Layer and Streaming dynamic rows](../context/epic-lebowski/rendering-strategies.md#the-strategies)
 - The auth side of this story: [auth-lesson.md, AUTH-8](./auth-lesson.md#auth-8-proxyts-refresh-and-the-data-access-layer)
+
+## AUTH-9: Forgot and reset password pages
+
+[#43](https://github.com/craig-o-curtis/dudesphere/issues/43) · 2026-10-16 · Static shell with a client form, and Server Actions
+
+**TLDR.** A member who forgot their password can now ask for a link at `/forgot-password` and set a new password at `/reset-password`. The idea: a form that needs a value from the URL before it can render must sit in a `<Suspense>` hole, a part of the page that waits for the request, and a hole shows only after React's inline script swaps it in. So the reset form needs JavaScript, and the hole's fallback in the static shell says so in a `<noscript>` line. The forgot form reads nothing from the request, so it stays in the shell and works with JavaScript off.
+
+### How it works here
+
+A member asks for a link, opens it from the email and sets a new password.
+
+1. `apps/web/src/app/(public)/forgot-password/page.tsx` → `ForgotPasswordPage`: synchronous, with no request-time reads, so `ForgotPasswordForm` is in the static shell. This is the AUTH-7 pattern.
+2. `apps/web/src/lib/actions/password.ts` → `requestReset`: on Nest's 202 it calls `redirect("/forgot-password/sent")`. With JavaScript off that is a 303. Success never returns state, so it never hits the blank page that a state-returning Server Action gets with JavaScript off (AUTH-7, Watch out). `apps/web/src/app/(public)/forgot-password/sent/page.tsx` → `ForgotPasswordSentPage` shows the same copy whether or not the address has an account.
+3. The member opens `/reset-password?token=…`. `apps/web/src/proxy.ts` → `proxy` finds the path in `NO_SESSION_PATHS` and passes it through. A refresh redirect there could land on `/login?next=…`, with the token inside `next`.
+4. `apps/web/next.config.ts` → `headers()` adds `Referrer-Policy: strict-origin` to the response for `/reset-password`. Path matching ignores the query, so `?token=` is covered.
+5. `apps/web/src/app/(public)/reset-password/page.tsx` → `ResetPasswordPage`: synchronous. The heading and the `<Suspense>` fallback go in the static shell. It passes its `searchParams` promise, unread, to the hole.
+6. `apps/web/src/components/ResetPasswordForm/ResetPasswordFromLink.tsx` → `ResetPasswordFromLink`: an async Server Component that awaits `searchParams` and hands the token to the form, or `null` when it is missing, empty or repeated. React streams its HTML inside `<div hidden id="S:0">`, with an inline script that swaps it in for the fallback. That script runs before hydration, but it is still JavaScript.
+7. `apps/web/src/components/ResetPasswordForm/ResetPasswordForm.tsx` → `ResetPasswordForm`: a `'use client'` component. With no token it renders `LinkInvalid` ("That link no longer works.") and no form. Otherwise it keeps the token in `useState`, puts it in a hidden `token` input, and after mount calls `window.history.replaceState(null, "", PAGE_PATH)` to take it out of the address bar.
+8. `password.ts` → `resetPassword`: if "New password" and "Same again" differ, it returns state and makes no Nest call. On Nest's 204 it calls `endOldSignIn`, then `clearSessionCookies()`, then `redirect("/login?reset=1")`.
+9. `apps/web/src/app/(public)/login/page.tsx` → `LoginPage`: `LoginNotice` reads `?reset=` in its own `<Suspense fallback={null}>`, and only `"1"` shows "Password changed. Roll in with the new one." The sign-in form stays in the shell. With JavaScript off the notice stays hidden, and sign-in still works.
+
+### Look-alikes
+
+|                        | `/forgot-password`                                    | `/reset-password`                                                    |
+| ---------------------- | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| Reads from the request | Nothing                                               | `?token=`                                                            |
+| Where the form is      | In the static shell                                   | In a `<Suspense>` hole                                               |
+| With JavaScript off    | The form shows and posts. Success is a 303 to `/sent` | Only the fallback shows: "Turn on JavaScript to set a new password." |
+| In this app            | `ForgotPasswordPage` → `ForgotPasswordForm`           | `ResetPasswordPage` → `ResetPasswordFromLink` → `ResetPasswordForm`  |
+
+Both routes show as `◐` in `next build`, not `○`, because the root layout has a dynamic hole of its own.
+
+### The code
+
+```tsx
+// NEW FILE: apps/web/src/app/(public)/reset-password/page.tsx
+export default function ResetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<ResetPasswordParams>;
+}) {
+  return (
+    <PageShell.Root width="form" gap="l">
+      <Heading level={1} size="3xl">
+        Reset password
+      </Heading>
+      <Suspense
+        fallback={
+          // Streamed holes need a script to show. With JavaScript off the
+          // fallback is all a visitor sees, so say what is missing.
+          // The grid item is the wrapper, so the class goes on it.
+          <div className={styles.noscript}>
+            <noscript>
+              <Text>Turn on JavaScript to set a new password.</Text>
+            </noscript>
+          </div>
+        }
+      >
+        <ResetPasswordFromLink searchParams={searchParams} />
+      </Suspense>
+    </PageShell.Root>
+  );
+}
+```
+
+```tsx
+// NEW FILE: apps/web/src/components/ResetPasswordForm/ResetPasswordFromLink.tsx
+export async function ResetPasswordFromLink({
+  searchParams,
+}: {
+  searchParams: Promise<ResetPasswordParams>;
+}) {
+  const { token } = await searchParams;
+  return <ResetPasswordForm token={typeof token === "string" && token !== "" ? token : null} />;
+}
+```
+
+The page never awaits `searchParams`, so it has no request-time read and stays in the shell. Only `ResetPasswordFromLink` waits. The `<noscript>` line sits in the fallback because the fallback is the one part of a hole that is in the shell. With JavaScript on, the browser ignores `<noscript>`, so the fallback is empty for the moment before the form swaps in.
+
+### Watch out
+
+- **Why not leave the form in the shell and put only the token in a hole**, as `NextPathField` does for `next`? Because the token decides whether there is a form at all. With no token the page shows "That link no longer works." and no form, so the whole choice has to wait for the request. AUTH-7's rule still holds: a form that must work with JavaScript off belongs in the shell. This form can't, so the story accepts that it needs JavaScript and says so.
+- **Pass `null` to `replaceState`.** Next patches `window.history.replaceState` so its router follows the new URL. In `node_modules/next/dist/client/components/app-router.js`, a state object that carries Next's `__NA` flag makes the patch skip that update. The first version passed `window.history.state`, which carries `__NA`, so the router kept `?token=…` and the Server Action posted to that URL (SEC-2). The Next docs' own example passes `null`. Even now, Next's router tree in `history.state` still names the URL with the token for that entry, which the story accepted.
+- **`strict-origin`, not `no-referrer`.** Both keep the path and query, and so the token, out of the `Referer` header. But under `no-referrer` the browser sends `Origin: null` with a plain HTML form post (MDN, `Referrer-Policy`), and Next refuses a Server Action whose `Origin` doesn't match the `Host`. The e2e run found it as a 500. `strict-origin` sends only the origin, so the check passes.
+
+### Read more
+
+- [Streaming: the HTML stream, and `<div hidden id="S:0">`](https://nextjs.org/docs/app/guides/streaming#the-html-stream)
+- [Caching: working with runtime APIs (`searchParams` goes in `<Suspense>`)](https://nextjs.org/docs/app/getting-started/caching#working-with-runtime-apis)
+- [Linking and navigating: the native History API](https://nextjs.org/docs/app/getting-started/linking-and-navigating#native-history-api)
+- [`headers`: `Referrer-Policy`](https://nextjs.org/docs/app/api-reference/config/next-config-js/headers#referrer-policy)
+- [Server Actions: security and the CSRF check](https://nextjs.org/docs/app/guides/server-actions#security)
+- [`Referrer-Policy` and the `Origin` header, MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy)
+- [rendering-strategies.md: Known limit, a form in a Suspense hole never shows with JavaScript off](../context/epic-lebowski/rendering-strategies.md#known-limit-a-form-in-a-suspense-hole-never-shows-with-javascript-off)

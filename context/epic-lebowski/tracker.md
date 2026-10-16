@@ -55,8 +55,8 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
    `proxy.ts` redirect-to-refresh, `lib/session.ts` with `verifySession`, `/api/bff`
 
 10. **AUTH-9** · [Forgot and reset password pages](issues/AUTH-9.md)\
-    ⬜ Todo · [#43][43] · Blocked by: none\
-    `/forgot-password`, `/reset-password`, `FRONTEND_URL` on the web origin
+    ✅ Done · [#43][43] · Blocked by: none\
+    `/forgot-password`, `/reset-password`, a "required" cue on every auth form
 
 11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
     ⬜ Todo · [#44][44] · Blocked by: none\
