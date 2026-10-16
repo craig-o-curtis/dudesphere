@@ -15,6 +15,7 @@ import { safeNextPath } from "@/lib/next-path";
 // lib/session.ts).
 //
 // The rule, for a GET only:
+// - A page that needs no session (NO_SESSION_PATHS): pass through.
 // - No session cookie, or an empty one: an anonymous visitor. Pass through.
 //   Redirecting them would loop through refresh and /login.
 // - A cookie whose token is outside the refresh window: pass through.
@@ -56,6 +57,23 @@ const SESSION_COOKIE = "__Host-session";
 const MAX_REFRESH_WINDOW_SECONDS = 60;
 
 const REFRESH_PATH = "/api/auth/refresh";
+
+// The forgot and reset pages work the same signed in or out, so proxy never
+// refreshes on them (SEC-1, AUTH-9 review round 1). A refresh that failed
+// would land on /login?next=..., and for /reset-password that `next` holds
+// the token from the email: it would sit in /login's address bar, history
+// and hidden `next` field. And a member who forgot their password can't
+// sign in. The site header still reads the session through verifySession,
+// which treats an expired token as signed out.
+//
+// Exact paths, so "/reset-password-help" is still refreshed. Next's
+// trailing-slash redirect runs before proxy, so "/reset-password/" never
+// reaches it. nextUrl.pathname carries no query, so "?token=" doesn't matter.
+const NO_SESSION_PATHS: ReadonlySet<string> = new Set([
+  "/forgot-password",
+  "/forgot-password/sent",
+  "/reset-password",
+]);
 
 /**
  * How many seconds before `exp` to refresh: min(60, floor((exp - iat) / 2)),
@@ -101,7 +119,7 @@ function nextPathFor(pathname: string, search: string): string | null {
  * and lets every other request through.
  */
 export function proxy(request: NextRequest): NextResponse {
-  if (request.method !== "GET") {
+  if (request.method !== "GET" || NO_SESSION_PATHS.has(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
 
