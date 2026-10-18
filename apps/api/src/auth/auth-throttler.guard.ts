@@ -1,8 +1,13 @@
+import { timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
+
 import { ExecutionContext, HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import type { ConfigType } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import {
   InjectThrottlerOptions,
   InjectThrottlerStorage,
+  normalizeIp,
   ThrottlerGuard,
   type ThrottlerLimitDetail,
   type ThrottlerModuleOptions,
@@ -10,6 +15,7 @@ import {
   type ThrottlerStorage,
 } from "@nestjs/throttler";
 
+import throttleConfig from "../config/throttle.config.js";
 import { ErrorCode } from "../shared/error-codes.js";
 
 /**
@@ -22,7 +28,7 @@ export const IP_THROTTLER = "ip";
 /**
  * Per IP everywhere; per account and IP where the request body names an
  * account. The docs' AuthThrottlerGuard, from "Rate-limit sign-in" on
- * https://docs.nestjs.com/security/authentication, with three changes:
+ * https://docs.nestjs.com/security/authentication, with four changes:
  *
  * - The account is `identifier` at POST /auth/token, where the docs sign in
  *   with `email`, and `email` everywhere else.
@@ -35,6 +41,10 @@ export const IP_THROTTLER = "ip";
  * - A refused request gets a 429 with errorCode RATE_LIMITED, like every
  *   other error here, and a Retry-After header saying how many seconds to
  *   wait.
+ * - The IP address is the visitor's when the web app vouches for it. Behind
+ *   the web app every request comes from the web server's address, so one
+ *   visitor could use up everyone's limit. The web app sends the visitor's
+ *   IP in X-Client-Ip, beside X-Bff-Secret. See clientIp below.
  *
  * Registered in AppModule, so it runs before the authentication guard, and
  * guessed bearer tokens count against the limit too.
@@ -48,6 +58,8 @@ export class AuthThrottlerGuard extends ThrottlerGuard {
     @InjectThrottlerOptions() options: ThrottlerModuleOptions,
     @InjectThrottlerStorage() storageService: ThrottlerStorage,
     @Inject(Reflector) reflector: Reflector,
+    @Inject(throttleConfig.KEY)
+    private readonly throttle: ConfigType<typeof throttleConfig>,
   ) {
     super(options, storageService, reflector);
   }
@@ -67,16 +79,29 @@ export class AuthThrottlerGuard extends ThrottlerGuard {
     }
     return super.handleRequest({
       ...requestProps,
-      getTracker: (request: Record<string, any>) => super.getTracker(request),
+      getTracker: (request: Record<string, any>) => this.clientIp(request),
     });
   }
 
   // The docs' tracker: the account and the IP address together where the
   // body names an account, and the IP address alone everywhere else.
   protected override async getTracker(req: Record<string, any>): Promise<string> {
-    const ip = await super.getTracker(req);
+    const ip = await this.clientIp(req);
     const account = accountNamedIn(req.body);
     return account ? `${account}|${ip}` : ip;
+  }
+
+  // The IP address both counts go by. The visitor's, from X-Client-Ip, when
+  // X-Bff-Secret matches BFF_SECRET and the header holds an IP address.
+  // Otherwise the caller's own, as ThrottlerGuard reads it. A wrong or
+  // missing secret falls back without an error, so a browser that forges
+  // X-Client-Ip is counted by its own address.
+  //
+  // The visitor's IP goes through normalizeIp, as the caller's own does in
+  // ThrottlerGuard, so an IPv6 address is counted by its /64 either way.
+  private async clientIp(req: Record<string, any>): Promise<string> {
+    const vouchedFor = vouchedForIp(req.headers, this.throttle.bffSecret);
+    return vouchedFor ? normalizeIp(vouchedFor, this.ipv6SubnetPrefix) : super.getTracker(req);
   }
 
   protected override throwThrottlingException(
@@ -99,6 +124,31 @@ export class AuthThrottlerGuard extends ThrottlerGuard {
       ),
     );
   }
+}
+
+// The IP address in X-Client-Ip, when X-Bff-Secret matches the secret and
+// the header holds an IP address and nothing else. Otherwise undefined.
+// The check on the address means even a leaked secret cannot put "|" or
+// other text into a count's key.
+function vouchedForIp(headers: unknown, bffSecret: string | undefined): string | undefined {
+  if (!bffSecret || typeof headers !== "object" || headers === null) {
+    return undefined;
+  }
+  const { "x-bff-secret": sent, "x-client-ip": clientIp } = headers as Record<string, unknown>;
+  if (typeof sent !== "string" || !sameSecret(sent, bffSecret)) {
+    return undefined;
+  }
+  return typeof clientIp === "string" && isIP(clientIp) !== 0 ? clientIp : undefined;
+}
+
+// Compares in constant time, so how long the answer takes says nothing
+// about how much of the secret was right. timingSafeEqual throws on two
+// buffers of different lengths, so those are refused first. The lengths
+// are compared in bytes: "é" is one character but two bytes.
+function sameSecret(sent: string, secret: string): boolean {
+  const sentBytes = Buffer.from(sent);
+  const secretBytes = Buffer.from(secret);
+  return sentBytes.length === secretBytes.length && timingSafeEqual(sentBytes, secretBytes);
 }
 
 // The account the body names, folded the way the database compares it:

@@ -4,6 +4,10 @@ import type { ThrottlerStorage } from "@nestjs/throttler";
 
 import { AuthThrottlerGuard, IP_THROTTLER } from "./auth-throttler.guard.js";
 
+// The guard's rate-limit settings, as throttle.config.ts gives them. No
+// BFF_SECRET, so X-Client-Ip is never trusted.
+const noSecret = { enabled: true, bffSecret: undefined };
+
 // getTracker is protected, because only ThrottlerGuard calls it. This opens
 // it to the spec and adds nothing.
 class GuardUnderTest extends AuthThrottlerGuard {
@@ -26,16 +30,24 @@ describe("AuthThrottlerGuard", () => {
     [{ ttl: 60_000, limit: 100 }],
     storage as unknown as ThrottlerStorage,
     new Reflector(),
+    noSecret,
   );
   const response = { header: vi.fn() };
 
   const ip = "203.0.113.7";
+  // The address the BFF calls from: the web server's, not the visitor's.
+  const webServer = "192.0.2.1";
+  // Made up for this spec. 36 characters, so long enough for env.validate.ts.
+  const bffSecret = "made-up-bff-secret-for-the-unit-spec";
 
-  function contextFor(body: unknown): ExecutionContext {
+  function contextFor(body: unknown, request: Record<string, unknown> = { ip }): ExecutionContext {
     return {
       getHandler: () => Routes.prototype.anyRoute,
       getClass: () => Routes,
-      switchToHttp: () => ({ getRequest: () => ({ ip, body }), getResponse: () => response }),
+      switchToHttp: () => ({
+        getRequest: () => ({ ...request, body }),
+        getResponse: () => response,
+      }),
     } as unknown as ExecutionContext;
   }
 
@@ -166,6 +178,7 @@ describe("AuthThrottlerGuard", () => {
       ],
       storage as unknown as ThrottlerStorage,
       new Reflector(),
+      { enabled: true, bffSecret },
     );
 
     beforeAll(async () => {
@@ -173,8 +186,11 @@ describe("AuthThrottlerGuard", () => {
     });
 
     // Each count the store was asked for, as [key, count name].
-    async function countsFor(body: unknown): Promise<[string, string][]> {
-      await expect(twoCounts.canActivate(contextFor(body))).resolves.toBe(true);
+    async function countsFor(
+      body: unknown,
+      request?: Record<string, unknown>,
+    ): Promise<[string, string][]> {
+      await expect(twoCounts.canActivate(contextFor(body, request))).resolves.toBe(true);
       const calls = (storage.increment.mock.calls as unknown[][]).map(
         ([key, , , , name]) => [key, name] as [string, string],
       );
@@ -204,6 +220,122 @@ describe("AuthThrottlerGuard", () => {
       const counts = await countsFor({ message: "hi" });
 
       expect(counts.map(([, name]) => name)).toEqual(["default"]);
+    });
+
+    // Behind the BFF every request comes from the web server's address. If
+    // the IP count used that address, one visitor could use up everyone's.
+    it("counts the visitor's IP from the BFF, not the web server's", async () => {
+      const body = { email: "walter@example.com" };
+      const throughTheBff = await countsFor(body, {
+        ip: webServer,
+        headers: { "x-bff-secret": bffSecret, "x-client-ip": ip },
+      });
+      const fromTheVisitor = await countsFor(body, { ip });
+
+      expect(throughTheBff[1][0]).toBe(fromTheVisitor[1][0]);
+    });
+
+    it("keeps two visitors behind one web server apart", async () => {
+      const body = { email: "walter@example.com" };
+      const walter = await countsFor(body, {
+        ip: webServer,
+        headers: { "x-bff-secret": bffSecret, "x-client-ip": ip },
+      });
+      const donny = await countsFor(body, {
+        ip: webServer,
+        headers: { "x-bff-secret": bffSecret, "x-client-ip": "198.51.100.2" },
+      });
+
+      expect(donny[1][0]).not.toBe(walter[1][0]);
+    });
+  });
+
+  // The web app sends X-Bff-Secret and X-Client-Ip on every call. The guard
+  // trusts the IP only when the secret matches BFF_SECRET, and only when it
+  // is an IP address. Otherwise it counts the caller's own address.
+  describe("behind the BFF", () => {
+    const behindTheBff = new GuardUnderTest(
+      [{ ttl: 60_000, limit: 100 }],
+      storage as unknown as ThrottlerStorage,
+      new Reflector(),
+      { enabled: true, bffSecret },
+    );
+
+    function throughTheBff(headers: Record<string, unknown>, body?: unknown): Promise<string> {
+      return behindTheBff.trackerFor({ ip: webServer, headers, body });
+    }
+
+    it("is the visitor's IP when the secret matches", async () => {
+      await expect(throughTheBff({ "x-bff-secret": bffSecret, "x-client-ip": ip })).resolves.toBe(
+        ip,
+      );
+    });
+
+    it("is the account and the visitor's IP when the body names an account", async () => {
+      await expect(
+        throughTheBff({ "x-bff-secret": bffSecret, "x-client-ip": ip }, { identifier: "walter" }),
+      ).resolves.toBe(`walter|${ip}`);
+    });
+
+    // Even with the secret, the header can't put other text in the key.
+    it.each(["not-an-ip", `${ip}|donny`, `${ip} `, "", ["203.0.113.7"]])(
+      "is the caller's own address when X-Client-Ip is %j",
+      async (clientIp) => {
+        await expect(
+          throughTheBff({ "x-bff-secret": bffSecret, "x-client-ip": clientIp }),
+        ).resolves.toBe(webServer);
+      },
+    );
+
+    it("is the caller's own address when the secret is wrong", async () => {
+      const wrong = `${bffSecret.slice(0, -1)}X`;
+
+      await expect(throughTheBff({ "x-bff-secret": wrong, "x-client-ip": ip })).resolves.toBe(
+        webServer,
+      );
+    });
+
+    it("is the caller's own address when the secret is missing", async () => {
+      await expect(throughTheBff({ "x-client-ip": ip })).resolves.toBe(webServer);
+    });
+
+    // timingSafeEqual throws on two buffers of different lengths. A short or
+    // long guess must fall back, not answer 500.
+    it.each([
+      ["shorter", bffSecret.slice(0, -1)],
+      ["longer", `${bffSecret}X`],
+      ["the same length in characters, but not in bytes", `${bffSecret.slice(0, -1)}é`],
+    ])("is the caller's own address when the secret is %s", async (_what, secret) => {
+      await expect(throughTheBff({ "x-bff-secret": secret, "x-client-ip": ip })).resolves.toBe(
+        webServer,
+      );
+    });
+
+    // No BFF_SECRET means the header is never trusted, whatever is sent.
+    it("is the caller's own address when BFF_SECRET is not set", async () => {
+      await expect(
+        guard.trackerFor({
+          ip: webServer,
+          headers: { "x-bff-secret": bffSecret, "x-client-ip": ip },
+        }),
+      ).resolves.toBe(webServer);
+    });
+
+    // The guard's own tracker groups an IPv6 address by its /64, because one
+    // home or phone often has a whole /64. The visitor's IP is grouped the
+    // same way, so a visitor can't get a fresh count from each address in it.
+    it("groups a visitor's IPv6 address by its /64, as for the caller's own", async () => {
+      const visitor = await throughTheBff({
+        "x-bff-secret": bffSecret,
+        "x-client-ip": "2001:db8:1:2:3:4:5:6",
+      });
+      const sameNetwork = await throughTheBff({
+        "x-bff-secret": bffSecret,
+        "x-client-ip": "2001:db8:1:2:aaaa:bbbb:cccc:dddd",
+      });
+
+      expect(visitor).toBe("2001:db8:1:2::/64");
+      expect(sameNetwork).toBe(visitor);
     });
   });
 
