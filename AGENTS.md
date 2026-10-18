@@ -33,10 +33,12 @@ Epic Lebowski is the work in progress. Start at `./context/epic-lebowski/index.m
 
 ## Skills
 
+- plan-story: `.agents/skills/plan-story`. `/plan-story` plans one story with you and writes its handoff
+- implement: `.agents/skills/implement`. `/implement` builds a planned story to an open PR
 - nestjs-best-practices: `.agents/skills/nestjs-best-practices`
 - plain-english: `.agents/skills/plain-english`
 - code-reviewer-nestjs: `.agents/skills/code-reviewer-nestjs`
-- grilling: `.agents/skills/grilling`. The interview that `grill-me` and the planner use
+- grilling: `.agents/skills/grilling`. The interview that `grill-me` and `/plan-story` use
 - domain-modeling: `.agents/skills/domain-modeling`. ADRs and the glossary, for `grill-with-docs`
 
 For `apps/web` (see `./context/suggested-frontend-skills.md`):
@@ -57,31 +59,31 @@ For `apps/web` (see `./context/suggested-frontend-skills.md`):
 
 ## Agents
 
-Ten agents build the epic one story at a time. Each one lives in `.agents/<name>.md`, with a link in `.claude/agents/` so Claude Code loads it.
+A story is two skills, run in any Claude chat in the story's worktree, in the terminal or in VS Code:
+
+```text
+worktree branch --github <issue>   ← once, makes the story's worktree
+/plan-story                        ← grills you, then writes context/epic-lebowski/handoffs/<ID>.md
+/clear
+/implement                         ← refuses to start until the handoff is planned; builds to an open PR
+```
+
+The chat that runs `/implement` starts every agent itself. No agent starts another (`.claude/settings.json` sets the subagent depth to 1). If a chat stops partway, run `/implement` again in a new chat: it resumes from the handoff's Tasks and Log. One story per chat.
+
+Eight agents do the work. Each one lives in `.agents/<name>.md`, with a link in `.claude/agents/` so Claude Code loads it.
 
 | Agent                    | Does                                                                                                             |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `planner`                | Reads the issue, spec and tracker, finds gaps, grills you, and writes the handoff                                |
-| `driver`                 | Sends each task in the handoff to a builder, runs the three reviewers, then hands off to pr-finalizer            |
 | `fullstack-hooker-upper` | Builds `apps/api`, `packages/api-types` and the BFF seam in `apps/web`                                           |
 | `fe-tdd-dev`             | Builds pages and components in `apps/web`, test first                                                            |
 | `3d-animator`            | Builds all motion: CSS, `motion/react`, View Transitions and React Three Fiber                                   |
 | `qa-skeptic`             | Reviews standards and spec, and tries to break the work                                                          |
 | `owasp-hacker`           | Reviews security against OWASP Top 10, on the local servers only                                                 |
 | `a11y-expert`            | Reviews WCAG 2.2 AA, the keyboard and reduced motion                                                             |
-| `pr-finalizer`           | Runs every check, commits in chunks, writes the PR, and asks before the push                                     |
 | `mentor`                 | Writes the TLDR lesson a story teaches into `lessons/`, for stories labelled `rendering-lesson` or `auth-lesson` |
+| `pr-finalizer`           | Runs every check, commits in chunks and writes the PR. `/implement` asks you before the push                     |
 
-The flow for one story:
-
-1. `worktree branch --github <issue>` makes the story's worktree.
-2. `claude --agent planner` in that worktree plans the story with you. It writes `context/epic-lebowski/handoffs/<ID>.md`.
-3. `claude --agent driver` in the same worktree builds, reviews and finalizes from the handoff.
-4. To finish a story by hand, run `claude --agent pr-finalizer` on its own.
-
-You don't have to launch the agents yourself. In an ordinary Claude session in the worktree, you can ask for the planner subagent. The session passes its questions on to you, and once you approve the plan, it drives the build itself by following `.agents/driver.md`. Don't run the driver as a subagent. A subagent can't start the builders or ask you questions.
-
-The builders and reviewers never commit. pr-finalizer makes every commit, and asks before every push.
+The builders and reviewers never commit. pr-finalizer makes every commit, and pushes only after your yes to that one push.
 
 ## Git
 

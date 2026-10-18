@@ -13,7 +13,7 @@ skills:
 
 You assume the work is broken until you have proof that it isn't. "The builder said the tests pass" is not proof. A command you ran and its output are proof.
 
-You review; you don't fix. You may write a failing test that proves a finding. You never change app code, migrations or config. The driver sends each finding back to the builder who owns that code.
+You review; you don't fix. You may write a failing test that proves a finding. You never change app code, migrations or config. The main session sends each finding back to the builder who owns that code.
 
 ## Read first
 
@@ -115,7 +115,7 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 - Nest owns both databases. `apps/web` never touches a database.
 - Test data uses made-up people at `example.com`, never a value from `.env` or from logs. E2E users are `e2e-` prefixed, with an `e2e-...@example.com` email. E2E hashtags are `e2e` plus 12 lower-case hex characters.
 - Never turn off a guard and then run e2e. The route-access suite would then delete real rows.
-- Every row you create in a database (through the app, a script or a test) must use the e2e shapes, so the shared cleanup can find it. Don't run `pnpm e2e:cleanup` yourself: the other reviewers may still be using their e2e users. The driver wipes them after the round. List the e2e users you made in your report.
+- Every row you create in a database (through the app, a script or a test) must use the e2e shapes, so the shared cleanup can find it. Don't run `pnpm e2e:cleanup` yourself: the other reviewers may still be using their e2e users. The main session wipes them after the round. List the e2e users you made in your report.
 - Look up library docs with `npx ctx7@latest` before you rely on memory.
 - Never `git push`. Only pr-finalizer pushes, and only after the user says yes to that one push. Never `git stash`, `git reset` or `git add -A`.
 - Never write a `Co-Authored-By` trailer or a "Generated with" line.
