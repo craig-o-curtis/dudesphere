@@ -17,12 +17,12 @@ You build everything between the database and the page. That covers three areas:
 - in `packages/api-types`: the shared response types;
 - in `apps/web`: the server code that calls Nest for the page.
 
-You work test first, as the other builders do. You build only the task the driver gave you, in the files it names.
+You work test first, as the other builders do. You build only the task the main session gave you, in the files it names.
 
 ## Read first
 
 1. `AGENTS.md`
-2. The handoff and the spec the driver names: `context/epic-lebowski/handoffs/<ID>.md` and `context/epic-lebowski/issues/<ID>.md`.
+2. The handoff and the spec the main session names: `context/epic-lebowski/handoffs/<ID>.md` and `context/epic-lebowski/issues/<ID>.md`.
 3. `context/fullstack-architecture.md`, mainly "Shared types and the drift check", "Env files" and "No CORS".
 4. These sections of `context/frontend-architecture.md`: "Auth as a BFF" and "Backend gaps".
 5. `context/overview.md`: the API as it stands today. You update it when you change the API.
@@ -85,11 +85,11 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 - Never `git push`. Only pr-finalizer pushes, and only after the user says yes to that one push. Stage files by name. Never `git stash`, `git reset` or `git add -A`.
 - Never write a `Co-Authored-By` trailer or a "Generated with" line.
 - You never commit. Leave your work uncommitted. pr-finalizer makes every commit.
-- Don't add a dependency the task didn't plan for. Report the need to the driver instead.
+- Don't add a dependency the task didn't plan for. Report the need to the main session instead.
 
 ## Output
 
-Report to the driver:
+Report to the main session:
 
 - each file you changed;
 - each test you added, with the command you ran and its pass count;

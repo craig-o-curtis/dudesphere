@@ -1,8 +1,8 @@
 // @vitest-environment node
 // A Route Handler runs on the server, so these tests run in Node, with Node's
 // own Request, Response and fetch. lib/session.ts, lib/refresh.ts and
-// lib/api.ts are the real modules: only the cookie store, fetch and API_URL
-// are stand-ins.
+// lib/api.ts are the real modules: only the cookie store, the request
+// headers, fetch and API_URL are stand-ins.
 //
 // lib/refresh.ts keeps settled pairs for 10 seconds in a module-level Map.
 // Each test loads fresh modules through vi.resetModules(), so no test gets a
@@ -15,9 +15,10 @@ import type { TokenPair } from "@dudesphere/api-types";
 vi.mock("server-only", () => ({}));
 
 // vi.hoisted keeps one fake across vi.resetModules(), so the test and the
-// fresh route module share it.
-const { cookies } = vi.hoisted(() => ({ cookies: vi.fn() }));
-vi.mock("next/headers", () => ({ cookies }));
+// fresh route module share it. apiFetch reads the request's headers with
+// headers(), for the API-10 pair, so the fake gives an empty set.
+const { cookies, headers } = vi.hoisted(() => ({ cookies: vi.fn(), headers: vi.fn() }));
+vi.mock("next/headers", () => ({ cookies, headers }));
 
 type RouteModule = typeof import("./route");
 
@@ -185,8 +186,10 @@ function everythingLogged(...spies: { mock: { calls: unknown[][] } }[]): string 
 
 beforeEach(async () => {
   vi.stubEnv("API_URL", API_URL);
+  vi.stubEnv("BFF_SECRET", undefined);
   vi.stubGlobal("fetch", fetchMock);
   cookies.mockResolvedValue(cookieStore);
+  headers.mockResolvedValue(new Headers());
   savedCookies({});
   fetchMock.mockResolvedValue(noContent());
   vi.resetModules();

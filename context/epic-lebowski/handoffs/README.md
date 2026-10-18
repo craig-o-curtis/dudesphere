@@ -1,6 +1,6 @@
 # Handoffs
 
-Each file here hands one story from the planner to the driver. The planner writes `<ID>.md`, such as `API-15.md`, once you approve its plan. The driver works from it and appends to its Log. pr-finalizer adds the PR body and the PR link. The file is committed on the story branch, so the PR shows how the story was built.
+Each file here hands one story from `/plan-story` to `/implement`. `/plan-story` writes `<ID>.md`, such as `API-15.md`, once you approve its plan. `/implement` works from it and appends to its Log. pr-finalizer adds the PR body and the PR link. The file is committed on the story branch, so the PR shows how the story was built.
 
 The spec in `../issues/<ID>.md` says what to build. The handoff says who builds which part, in what order, and what was decided on the way.
 
@@ -56,7 +56,7 @@ hard on this one:
 
 ## Open questions
 
-<Anything left for the driver to ask you. "None" when empty.>
+<Anything left for `/implement` to ask you. "None" when empty.>
 
 ## PR
 
@@ -64,7 +64,7 @@ hard on this one:
 
 ## Log
 
-<The driver appends one dated line per event: task started, task done,
+<`/implement` appends one dated line per event: task started, task done,
 finding raised, finding fixed, review round passed, PR opened. Dates come from
 `date -u +%F`.>
 ```

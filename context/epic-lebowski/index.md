@@ -62,11 +62,12 @@ included, and never a JavaScript `Date`. The root oxlint config enforces it.
 7. Put `Closes #<issue>` in the PR description, so merging the PR closes the
    GitHub issue. Check the issue closed after the merge.
 
-The agents in `.agents/` run these steps for you. `worktree branch --github
-<issue>` makes the branch. The `planner` agent covers steps 2 and 4, and writes
-a handoff to [handoffs/](handoffs/). The `driver` agent covers steps 5 and 6.
-`pr-finalizer` covers step 7. The worktree tool names branches its own way, so
-the branch may not match step 3. See the Agents section of `AGENTS.md`.
+Two skills run these steps for you. `worktree branch --github <issue>` makes
+the branch. `/plan-story` covers steps 2 and 4, and writes a handoff to
+[handoffs/](handoffs/). After `/clear`, `/implement` covers steps 5 to 7: the
+builders, the reviewers and `pr-finalizer`. The worktree tool names branches
+its own way, so the branch may not match step 3. That is fine. See the Agents
+section of `AGENTS.md`.
 
 ## How issues are named
 

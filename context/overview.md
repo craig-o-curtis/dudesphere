@@ -373,6 +373,31 @@ sets `trust proxy` to `loopback`, so behind a proxy on the same machine each
 caller is counted by their own address. A proxy elsewhere needs its address
 there instead.
 
+Behind the web app, every request comes from the web server's address, so one
+visitor could use up everyone's limit. So the web app sends a pair of headers
+on every call to Nest: `X-Bff-Secret` and `X-Client-Ip`, the visitor's IP.
+When `X-Bff-Secret` matches `BFF_SECRET`, both counts go by `X-Client-Ip`
+instead of the caller's address. The secret is compared in constant time, and
+the IP is used only if it is an IPv4 or IPv6 address, so it cannot put other
+text into a count's key. An IPv6 address is counted by its /64, and
+`::ffff:a.b.c.d` as `a.b.c.d`, the same as for a direct caller. A wrong or
+missing secret, or a bad IP, gets no error: the request is counted by the
+caller's own address, as before. `BFF_SECRET` is optional. When set, it is at
+least 32 characters, all letters, digits or `+ / = _ -`, so base64, base64url
+and hex all fit. Nest will not start with any other value, and the web app
+sends no headers with one. Unset, Nest never trusts `X-Client-Ip`. Both apps
+must have the same value.
+
+The visitor's IP is only as honest as the web app's host. Vercel overwrites
+`X-Real-Ip` and `X-Forwarded-For` with the visitor's real address, which the
+web app reads. Off Vercel, in `next dev` or a self-hosted `next start`, a
+visitor can send their own `X-Real-Ip` or `X-Forwarded-For`, and the web app
+passes it on with the secret. `X-Real-Ip` is read first, so a proxy that
+rewrites `X-Forwarded-For` but leaves `X-Real-Ip` alone does not close the
+gap. That is an accepted limit. A host that adds to
+`X-Forwarded-For` instead of overwriting it, such as Cloudflare, needs the
+web app to read that host's own header.
+
 `AuthThrottlerGuard` in `src/auth/` does this, on top of `@nestjs/throttler`.
 The counts are kept in the app's memory: they reset on a restart and are not
 shared between two copies of the app. `THROTTLE_ENABLED=false` turns it off,

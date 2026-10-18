@@ -1,9 +1,13 @@
 import "server-only";
 import type { ApiError, ApiErrorCode } from "@dudesphere/api-types";
+import { headers } from "next/headers";
+
+import { BFF_HEADER_NAMES, bffHeadersFrom, type BffHeaders } from "@/lib/bff-headers";
 
 // The one way the web app calls the NestJS API. Server Actions and Route
 // Handlers use it; the browser never does. It reads API_URL from the server's
-// environment, adds the Bearer itself, and turns any failed answer into one
+// environment, adds the Bearer itself, adds the visitor's address for Nest's
+// rate limits (lib/bff-headers.ts), and turns any failed answer into one
 // ApiRequestError.
 
 /**
@@ -37,8 +41,9 @@ export interface ApiFetchOptions {
   /** An access token. Sent as `Authorization: Bearer <token>` when present. */
   token?: string | null;
   /**
-   * Added to the request. They can't replace Authorization or Content-Type.
-   * API-10 sends X-Bff-Secret and X-Client-Ip through here.
+   * Added to the request. They can't replace Authorization, Content-Type,
+   * X-Bff-Secret or X-Client-Ip. apiFetch sets the last two itself, from the
+   * incoming request (API-10), and drops any copies given here.
    */
   extraHeaders?: Record<string, string>;
 }
@@ -90,6 +95,11 @@ export class ApiRequestError extends Error {
  * undefined when a 204 or a 202 has an empty body. Nest's 202, from
  * POST /auth/password/forgot, has none.
  *
+ * Adds X-Bff-Secret and X-Client-Ip from the incoming request, read with
+ * `headers()` from next/headers, so Nest counts rate limits by the visitor's
+ * address. That needs a request: call it from a Server Action, a Route
+ * Handler or a Server Component, never inside `'use cache'`.
+ *
  * Throws ApiRequestError when Nest answers outside 2xx, when any other 2xx
  * body isn't JSON (an empty 200 included, since its caller expects JSON), and
  * when there is no answer at all, with status 0. Throws a plain Error when
@@ -100,12 +110,13 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const url = `${apiBaseUrl()}${checkedPath(path)}`;
   const method = options.method ?? (options.body === undefined ? "GET" : "POST");
   const route = `${method} ${path}`;
+  const bffHeaders = bffHeadersFrom(await headers());
 
   let response: Response;
   try {
     response = await fetch(url, {
       method,
-      headers: requestHeaders(options),
+      headers: requestHeaders(options, bffHeaders),
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       // Auth answers belong to one member and one moment. Never keep them in
       // Next's fetch cache.
@@ -197,7 +208,13 @@ function checkedPath(path: string): string {
   return path;
 }
 
-function requestHeaders({ body, token, extraHeaders }: ApiFetchOptions): Headers {
+// extraHeaders first, then the headers apiFetch owns, so a caller can't
+// replace them. The pair is both headers or neither: a caller's copy is
+// dropped even when there is no pair to send.
+function requestHeaders(
+  { body, token, extraHeaders }: ApiFetchOptions,
+  bffHeaders: BffHeaders,
+): Headers {
   const headers = new Headers(extraHeaders);
   headers.set("Accept", "application/json");
   if (body === undefined) {
@@ -209,6 +226,12 @@ function requestHeaders({ body, token, extraHeaders }: ApiFetchOptions): Headers
     headers.set("Authorization", `Bearer ${token}`);
   } else {
     headers.delete("Authorization");
+  }
+  for (const name of BFF_HEADER_NAMES) {
+    headers.delete(name);
+  }
+  for (const [name, value] of Object.entries(bffHeaders)) {
+    headers.set(name, value);
   }
   return headers;
 }

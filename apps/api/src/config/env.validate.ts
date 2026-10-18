@@ -113,6 +113,26 @@ export class EnvironmentVariables {
   @IsIn(["true", "false"])
   THROTTLE_ENABLED: "true" | "false" = "true";
 
+  // Shared with apps/web, which sends it as X-Bff-Secret beside the
+  // visitor's IP in X-Client-Ip. Behind the web app every request comes from
+  // the web server's address, so without this one visitor could use up
+  // everyone's limit. Unset means X-Client-Ip is never trusted. At least 32
+  // characters, as for JWT_SECRET, so it is too long to guess. Only letters,
+  // digits and + / = _ -, so base64, base64url and hex all fit: the web app
+  // sends it as a header, and a CR, LF or NUL there would make every call
+  // fail with the secret in the error. apps/web/src/lib/bff-headers.ts
+  // checks the same rule. Neither message prints the value.
+  @IsOptional()
+  @IsString()
+  @MinLength(32, {
+    message: "BFF_SECRET must be at least 32 characters. Make one with: openssl rand -base64 48",
+  })
+  @Matches(/^[A-Za-z0-9+/=_-]+$/, {
+    message:
+      "BFF_SECRET may hold only letters, digits and + / = _ -. Make one with: openssl rand -base64 48",
+  })
+  BFF_SECRET?: string;
+
   // Outgoing email, sent over SMTP. The defaults point at the Mailpit
   // container in docker-compose.yml, which keeps every message and delivers
   // none, so the app sends no real mail until these are changed.

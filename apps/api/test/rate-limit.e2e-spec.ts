@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { INestApplication } from "@nestjs/common";
+import type { ConfigType } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -25,6 +26,9 @@ describe("Rate limiting (e2e)", () => {
 
   const tag = randomUUID().slice(0, 8);
   const password = "a-long-secret-123";
+  // Made up for this file, and set on its own app below. Never a value
+  // from .env.
+  const bffSecret = "e2e-made-up-bff-secret-for-the-rate-limit-suite";
 
   function login(identifier: string, withPassword = "not-the-password") {
     return request(app.getHttpServer())
@@ -52,7 +56,7 @@ describe("Rate limiting (e2e)", () => {
       imports: [AppModule],
     })
       .overrideProvider(throttleConfig.KEY)
-      .useValue({ enabled: true })
+      .useValue({ enabled: true, bffSecret } satisfies ConfigType<typeof throttleConfig>)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -110,6 +114,39 @@ describe("Rate limiting (e2e)", () => {
       await failLogin(`e2e-two-${tag}`, 5);
 
       await login(`e2e-two-${tag}@example.com`).expect(401);
+    });
+  });
+
+  // Behind the BFF, every call comes from the web server's address. The web
+  // app sends X-Bff-Secret and X-Client-Ip, and Nest counts by the visitor's
+  // IP only when the secret matches. These come before the forgot-password
+  // tests, which use up this address's IP count.
+  describe("behind the BFF, login counts each visitor's IP apart", () => {
+    function loginFrom(identifier: string, clientIp: string, secret?: string) {
+      const call = login(identifier).set("X-Client-Ip", clientIp);
+      return secret ? call.set("X-Bff-Secret", secret) : call;
+    }
+
+    it("lets a second visitor try the same account when the secret matches", async () => {
+      const identifier = `e2e-bff-${tag}`;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await loginFrom(identifier, "198.51.100.1", bffSecret).expect(401);
+      }
+
+      await loginFrom(identifier, "198.51.100.1", bffSecret).expect(429);
+      await loginFrom(identifier, "198.51.100.2", bffSecret).expect(401);
+    });
+
+    // Without the secret, X-Client-Ip is ignored, so both "visitors" are
+    // this test's own address and share one count.
+    it("ignores X-Client-Ip without the secret", async () => {
+      const identifier = `e2e-nobff-${tag}`;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await loginFrom(identifier, "198.51.100.1").expect(401);
+      }
+
+      await loginFrom(identifier, "198.51.100.1").expect(429);
+      await loginFrom(identifier, "198.51.100.2").expect(429);
     });
   });
 

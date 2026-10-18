@@ -1,5 +1,6 @@
 import "server-only";
 import { API_TIMEOUT_MS, ApiRequestError, apiBaseUrl } from "@/lib/api";
+import { bffHeadersFrom } from "@/lib/bff-headers";
 import { bffTarget } from "@/lib/bff-paths";
 import { assertSameOrigin } from "@/lib/origin";
 import { logFailure } from "@/lib/route-responses";
@@ -17,7 +18,9 @@ import { verifySession } from "@/lib/session";
 // `{ statusCode, message }`, so clientFetch reads one shape whoever answered.
 //
 // Only the method, the query string, Content-Type and the body go to Nest,
-// with the Bearer. Only the status, Content-Type, Retry-After and the body
+// with the Bearer and, when BFF_SECRET is set, X-Bff-Secret and X-Client-Ip
+// (lib/bff-headers.ts), so Nest counts rate limits by the visitor's address.
+// Only the status, Content-Type, Retry-After and the body
 // come back. It never refreshes: a 401 from Nest passes through, and
 // clientFetch refreshes and retries.
 //
@@ -112,11 +115,15 @@ async function forward(method: Method, request: Request, context: BffContext): P
   return passThrough(answer);
 }
 
-// A fresh set of headers: the Bearer, and Content-Type when a body goes too.
-// Nothing else from the browser, so no Cookie, Authorization, hop-by-hop or
-// X-Forwarded header reaches Nest.
+// A fresh set of headers: the Bearer, the visitor's address pair when there
+// is one, and Content-Type when a body goes too. Nothing else from the
+// browser, so no Cookie, Authorization, hop-by-hop or X-Forwarded header
+// reaches Nest, and no X-Bff-Secret or X-Client-Ip the browser made up.
 function nestInit(method: Method, request: Request, accessToken: string): StreamingRequestInit {
-  const headers = new Headers({ Authorization: `Bearer ${accessToken}` });
+  const headers = new Headers({
+    ...bffHeadersFrom(request.headers),
+    Authorization: `Bearer ${accessToken}`,
+  });
   const init: StreamingRequestInit = {
     method,
     headers,

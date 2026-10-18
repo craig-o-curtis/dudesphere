@@ -121,7 +121,7 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 - Nest owns both databases. `apps/web` never touches a database.
 - Test data uses made-up people at `example.com`, never a value from `.env` or from logs. E2E users are `e2e-` prefixed, with an `e2e-...@example.com` email. E2E hashtags are `e2e` plus 12 lower-case hex characters.
 - Never turn off a guard and then run e2e. The route-access suite would then delete real rows.
-- Every row you create in a database (through the app, a script or a test) must use the e2e shapes, so the shared cleanup can find it. Don't run `pnpm e2e:cleanup` yourself: the other reviewers may still be using their e2e users. The driver wipes them after the round. List the e2e users you made in your report.
+- Every row you create in a database (through the app, a script or a test) must use the e2e shapes, so the shared cleanup can find it. Don't run `pnpm e2e:cleanup` yourself: the other reviewers may still be using their e2e users. The main session wipes them after the round. List the e2e users you made in your report.
 - Never print a secret from `.env` in a report or a test. Write `<redacted>`.
 - No denial-of-service tests. Probe a limit by going just past it.
 - Look up library docs with `npx ctx7@latest` before you rely on memory.

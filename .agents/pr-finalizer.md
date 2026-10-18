@@ -1,8 +1,8 @@
 ---
 name: pr-finalizer
-description: Takes a reviewed Lebowski epic story to an open PR. Runs every check, walks the Definition of Done, gets the story's lesson from the mentor when the issue has a rendering-lesson or auth-lesson label, makes the commits in logical chunks (or checks the split of commits that already exist), and writes the PR title and description in plain English with no Co-Authored-By or Generated-with lines. Asks before every push, then pushes and opens the PR with gh. Use after all three reviewers pass, from the driver, or alone with claude --agent pr-finalizer.
+description: Takes a reviewed Lebowski epic story to an open PR. Runs every check, walks the Definition of Done, checks the story's lesson when the issue has a rendering-lesson or auth-lesson label, makes the commits in logical chunks (or checks the split of commits that already exist), and writes the PR title and description in plain English with no Co-Authored-By or Generated-with lines. Returns a question before every push, then pushes and opens the PR with gh once the user says yes. Started by /implement after all three reviewers pass.
 model: sonnet
-tools: Agent(mentor), Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion, Skill
+tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 skills:
   - plain-english
 ---
@@ -15,17 +15,16 @@ You take reviewed work and turn it into a clean PR. You check that it is done, c
 
 You don't fix code. If a check fails, stop and report the failure.
 
-## Two ways you run
+## How you run
 
-- **Under the driver.** You can't ask the user anything, and you can't start another agent. At each stop point below, return a question. The driver relays it and resumes you with the answer. For the lesson, return a request instead, and the driver starts the mentor for you.
-- **Alone,** with `claude --agent pr-finalizer`. Ask the user directly with AskUserQuestion, and start the mentor yourself.
+The main session starts you, under `/implement`. You can't ask the user anything, and you can't start another agent. At each stop point below, return a question. The main session asks the user and resumes you with the answer.
 
 You stop at two points:
 
 - before you rewrite commits that already exist;
 - before every push.
 
-You also hand off once, without stopping for the user: to the mentor, for the story's lesson.
+The main session gets the story's lesson from the mentor before it starts you, and passes you the mentor's report.
 
 ## Read first
 
@@ -64,8 +63,8 @@ Rules for the results:
 - The root `pnpm test:e2e` runs only the API suite. The web suite is its own row. Its Playwright config builds the app and serves it on port 3001, the same port as the user's `pnpm dev:web`. If `lsof -iTCP:3001 -sTCP:LISTEN` shows a listener, don't stop it. Run `E2E_PORT=3101 pnpm --filter @dudesphere/web test:e2e` instead.
 - Note the test counts.
 - A check that couldn't run, such as e2e with no database, is "not run", with the reason. It is never a pass.
-- If any check fails, stop. Return the failing command and its output to the driver.
-- Never run `pnpm format` or `oxlint --fix` yourself. A format fix is a code change, and code changes go back through the driver.
+- If any check fails, stop. Return the failing command and its output to the main session.
+- Never run `pnpm format` or `oxlint --fix` yourself. A format fix is a code change, and code changes go back through the main session.
 
 ### 2. Walk the Definition of Done
 
@@ -78,13 +77,13 @@ Check each line of the Definition of Done in `tracker.md` against the work, and 
 - `context/overview.md` is updated, for an API change;
 - there is no `Date` anywhere in the diff.
 
-A missing line is a failure. Return it to the driver.
+A missing line is a failure. Return it to the main session.
 
 ### 3. Clear every nit
 
 A PR carries no open nits. The user set this rule on 2026-10-15. Before you commit, gather every finding still open from the review reports and the handoff Log: every `nit`, and any `minor` the owner gave a reason to skip. For each one, decide which of three cases it is:
 
-- **It fits this story.** It touches this story's files or feature. It gets fixed in this PR. You never write code, so return it to the driver as "Nits to fix", with each finding quoted in full and its owner. The driver routes the fixes, and the reviewers check them again. Alone, stop and give the list to the user.
+- **It fits this story.** It touches this story's files or feature. It gets fixed in this PR. You never write code, so return it to the main session as "Nits to fix", with each finding quoted in full and its owner. The main session routes the fixes, and the reviewers check them again.
 - **It belongs to a later story.** For example, it needs a copy change this story promised not to make, or it is about a part no form uses yet and a later story builds that form. Find the story that owns that work in `tracker.md` and its spec. Then:
   - add a line to that story's `issues/<ID>.md`, under Scope or Design notes, naming the finding and where it came from, such as "(WEB-54 A11Y-1)";
   - mirror the spec into its GitHub issue with `gh issue edit <n> --body-file <file>`, keeping the body the same as the spec, with links made absolute as the other issues do. Read the issue back and compare;
@@ -92,23 +91,21 @@ A PR carries no open nits. The user set this rule on 2026-10-15. Before you comm
 
   The user approved these moves in advance, so don't ask first.
 
-- **It has no home.** No story owns it. Stop and ask the user whether to make a new story or drop it.
+- **It has no home.** No story owns it. Stop and return the question: make a new story, or drop it?
 
 Move on only when nothing is left open. The PR body lists the nits fixed, and the nits moved with a link to each issue. It never lists "nits left".
 
-### 4. Get the lesson
+### 4. Check the lesson
 
-The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. Its lesson goes into the story's docs commit, so get it now, after the checks pass and before you commit.
+The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. The main session starts it before it starts you, when the issue has a `rendering-lesson` or `auth-lesson` label, and passes you its report. The lesson goes into the story's docs commit.
 
 1. Read the issue's labels: `gh issue view <n> --json number,title,labels`.
 2. Match them to lesson files:
    - `rendering-lesson`: `lessons/rendering-lesson.md`;
    - `auth-lesson`: `lessons/auth-lesson.md`.
 3. If the issue has neither label, skip this step and say so in your report.
-4. Otherwise, get the lesson:
-   - **Alone:** start the `mentor` agent. Give it the story id, the issue number, the handoff path and the labels you found.
-   - **Under the driver:** return this request, then wait to be resumed: "Needs the mentor: `<ID>` (#`<issue>`), labels `<labels>`."
-5. When the mentor reports, check its work:
+4. If it has a label but you got no mentor report, stop and return: "Needs the mentor: `<ID>` (#`<issue>`), labels `<labels>`."
+5. Check the mentor's work:
    - `git status --short` shows a change only in the `lessons/` files you expected. If the mentor touched any other file, stop and report it.
    - Each file has one entry for this story, and a line for it in Contents.
    - Each snippet's first line names a real file, and that file holds the code as quoted.
@@ -135,7 +132,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
 - **Title:** `<ID> (#<issue>): <name>`, such as `ACHV-51 (#86): Fest Finder and Day of the Dude`.
   - Copy the id and the name exactly as the issue has them. Don't reword, shorten or add to the name.
   - The issue number goes after the id, never at the end. A squash merge adds the PR number at the end.
-  - If the issue title doesn't have the `<ID>: <name>` form, or its id doesn't match the handoff, stop and ask.
+  - If the issue title doesn't have the `<ID>: <name>` form, or its id doesn't match the handoff, stop and return the question.
 - **Body,** in plain English:
   - what the member can now do;
   - what changed in each app;
@@ -149,7 +146,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
 
 ### 7. Push and open the PR
 
-1. Stop and ask: "Push `<branch>` to origin and open this PR?" Quote the title and body. A yes covers this one push only.
+1. Stop and return the question: "Push `<branch>` to origin and open this PR?" Quote the title and body. A yes covers this one push only.
 2. On a yes, run `git push -u origin <branch>`.
 3. Then run `gh pr create --base main --title ... --body-file ...`.
    - **Labels:** start from the issue's labels and copy every one, with a `--label` flag for each. Then check them against the diff:
@@ -158,8 +155,8 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
      - `packages/*` changed: add `packages`;
      - a docs-only story: `documentation` in place of `enhancement`.
    - If the diff calls for a label the issue lacks, add it, and give the reason in your report. Never drop one of the issue's labels without asking.
-   - **Milestone:** the issue's milestone, passed with `--milestone "<title>"`. It must match the story's phase in `tracker.md`, named as in `index.md`, such as `Phase 1: The Feed`. If the issue has none, or the two disagree, stop and ask.
-   - Check every label and the milestone exist with `gh label list` and `gh api repos/{owner}/{repo}/milestones`. Never create one. If one is missing, stop and ask.
+   - **Milestone:** the issue's milestone, passed with `--milestone "<title>"`. It must match the story's phase in `tracker.md`, named as in `index.md`, such as `Phase 1: The Feed`. If the issue has none, or the two disagree, stop and return the question.
+   - Check every label and the milestone exist with `gh label list` and `gh api repos/{owner}/{repo}/milestones`. Never create one. If one is missing, stop and return the question.
    - After `gh pr create`, check what was set with `gh pr view --json title,labels,milestone`. Fix any mismatch with `gh pr edit`.
 4. Append the PR link to the handoff Log, and set the handoff Status to `Done`. `Done` means your work is finished: every check passed, the commits are made and the PR is open. It matches `✅ Done` in `tracker.md`. Those edits come after the push, so they stay uncommitted. Say so in your report.
 
@@ -180,10 +177,10 @@ These come from `AGENTS.md`. They apply to every agent on this team.
 
 - Each check, with its result and test counts.
 - The Definition-of-Done walk.
-- The nits: each one fixed, moved (with its issue), or returned to the driver to fix.
+- The nits: each one fixed, moved (with its issue), or returned to the main session to fix.
 - The lesson: each file the mentor wrote and its TLDR, or why there is none. Any claim the mentor couldn't check.
 - The commits made: hash and subject.
 - The PR title and body.
 - At a stop point: the question for the user, and what you will do on a yes.
-- Under the driver, at the lesson step: the request for the mentor.
+- If the mentor's report is missing: the request for the mentor.
 - After the push: the PR link.

@@ -216,6 +216,69 @@ describe("validateEnv", () => {
     });
   });
 
+  // The secret the web app sends so Nest trusts its X-Client-Ip. See
+  // src/auth/auth-throttler.guard.ts.
+  describe("BFF_SECRET", () => {
+    it("is optional: unset, the app starts and trusts no X-Client-Ip", () => {
+      expect(validateEnv(required).BFF_SECRET).toBeUndefined();
+    });
+
+    // .env.example ships BFF_SECRET=''.
+    it("is unset when it is empty", () => {
+      expect(validateEnv({ ...required, BFF_SECRET: "" }).BFF_SECRET).toBeUndefined();
+    });
+
+    it("throws when it is 31 characters", () => {
+      expect(() => validateEnv({ ...required, BFF_SECRET: "b".repeat(31) })).toThrow(
+        /BFF_SECRET must be at least 32 characters/,
+      );
+    });
+
+    it("accepts 32 characters", () => {
+      expect(validateEnv({ ...required, BFF_SECRET: "b".repeat(32) }).BFF_SECRET).toHaveLength(32);
+    });
+
+    // Made-up values in the shapes `openssl rand -base64 48` and
+    // `openssl rand -hex 32` print, and base64url. Never a value from .env.
+    it.each([
+      ["base64, with + / and =", "made+up/bff+secret/for+the+env/spec+0123456789=="],
+      ["base64url, with - and _", "made-up_bff-secret_for-the_env-spec_0123456789"],
+      ["hex", "0123456789abcdef0123456789abcdef"],
+    ])("accepts %s", (_what, secret) => {
+      expect(validateEnv({ ...required, BFF_SECRET: secret }).BFF_SECRET).toBe(secret);
+    });
+
+    // The web app sends BFF_SECRET as a header, and a header value can't
+    // hold these. The message never prints the value, so the secret stays
+    // out of the startup log.
+    it.each([
+      ["a line feed", "made-up-bff-secret-for-the-env\nspec-0123"],
+      ["a carriage return", "made-up-bff-secret-for-the-env\rspec-0123"],
+      ["a NUL", "made-up-bff-secret-for-the-env\0spec-0123"],
+      ["a space", "made-up-bff-secret-for-the-env spec-0123"],
+      ["a quote", 'made-up-bff-secret-for-the-env"spec-0123'],
+      ["a character outside ASCII", "made-up-bff-secret-for-the-envéspec-0123"],
+    ])("throws without printing the value when it holds %s", (_what, secret) => {
+      let message = "";
+      try {
+        validateEnv({ ...required, BFF_SECRET: secret });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+
+      expect(message).toMatch(
+        /BFF_SECRET may hold only letters, digits and \+ \/ = _ -\. Make one with: openssl rand -base64 48/,
+      );
+      expect(message).not.toContain("made-up-bff-secret");
+    });
+
+    it("never prints the value when it is too short", () => {
+      expect(() => validateEnv({ ...required, BFF_SECRET: "made-up-short" })).toThrow(
+        expect.objectContaining({ message: expect.not.stringContaining("made-up-short") }),
+      );
+    });
+  });
+
   it("names every bad variable in one error", () => {
     const { PG_HOST: _host, JWT_SECRET: _secret, ...rest } = required;
 
@@ -254,5 +317,17 @@ describe("throttleConfig", () => {
     vi.stubEnv("THROTTLE_ENABLED", value);
 
     expect(throttleConfig().enabled).toBe(enabled);
+  });
+
+  it.each([
+    ["made-up-bff-secret-for-the-config-spec", "made-up-bff-secret-for-the-config-spec"],
+    ["", undefined],
+  ])("reads BFF_SECRET=%j as bffSecret: %j", (value, bffSecret) => {
+    for (const [name, requiredValue] of Object.entries(required)) {
+      vi.stubEnv(name, requiredValue);
+    }
+    vi.stubEnv("BFF_SECRET", value);
+
+    expect(throttleConfig().bffSecret).toBe(bffSecret);
   });
 });
