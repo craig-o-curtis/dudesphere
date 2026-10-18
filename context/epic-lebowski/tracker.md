@@ -59,7 +59,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
     `/forgot-password`, `/reset-password`, a "required" cue on every auth form
 
 11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
-    ⬜ Todo · [#44][44] · Blocked by: none\
+    ⏳ In progress · [#44][44] · Blocked by: none\
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
 12. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
