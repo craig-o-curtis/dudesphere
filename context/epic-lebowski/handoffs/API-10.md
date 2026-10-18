@@ -134,6 +134,10 @@ No lesson. The issue has no `rendering-lesson` or `auth-lesson` label.
 
 Three rounds by qa-skeptic, owasp-hacker and a11y-expert. Round 3 had no findings. Nits and minors fixed in this PR: QA-1 (format of the handoff), QA-2 (the /64 rule written down), QA-3 and SEC-1 (docs name `X-Real-Ip`), SEC-2 (the `BFF_SECRET` character rule), QA-4 (spec text and issue #44 brought in line), QA-5 (a web spec row that could not test a NUL). Nits moved to later stories: none.
 
+### Also in this PR: a simpler story flow
+
+One commit, separate from API-10, replaces the planner and driver agents with two skills, `/plan-story` and `/implement`. Any chat runs them, in the terminal or in VS Code, so a story no longer needs `claude --agent`. The flow is `/plan-story`, `/clear`, `/implement`. A new `.claude/settings.json` turns off commit and PR attribution, and only the main chat may start agents. `AGENTS.md` describes the new flow.
+
 Closes #44
 
 ## Log
@@ -168,3 +172,5 @@ Closes #44
 - 2026-10-18: Round 3: qa-skeptic, owasp-hacker and a11y-expert all pass, no findings. QA-4 and QA-5 confirmed fixed. Review done after 3 rounds: 7 findings fixed (QA-1 to QA-5, SEC-1, SEC-2), none open.
 - 2026-10-18: Note for pr-finalizer, from Craig: leave the uncommitted `apps/web/.gitignore` change (an extra `.env` line) out of the API-10 commits.
 - 2026-10-18: Finalizing. Stopped the review servers. pr-finalizer started.
+- 2026-10-18: pr-finalizer: all checks pass (lint, format, typecheck, build, API unit 1201, web unit 1577, API e2e 371, web e2e 42 pass / 72 skipped, migration:check, e2e:check). Commits 400c87d (API), 9088984 (web), b91e235 (docs). PR text written in the PR section. Craig said yes to one push via AskUserQuestion; pr-finalizer would not push on a relayed yes. Not pushed yet.
+- 2026-10-18: Added the workflow commit (`/plan-story` and `/implement` skills) and its section in the PR body. Craig asked for the commit, push and PR in plain words.
