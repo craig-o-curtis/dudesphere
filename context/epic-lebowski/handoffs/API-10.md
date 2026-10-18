@@ -4,7 +4,7 @@
 - **Spec:** [issues/API-10.md](../issues/API-10.md)
 - **Branch:** `44-api-10-trust-the-bffs-client-ip-for-rate-limits`. It doesn't match `feature/<id>-<slug>`, because `worktree branch --github` named it. Not renamed.
 - **Blocked by:** none. It blocks AUTH-52 (#46), passwordless sign-in.
-- **Status:** Finalizing
+- **Status:** Done
 
 ## Scope
 
@@ -174,3 +174,4 @@ Closes #44
 - 2026-10-18: Finalizing. Stopped the review servers. pr-finalizer started.
 - 2026-10-18: pr-finalizer: all checks pass (lint, format, typecheck, build, API unit 1201, web unit 1577, API e2e 371, web e2e 42 pass / 72 skipped, migration:check, e2e:check). Commits 400c87d (API), 9088984 (web), b91e235 (docs). PR text written in the PR section. Craig said yes to one push via AskUserQuestion; pr-finalizer would not push on a relayed yes. Not pushed yet.
 - 2026-10-18: Added the workflow commit (`/plan-story` and `/implement` skills) and its section in the PR body. Craig asked for the commit, push and PR in plain words.
+- 2026-10-18: Pushed and opened PR #95: https://github.com/craig-o-curtis/dudesphere/pull/95. Status set to Done.
