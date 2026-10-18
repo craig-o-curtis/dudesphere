@@ -12,6 +12,11 @@ import { API_TIMEOUT_MS, ApiRequestError, apiFetch, mapValidationMessages } from
 // build. Next resolves it to an empty module on the server; this does the same.
 vi.mock("server-only", () => ({}));
 
+// The incoming request's headers. apiFetch reads them with headers() from
+// next/headers, which works only inside a request, so tests give their own.
+const { headers } = vi.hoisted(() => ({ headers: vi.fn() }));
+vi.mock("next/headers", () => ({ headers }));
+
 const API_URL = "http://api.example.com";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -49,15 +54,26 @@ const pair: TokenPair = {
   expiresIn: 900,
 };
 
+// A made-up secret, 32 characters or more as Nest asks. Never a value from .env.
+const BFF_SECRET = "made-up-bff-secret-for-tests-0123456789";
+
+/** The browser's request, as headers() gives it to apiFetch. */
+function incoming(values: Record<string, string>) {
+  headers.mockResolvedValue(new Headers(values));
+}
+
 beforeEach(() => {
   vi.stubEnv("API_URL", API_URL);
+  vi.stubEnv("BFF_SECRET", undefined);
   vi.stubGlobal("fetch", fetchMock);
+  incoming({});
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   fetchMock.mockReset();
+  headers.mockReset();
 });
 
 describe("the module", () => {
@@ -140,14 +156,13 @@ describe("apiFetch: the request", () => {
       method: "POST",
       body: {},
       token: pair.accessToken,
-      extraHeaders: { "X-Bff-Secret": "a-made-up-secret", "X-Client-Ip": "192.0.2.10" },
+      extraHeaders: { "X-Request-Id": "request-id-for-tests" },
     });
 
-    const headers = sentHeaders();
-    expect(headers.get("X-Bff-Secret")).toBe("a-made-up-secret");
-    expect(headers.get("X-Client-Ip")).toBe("192.0.2.10");
-    expect(headers.get("Authorization")).toBe("Bearer access-token-for-tests");
-    expect(headers.get("Content-Type")).toBe("application/json");
+    const sent = sentHeaders();
+    expect(sent.get("X-Request-Id")).toBe("request-id-for-tests");
+    expect(sent.get("Authorization")).toBe("Bearer access-token-for-tests");
+    expect(sent.get("Content-Type")).toBe("application/json");
   });
 
   it("never lets extraHeaders replace the Bearer or the content type", async () => {
@@ -160,9 +175,9 @@ describe("apiFetch: the request", () => {
       extraHeaders: { authorization: "Bearer someone-else", "content-type": "text/plain" },
     });
 
-    const headers = sentHeaders();
-    expect(headers.get("Authorization")).toBe("Bearer access-token-for-tests");
-    expect(headers.get("Content-Type")).toBe("application/json");
+    const sent = sentHeaders();
+    expect(sent.get("Authorization")).toBe("Bearer access-token-for-tests");
+    expect(sent.get("Content-Type")).toBe("application/json");
   });
 
   it("sends the body as JSON, with the method given", async () => {
@@ -212,6 +227,88 @@ describe("apiFetch: the request", () => {
 
   it("waits longer than Nest's own 10 second limit, so Nest's 408 arrives first", () => {
     expect(API_TIMEOUT_MS).toBeGreaterThan(10_000);
+  });
+});
+
+describe("apiFetch: the visitor's address (API-10)", () => {
+  it("sends X-Bff-Secret and X-Client-Ip from the incoming request", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+    incoming({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "198.51.100.1" });
+    fetchMock.mockResolvedValue(jsonResponse(200, pair));
+
+    await apiFetch<TokenPair>("/auth/token", { method: "POST", body: {} });
+
+    const sent = sentHeaders();
+    expect(headers).toHaveBeenCalledTimes(1);
+    expect(sent.get("X-Bff-Secret")).toBe(BFF_SECRET);
+    expect(sent.get("X-Client-Ip")).toBe("203.0.113.7");
+  });
+
+  it("uses the first x-forwarded-for entry when there is no x-real-ip", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+    incoming({ "x-forwarded-for": "198.51.100.1, 192.0.2.10" });
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await apiFetch("/users/me", { token: pair.accessToken });
+
+    expect(sentHeaders().get("X-Client-Ip")).toBe("198.51.100.1");
+  });
+
+  it("never lets extraHeaders replace the pair", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+    incoming({ "x-real-ip": "203.0.113.7" });
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await apiFetch("/auth/token", {
+      method: "POST",
+      body: {},
+      extraHeaders: { "x-bff-secret": "a-forged-secret", "x-client-ip": "192.0.2.10" },
+    });
+
+    const sent = sentHeaders();
+    expect(sent.get("X-Bff-Secret")).toBe(BFF_SECRET);
+    expect(sent.get("X-Client-Ip")).toBe("203.0.113.7");
+  });
+
+  it.each([
+    ["unset", undefined],
+    ["empty", ""],
+  ])("sends neither header when BFF_SECRET is %s", async (_what, secret) => {
+    vi.stubEnv("BFF_SECRET", secret);
+    incoming({ "x-real-ip": "203.0.113.7" });
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await apiFetch("/users/me");
+
+    const sent = sentHeaders();
+    expect(sent.has("X-Bff-Secret")).toBe(false);
+    expect(sent.has("X-Client-Ip")).toBe(false);
+  });
+
+  it("sends neither header when the incoming request has no valid address", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+    incoming({ "x-real-ip": "1.2.3.4|x" });
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await apiFetch("/users/me");
+
+    const sent = sentHeaders();
+    expect(sent.has("X-Bff-Secret")).toBe(false);
+    expect(sent.has("X-Client-Ip")).toBe(false);
+  });
+
+  it("drops a pair given in extraHeaders when it has none of its own to send", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await apiFetch("/auth/token", {
+      method: "POST",
+      body: {},
+      extraHeaders: { "X-Bff-Secret": "a-forged-secret", "X-Client-Ip": "192.0.2.10" },
+    });
+
+    const sent = sentHeaders();
+    expect(sent.has("X-Bff-Secret")).toBe(false);
+    expect(sent.has("X-Client-Ip")).toBe(false);
   });
 });
 

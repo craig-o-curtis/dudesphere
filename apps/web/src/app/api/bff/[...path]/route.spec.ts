@@ -1,8 +1,8 @@
 // @vitest-environment node
 // A Route Handler runs on the server, so these tests run in Node, with Node's
-// own Request, Response and fetch. lib/bff-paths.ts, lib/origin.ts and
-// lib/api.ts are the real modules: only verifySession, fetch and API_URL are
-// stand-ins.
+// own Request, Response and fetch. lib/bff-paths.ts, lib/origin.ts,
+// lib/bff-headers.ts and lib/api.ts are the real modules: only verifySession,
+// fetch, API_URL and BFF_SECRET are stand-ins.
 
 import { verifySession } from "@/lib/session";
 
@@ -26,6 +26,8 @@ const ACCESS_TOKEN = "eyJhbGciOiJIUzI1NiJ9.access-token-for-tests.signature_for-
 const BROWSER_BEARER = "Bearer browser-supplied-token-for-tests";
 const BROWSER_COOKIE = "__Host-session=cookie-token-for-tests; __Secure-refresh=refresh-for-tests";
 const SESSION_EXP = 1_900_000_000;
+// A made-up secret, 32 characters or more as Nest asks. Never a value from .env.
+const BFF_SECRET = "made-up-bff-secret-for-tests-0123456789";
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -95,6 +97,7 @@ function everythingLogged(...spies: { mock: { calls: unknown[][] } }[]): string 
 
 beforeEach(() => {
   vi.stubEnv("API_URL", API_URL);
+  vi.stubEnv("BFF_SECRET", undefined);
   vi.stubGlobal("fetch", fetchMock);
   vi.mocked(verifySession).mockResolvedValue({ accessToken: ACCESS_TOKEN, exp: SESSION_EXP });
   fetchMock.mockImplementation(async () => jsonResponse(200, { items: [] }));
@@ -221,6 +224,8 @@ describe("the request to Nest", () => {
   });
 
   it("never forwards the browser's Cookie or hop-by-hop headers", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+
     await call({
       method: "POST",
       path: ["abidings"],
@@ -238,12 +243,49 @@ describe("the request to Nest", () => {
         "x-smuggled": "1",
         "x-forwarded-for": "203.0.113.7",
         "x-forwarded-host": APP_HOST,
+        "x-bff-secret": "a-forged-secret",
+        "x-client-ip": "192.0.2.10",
         accept: "text/html",
       },
     });
 
-    const sent = [...nestHeaders().keys()].sort();
-    expect(sent).toEqual(["authorization", "content-type"]);
+    const sent = nestHeaders();
+    expect([...sent.keys()].sort()).toEqual([
+      "authorization",
+      "content-type",
+      "x-bff-secret",
+      "x-client-ip",
+    ]);
+    // The pair is the handler's own, never the browser's copy.
+    expect(sent.get("x-bff-secret")).toBe(BFF_SECRET);
+    expect(sent.get("x-client-ip")).toBe("203.0.113.7");
+  });
+
+  it("sends X-Client-Ip from x-real-ip over x-forwarded-for, with BFF_SECRET", async () => {
+    vi.stubEnv("BFF_SECRET", BFF_SECRET);
+
+    await call({
+      headers: { "x-real-ip": "198.51.100.1", "x-forwarded-for": "203.0.113.7" },
+    });
+
+    const sent = nestHeaders();
+    expect(sent.get("x-bff-secret")).toBe(BFF_SECRET);
+    expect(sent.get("x-client-ip")).toBe("198.51.100.1");
+  });
+
+  it.each([
+    ["BFF_SECRET is unset", undefined, { "x-real-ip": "203.0.113.7" }],
+    ["BFF_SECRET is empty", "", { "x-real-ip": "203.0.113.7" }],
+    ["the address isn't one", BFF_SECRET, { "x-forwarded-for": "1.2.3.4|x" }],
+    ["there is no address", BFF_SECRET, {}],
+  ])("sends only the Bearer when %s, never the browser's pair", async (_what, secret, sent) => {
+    vi.stubEnv("BFF_SECRET", secret);
+
+    await call({
+      headers: { ...sent, "x-bff-secret": "a-forged-secret", "x-client-ip": "192.0.2.10" },
+    });
+
+    expect([...nestHeaders().keys()]).toEqual(["authorization"]);
   });
 
   it("keeps Nest answers out of Next's fetch cache and times out like apiFetch", async () => {
