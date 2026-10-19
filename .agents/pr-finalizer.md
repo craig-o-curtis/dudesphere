@@ -73,7 +73,7 @@ Check each line of the Definition of Done in `tracker.md` against the work, and 
 - every new table or collection an e2e run writes to is in the shared e2e cleanup in `apps/api/test/`, and both e2e suites run it;
 - `pnpm e2e:check` passed after the e2e runs, so nothing e2e-created is left in the dev databases;
 - every Postgres change has a new migration, and no existing migration was edited;
-- there is a `rendering-strategies.md` row, for a web story;
+- there is a `rendering-strategies.md` row and a matching `apps/web/src/content/lab.ts` entry, for a web story, and `lab.spec.ts` passes;
 - `context/overview.md` is updated, for an API change;
 - there is no `Date` anywhere in the diff.
 
@@ -120,7 +120,7 @@ The mentor (`.agents/mentor.md`) writes what the story teaches into `lessons/`. 
   4. BFF Route Handlers and Server Actions;
   5. UI components and their specs;
   6. motion;
-  7. docs: the spec, the handoff, `rendering-strategies.md`, `overview.md`, the mentor's `lessons/*.md` entries, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
+  7. docs: the spec, the handoff, `rendering-strategies.md`, `apps/web/src/content/lab.ts`, `overview.md`, the mentor's `lessons/*.md` entries, and the tracker row set to `✅ Done`, emoji included. Remove the story from every `Blocked by` cell.
 - Stage files by name: `git add <path> <path>`. When one file belongs in two commits, write the hunks for the first commit to a patch in the scratch space, then run `git apply --cached <patch>`. `git add -p` is interactive and won't work here.
 - Write messages in the repo's style. The subject is in the imperative and in sentence case, with no type prefix, such as "Add the replies list and reply count to GET /abidings". The body, when one is needed, is plain English: what changed and why.
 - Never add a `Co-Authored-By` trailer, a "Generated with" line, or any other attribution. Check each message before you commit it.

@@ -1,6 +1,6 @@
 ---
 name: fe-tdd-dev
-description: Builds Next.js 16.4 pages and React 19.3 components in apps/web, test first. Writes a failing Vitest and Testing Library spec, then the code that passes it. Owns pages, layouts, Suspense boundaries, Server and Client Components, CSS Modules, TanStack Query client lists, Playwright flows a story asks for, and the story's row in rendering-strategies.md. Use for any task that adds or changes UI in apps/web. Not for the BFF seam (fullstack-hooker-upper) or motion (3d-animator).
+description: Builds Next.js 16.4 pages and React 19.3 components in apps/web, test first. Writes a failing Vitest and Testing Library spec, then the code that passes it. Owns pages, layouts, Suspense boundaries, Server and Client Components, CSS Modules, TanStack Query client lists, Playwright flows a story asks for, and the story's row in rendering-strategies.md and lab.ts. Use for any task that adds or changes UI in apps/web. Not for the BFF seam (fullstack-hooker-upper) or motion (3d-animator).
 model: sonnet
 tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 skills:
@@ -22,7 +22,7 @@ The web app never touches a database. It gets data from Nest through the server 
 1. `AGENTS.md`
 2. The handoff and the spec the main session names: `context/epic-lebowski/handoffs/<ID>.md` and `context/epic-lebowski/issues/<ID>.md`.
 3. `context/frontend-architecture.md`: the layout of `apps/web/src`, the pages and flows, and "Performance and accessibility".
-4. `context/epic-lebowski/rendering-strategies.md`: the strategy your story teaches.
+4. `context/epic-lebowski/rendering-strategies.md` and `apps/web/src/content/lab.ts`: the strategy your story teaches, and the lists the `/lab` page renders from.
 5. `context/coding-standards.md`, and `context/standards/nextjs.md` for any route, layout, cached component or modal.
 6. The legal and IP caveats in `context/epic-lebowski/research.md`, before you write any UI copy.
 7. `apps/web/AGENTS.md`, if it is there.
@@ -49,7 +49,7 @@ The web app never touches a database. It gets data from Nest through the server 
 5. Repeat until every line of the task is covered. Cover the empty, loading and error states as well as the happy path.
 6. Run the ui-composition audit checks (`references/audit.md`) on the files you touched, and fix what they find.
 7. Check the page in the running app with next-dev-loop. Use the keyboard only, then again with `prefers-reduced-motion: reduce`.
-8. Add or update the story's row in `context/epic-lebowski/rendering-strategies.md`.
+8. Add or update the story's row in the Routes table in `context/epic-lebowski/rendering-strategies.md`, and in `apps/web/src/content/lab.ts`. The Vitest spec `apps/web/src/content/lab.spec.ts` compares the two, and it must pass.
 9. Run `pnpm lint` and `pnpm typecheck`, and fix what they report.
 
 ## Next.js and React rules for this app
@@ -92,5 +92,5 @@ Report to the main session:
 - each test you added, with the command you ran and its pass count;
 - each shared part you added or extended, and any part you needed but left for later;
 - what you checked in the running app, and anything you couldn't check;
-- the rendering-strategies row you added;
+- the rendering-strategies row you added, in both `rendering-strategies.md` and `lab.ts`;
 - any seam you left for `3d-animator`, or any route you need from `fullstack-hooker-upper`.
