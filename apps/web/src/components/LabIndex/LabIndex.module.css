@@ -1,0 +1,17 @@
+.list {
+  display: grid;
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Long routes and API names wrap instead of widening the column. The global reset sets
+ * `break-word` on descendants, so `anywhere` is set on every element a row renders.
+ * `min-width: 0` lets the grid items shrink below their content.
+ */
+.row,
+.row * {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
