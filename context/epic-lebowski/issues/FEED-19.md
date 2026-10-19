@@ -1,6 +1,6 @@
 # FEED-19: Admin users and hashtags tables
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-11, API-18.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, API-18.
 
 **Scope:** `/admin/users` and `/admin/hashtags` let an admin list, soft-delete and restore users and hide and restore tags, behind `forbidden()` for everyone else, with an audit line written after each action.
 
@@ -41,12 +41,12 @@ Admins can manage users and hashtags only through curl. The web app has no admin
 
 ## Rendering strategy
 
-Dynamic: both pages read the session inside Suspense. `forbidden()` behind `experimental.authInterrupts` renders `forbidden.tsx` with a 403 status. `after()` writes the audit line after the response. Server Actions do the writes.
+Dynamic: both pages read the session inside Suspense. `forbidden()` behind `experimental.authInterrupts` renders `forbidden.tsx` with a `noindex` tag. The status stays 200, because `forbidden()` runs inside Suspense after streaming has started (WEB-11 chose this for `/lab`). `after()` writes the audit line after the response. Server Actions do the writes.
 
 ## Verification
 
 - As the seeded admin: both tables list rows; restore and hide work and update the table at once.
-- As a member: `/admin/users` answers 403 and renders the "There are rules" page.
+- As a member: `/admin/users` renders the forbidden page ("There are rules") with a `noindex` tag and status 200, and the HTML holds no table rows.
 - Anonymous: `/admin/users` redirects to `/login?next=%2Fadmin%2Fusers`.
 - Demote the admin in the database mid-session: the next action fails with Nest's 403 and the page shows the forbidden view.
 - Each action prints exactly one JSON audit line after the response.

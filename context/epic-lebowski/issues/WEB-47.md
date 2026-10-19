@@ -2,7 +2,7 @@
 
 Part of the Lebowski epic. See [index.md](../index.md). Realm: Web. Phase 5. Blocked by: WEB-46.
 
-**Scope:** Every page meets the performance budgets and WCAG 2.2 AA, works with the keyboard alone and under reduced motion, and Partial Prefetching is on for the routes that benefit.
+**Scope:** Every page meets the performance budgets and WCAG 2.2 AA, works with the keyboard alone and under reduced motion, and Partial Prefetching is confirmed to work for the routes that benefit.
 
 ## Gap
 
@@ -14,7 +14,7 @@ Each story checked its own page. Nobody has checked the whole app at once: bundl
   - Under 200 KB of JavaScript (compressed) before any lane or canvas chunk, per route. Checked from `next build` output with a script in `apps/web/scripts/check-budgets.ts`.
   - LCP under 2.5 s and INP under 200 ms on a mid-range phone profile over 4G, measured with Lighthouse CI on `/`, `/feed`, `/abidings/[id]`, `/lanes/[id]`.
   - CLS under 0.1 on the same pages.
-- **Partial Prefetching:** turn it on in `next.config.ts` for the app, and confirm with WEB-46's `instant()` tests that prefetched shells render at once.
+- **Partial Prefetching:** it has been on in `next.config.ts` since WEB-5. Confirm with WEB-46's `instant()` tests that prefetched shells render at once.
 - **Accessibility:**
   - axe: zero serious or critical issues on every page (extend WEB-46's `a11y.spec.ts` to every route in `lab.ts`).
   - Keyboard: every action reachable, visible focus, no traps; dialogs return focus.
@@ -46,7 +46,7 @@ Partial Prefetching is the lesson's last row: the router prefetches each route's
 ## Done when
 
 - [ ] Budget script and Lighthouse CI in the pipeline
-- [ ] Partial Prefetching on and verified
+- [ ] Partial Prefetching verified with `instant()`
 - [ ] axe on every route; keyboard, contrast, zoom and VoiceOver passes recorded
 - [ ] Reduced-motion check on every page
 - [ ] Findings fixed or filed as new rows

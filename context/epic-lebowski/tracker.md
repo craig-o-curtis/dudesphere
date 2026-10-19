@@ -63,7 +63,7 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
 12. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
-    ⏳ In progress · [#45][45] · Blocked by: none\
+    ✅ Done · [#45][45] · Blocked by: none\
     `rendering-strategies.md` and a `/lab` index of every strategy
 
 ## Phase 1: The Feed
@@ -103,7 +103,7 @@ Passwordless sign-in, then the Twitter part of the app.
     An admin-only list of every tag, hidden ones included
 
 21. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
-    ⬜ Todo · [#54][54] · Blocked by: WEB-11, API-18\
+    ⬜ Todo · [#54][54] · Blocked by: API-18\
     `/admin/users`, `/admin/hashtags`, `forbidden()`, `after()` audit line
 
 22. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
