@@ -2,7 +2,7 @@ import "server-only";
 import type { TokenPair, UserResponse } from "@dudesphere/api-types";
 import { io } from "next/cache";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 import { cache } from "react";
 
 import { expiresWithin, readTokenExp } from "@/lib/access-token";
@@ -14,8 +14,8 @@ import { logFailure } from "@/lib/route-responses";
 // lifetimes. Server Actions and Route Handlers call it; page scripts never see
 // a token, because both cookies are httpOnly.
 //
-// It is also the Data Access Layer: verifySession, getMe and requireSession
-// are how every page, Server Action and Route Handler asks who is signed in.
+// It is also the Data Access Layer: verifySession, getMe, requireSession and
+// requireAdmin are how every page, Server Action and Route Handler asks who is signed in.
 // Layouts never ask. Proxy's check is only an optimistic first step.
 //
 // Lifetimes go in `maxAge`, in seconds, and never as an end time.
@@ -303,4 +303,30 @@ export async function requireSession(next: string): Promise<VerifiedSession> {
     redirect(loginHref(next));
   }
   return session;
+}
+
+/**
+ * The signed-in member when their role is `admin`. With no live session, or
+ * when Nest answers 401, it redirects to sign-in with `next`, as
+ * requireSession does. Any other role calls forbidden(), which renders the
+ * nearest forbidden.tsx. Both throw, so nothing after a failed check runs.
+ * Any other failure from getMe is thrown as it came.
+ *
+ * The role comes from Nest's GET /users/me through getMe, never from the
+ * token, which carries none. So unlike requireSession it is an authorization
+ * gate for what HTML the page sends. Nest still guards every piece of data.
+ *
+ * forbidden() needs `experimental.authInterrupts` in next.config.ts. Call
+ * requireAdmin in the render path and await it: a try/catch around it, or a
+ * promise left unawaited, swallows the redirect and the forbidden page.
+ */
+export async function requireAdmin(next: string): Promise<UserResponse> {
+  const me = await getMe();
+  if (me === null) {
+    redirect(loginHref(next));
+  }
+  if (me.role !== "admin") {
+    forbidden();
+  }
+  return me;
 }

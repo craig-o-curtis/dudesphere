@@ -7,7 +7,7 @@ import type { TokenPair, UserResponse } from "@dudesphere/api-types";
 import { getUnixNow } from "@northguild/gmt";
 import { io } from "next/cache";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 
 import { apiFetch, ApiRequestError } from "@/lib/api";
 
@@ -20,6 +20,7 @@ import {
   REFRESH_COOKIE,
   REFRESH_COOKIE_PATH,
   REFRESH_MAX_AGE_SECONDS,
+  requireAdmin,
   requireSession,
   SESSION_COOKIE,
   startSession,
@@ -40,11 +41,15 @@ vi.mock("next/cache", () => ({
   io: vi.fn(() => Promise.resolve()),
 }));
 
-// The real redirect throws NEXT_REDIRECT, which ends the render. This throws
-// too, so code after it never runs, as in Next.
+// The real redirect throws NEXT_REDIRECT, and the real forbidden throws
+// NEXT_HTTP_ERROR_FALLBACK;403. Both end the render. These throw too, so code
+// after them never runs, as in Next.
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT ${url}`);
+  }),
+  forbidden: vi.fn(() => {
+    throw new Error("NEXT_HTTP_ERROR_FALLBACK;403");
   }),
 }));
 
@@ -760,5 +765,76 @@ describe("requireSession", () => {
 
     expect(redirect).not.toHaveBeenCalled();
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("requireAdmin", () => {
+  const admin: UserResponse = { ...me, role: "admin" };
+
+  it.each<[string, string, string]>([
+    ["a plain path", "/lab", "/login?next=%2Flab"],
+    [
+      "a path with a query",
+      "/lab?group=streaming&x=1",
+      "/login?next=%2Flab%3Fgroup%3Dstreaming%26x%3D1",
+    ],
+  ])(
+    "redirects to sign-in with %s kept as next when there is no session",
+    async (_label, next, target) => {
+      await expect(requireAdmin(next)).rejects.toThrow(`NEXT_REDIRECT ${target}`);
+
+      expect(redirect).toHaveBeenCalledTimes(1);
+      expect(redirect).toHaveBeenCalledWith(target);
+      expect(forbidden).not.toHaveBeenCalled();
+      expect(apiFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("redirects to sign-in when Nest answers 401", async () => {
+    savedCookies({ "__Host-session": accessTokenWith(NOW + 600) });
+    vi.mocked(apiFetch).mockRejectedValue(
+      new ApiRequestError("GET /users/me answered 401", { status: 401 }),
+    );
+
+    await expect(requireAdmin("/lab")).rejects.toThrow("NEXT_REDIRECT /login?next=%2Flab");
+
+    expect(forbidden).not.toHaveBeenCalled();
+  });
+
+  it("calls forbidden() for a member whose role is user", async () => {
+    const token = accessTokenWith(NOW + 600);
+    savedCookies({ "__Host-session": token });
+    vi.mocked(apiFetch).mockResolvedValue(me);
+
+    await expect(requireAdmin("/lab")).rejects.toThrow("NEXT_HTTP_ERROR_FALLBACK;403");
+
+    expect(forbidden).toHaveBeenCalledTimes(1);
+    expect(redirect).not.toHaveBeenCalled();
+    // The role comes from Nest's GET /users/me, never from the token.
+    expect(apiFetch).toHaveBeenCalledWith("/users/me", { token });
+  });
+
+  it("gives the member, and neither redirects nor forbids, when the role is admin", async () => {
+    savedCookies({ "__Host-session": accessTokenWith(NOW + 600) });
+    vi.mocked(apiFetch).mockResolvedValue(admin);
+
+    await expect(requireAdmin("/lab")).resolves.toEqual(admin);
+
+    expect(redirect).not.toHaveBeenCalled();
+    expect(forbidden).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Error]>([
+    ["a 500 from Nest", new ApiRequestError("GET /users/me answered 500", { status: 500 })],
+    ["a 429 from Nest", new ApiRequestError("GET /users/me answered 429", { status: 429 })],
+    ["an error that isn't an ApiRequestError", new Error("API_URL is not set.")],
+  ])("rethrows %s, and neither redirects nor forbids", async (_label, error) => {
+    savedCookies({ "__Host-session": accessTokenWith(NOW + 600) });
+    vi.mocked(apiFetch).mockRejectedValue(error);
+
+    await expect(requireAdmin("/lab")).rejects.toBe(error);
+
+    expect(redirect).not.toHaveBeenCalled();
+    expect(forbidden).not.toHaveBeenCalled();
   });
 });

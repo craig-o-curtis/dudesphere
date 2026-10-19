@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // No anonymous feedback from `next dev` about how agents use Next.
     agentFeedback: false,
+    // Lets requireAdmin call forbidden() and render app/forbidden.tsx (WEB-11).
+    authInterrupts: true,
   },
   // Never show the app inside a frame on another site, against clickjacking.
   // frame-ancestors is the modern way; X-Frame-Options covers older browsers.
