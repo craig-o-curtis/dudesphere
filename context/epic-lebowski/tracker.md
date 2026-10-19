@@ -59,11 +59,11 @@ The monorepo, the web shell, auth through the BFF, and the rendering-strategies 
     `/forgot-password`, `/reset-password`, a "required" cue on every auth form
 
 11. **API-10** · [Trust the BFF's client IP for rate limits](issues/API-10.md)\
-    ⏳ In progress · [#44][44] · Blocked by: none\
+    ✅ Done · [#44][44] · Blocked by: none\
     `BFF_SECRET`, `X-Bff-Secret` and `X-Client-Ip` read by `AuthThrottlerGuard`
 
 12. **WEB-11** · [Rendering strategies guide and the /lab page](issues/WEB-11.md)\
-    ⬜ Todo · [#45][45] · Blocked by: none\
+    ⏳ In progress · [#45][45] · Blocked by: none\
     `rendering-strategies.md` and a `/lab` index of every strategy
 
 ## Phase 1: The Feed
@@ -103,7 +103,7 @@ Passwordless sign-in, then the Twitter part of the app.
     An admin-only list of every tag, hidden ones included
 
 21. **FEED-19** · [Admin users and hashtags tables](issues/FEED-19.md)\
-    ⬜ Todo · [#54][54] · Blocked by: API-18\
+    ⬜ Todo · [#54][54] · Blocked by: WEB-11, API-18\
     `/admin/users`, `/admin/hashtags`, `forbidden()`, `after()` audit line
 
 22. **WEB-20** · [SEO and sharing](issues/WEB-20.md)\
@@ -273,8 +273,9 @@ Every story meets every line below before it says `Done`.
 - Every date goes through `@northguild/gmt`. No code holds a `Date`.
 - `pnpm lint`, `pnpm format:check` and `pnpm typecheck` pass, and every CI job is green.
 - A web story works with the keyboard alone and under `prefers-reduced-motion: reduce`.
-- The rendering strategy the story uses is recorded in
-  `context/epic-lebowski/rendering-strategies.md`.
+- The rendering strategy the story uses is recorded in the Routes table of
+  `context/epic-lebowski/rendering-strategies.md` and in `apps/web/src/content/lab.ts`,
+  and the Vitest spec that compares them passes.
 - The docs are updated. An API change updates `context/overview.md`.
 - The story is set to `Done` in this tracker, and its GitHub issue is closed.
 

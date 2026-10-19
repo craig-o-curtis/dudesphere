@@ -113,6 +113,7 @@ Two facts from the package shape the design:
 - `/dudes/me/sign-in` page: list, rename and delete passkeys; "Add a passkey"; "Verify my email".
 - After a first sign-in by link or social, a one-time banner offers "Add a passkey, sign in faster next time."
 - `@simplewebauthn/browser` added to `apps/web`.
+- `getMe()` in `apps/web/src/lib/session.ts` turns Nest's 429 into the generic error page. API-10's review found this, and WEB-11's `/lab` inherits it through `requireAdmin()`. Show a 429 as a rate-limit message that says how long to wait, not as an error.
 
 ## Design notes
 
@@ -173,6 +174,10 @@ Social:
 
 - With the provider mocked (OIDC test server or the package's `testing/` helpers): a new subject creates an account; the same subject signs in to it; a verified email equal to an existing account links to it; an unverified email creates a new account and never links.
 
+Rate limits:
+
+- A 429 from `GET /users/me` shows the rate-limit message with the wait time, not the generic error page.
+
 E2E housekeeping:
 
 - the shared e2e cleanup in `apps/api/test/e2e-cleanup.ts` deletes and counts `passkey`, `passkey_challenge` and `oidc_identity` rows for e2e users, so `pnpm e2e:check` sees them.
@@ -188,6 +193,7 @@ E2E housekeeping:
 - [ ] Google and GitHub through `OidcService`, linking only by verified email
 - [ ] "Roll in" page, `/auth/link` POST page, cookie relay Route Handlers
 - [ ] Rate limits as listed, with API-10's client IP
+- [ ] `getMe()` shows Nest's 429 as a rate-limit message
 - [ ] Unit and e2e specs as listed; new tables in the e2e cleanup
 - [ ] `context/overview.md` Auth and Rate limits sections updated; `reference/TOKENS_AND_SESSIONS.md` gains the three new flows
-- [ ] Row added to `rendering-strategies.md`
+- [ ] Rows added to `rendering-strategies.md` and `apps/web/src/content/lab.ts`

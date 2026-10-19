@@ -1,19 +1,17 @@
 # FEED-19: Admin users and hashtags tables
 
-Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, API-18.
+Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Blocked by: WEB-5, WEB-11, API-18.
 
 **Scope:** `/admin/users` and `/admin/hashtags` let an admin list, soft-delete and restore users and hide and restore tags, behind `forbidden()` for everyone else, with an audit line written after each action.
 
 ## Gap
 
-Admins can manage users and hashtags only through curl. The web app has no admin area. This is also the lesson's row for `forbidden()` with `experimental.authInterrupts` and for `after()`.
+Admins can manage users and hashtags only through curl. The web app has no admin area. It adds the admin pages to the `forbidden()` row that WEB-11 started with `/lab`, and it is the lesson's row for `after()`.
 
 ## Scope
 
-- `apps/web/next.config.ts`: `experimental.authInterrupts: true`.
-- `apps/web/src/app/(app)/admin/layout.tsx`: no auth check (layouts never check auth). A nav with "Users" and "Hashtags".
-- `apps/web/src/app/(app)/admin/forbidden.tsx`: "There are rules, and this room is one of them." with a link to `/feed`.
-- `apps/web/src/lib/session.ts` gains `requireAdmin()`: calls `getMe()`; no session redirects to `/login?next=`; a role other than `admin` calls `forbidden()`.
+- `experimental.authInterrupts: true` in `apps/web/next.config.ts`, the root `apps/web/src/app/forbidden.tsx` and `requireAdmin()` in `apps/web/src/lib/session.ts` already exist. WEB-11 built them for `/lab`. Reuse them.
+- `apps/web/src/app/(app)/admin/layout.tsx`: no auth check (layouts never check auth). A nav with "Users", "Hashtags" and "Rendering lab" (`/lab`, from WEB-11).
 - `apps/web/src/app/(app)/admin/users/page.tsx`:
   - `requireAdmin()` inside Suspense.
   - Nest `GET /users?limit=50&page=N` (Admin). Columns: id, username, email, display name, role, created, status.
@@ -57,9 +55,8 @@ Dynamic: both pages read the session inside Suspense. `forbidden()` behind `expe
 
 ## Done when
 
-- [ ] `authInterrupts` on; `forbidden.tsx` and `requireAdmin()`
+- [ ] Both pages gated by WEB-11's `requireAdmin()`, and the admin nav links to `/lab`
 - [ ] Users table with delete and restore
 - [ ] Hashtags table with hide, restore and the state filter
 - [ ] `after()` audit line on every action
-- [ ] Vitest specs for `requireAdmin()` branches
-- [ ] Row added to `rendering-strategies.md`
+- [ ] Rows added to `rendering-strategies.md` and `apps/web/src/content/lab.ts`
