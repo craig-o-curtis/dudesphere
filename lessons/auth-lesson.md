@@ -6,6 +6,7 @@ This file teaches authentication (proving who the member is) and authorization (
 
 - [AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies](#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies): A member can now sign up, sign in and sign out in the web app, and the browser never sees a token or calls Nest.
 - [AUTH-8: proxy.ts refresh and the Data Access Layer](#auth-8-proxyts-refresh-and-the-data-access-layer): A member now stays signed in past the 15-minute access token, until the refresh token runs out.
+- [WEB-11: Rendering strategies guide and the /lab page](#web-11-rendering-strategies-guide-and-the-lab-page): Only an admin can now see the rows of `/lab`, the Rendering lab.
 
 ## AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies
 
@@ -260,3 +261,88 @@ async function refreshFromCookie(request: Request, sessionToken: string): Promis
 - [TOKENS_AND_SESSIONS.md: Why a token used twice ends the whole family](../reference/TOKENS_AND_SESSIONS.md#why-a-token-used-twice-ends-the-whole-family)
 - [TOKENS_AND_SESSIONS.md: Two requests at the same moment](../reference/TOKENS_AND_SESSIONS.md#two-requests-at-the-same-moment)
 - The rendering side of this story: [rendering-lesson.md, AUTH-8](./rendering-lesson.md#auth-8-proxyts-refresh-and-the-data-access-layer)
+
+## WEB-11: Rendering strategies guide and the /lab page
+
+[#45](https://github.com/craig-o-curtis/dudesphere/issues/45) · 2026-10-19 · Authorization
+
+**TLDR.** Only an admin can now see the rows of `/lab`, the Rendering lab. A signed-out visitor goes to sign in, and a member who isn't an admin gets the "Off limits" page. The idea: `requireAdmin()` is the web app's first authorization check, a decision about what a known member may see. It takes the role from Nest's answer to `GET /users/me`, never from the token, and it says "we know you, but no" with `forbidden()`.
+
+### How it works here
+
+A visitor opens `/lab`. Steps 2 and 3 are authentication, which AUTH-8 built. Steps 4 and 5 are the new authorization.
+
+1. `apps/web/src/components/LabIndex/LabIndex.tsx` → `LabIndex` awaits `apps/web/src/lib/session.ts` → `requireAdmin("/lab")` before it renders any row.
+2. **Who is this?** `requireAdmin` calls `getMe()`. It calls `verifySession()`, which reads `__Host-session` and checks only the token's shape and `exp`. Then it calls Nest's `GET /users/me` with the token as Bearer. No live token, or a 401 from Nest, gives `null`, and `requireAdmin` calls `redirect(loginHref("/lab"))`. The visitor lands on `/login?next=%2Flab`.
+3. **Nest proves it.** `apps/api/src/auth/jwt-auth.provider.ts` → `JwtAuth` checks the token's signature. Then `validate` loads the member from Postgres (`UsersRepository.findById`) and checks that the token's `sid` is still live. `apps/api/src/users/users.controller.ts` → `getMyUser` is `@Can.Anyone()`, so any signed-in member may ask, and the answer carries their `role`.
+4. **What may they see?** Back in `requireAdmin`, `me.role !== "admin"`, so it calls `forbidden()` from `next/navigation`. That throws, so the rows never render. Next renders `apps/web/src/app/forbidden.tsx` → `Forbidden`: "Off limits", with a link to `/feed`. `forbidden()` works only because `apps/web/next.config.ts` sets `experimental.authInterrupts: true`.
+5. **An admin.** `requireAdmin` returns the member, and `LabIndex` renders the rows from `apps/web/src/content/lab.ts`.
+
+The role is read fresh on every render, with no copy in the browser, so a demoted admin loses `/lab` on their next visit. owasp-hacker checked this in review round 1: demotion took effect at once, and forged role tokens were refused.
+
+The rows come from `lab.ts`, not from Nest. So for `/lab`, `requireAdmin` is the only guard on the rows: it decides what HTML the page sends. For any data that comes from Nest, Nest's own guards still decide, on every call.
+
+### Look-alikes
+
+|                        | `requireSession(next)`                                       | `requireAdmin(next)`                                     |
+| ---------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| Kind                   | Authentication, and only an optimistic one                   | Authorization, on top of authentication                  |
+| What it checks         | The cookie holds a token whose unchecked `exp` hasn't passed | Nest's `GET /users/me` answered, with `role: "admin"`    |
+| Calls Nest             | No                                                           | Yes, through `getMe()`, once per render                  |
+| Catches a forged token | No                                                           | Yes: Nest checks the signature and the `sid`             |
+| On failure             | `redirect()` to `/login?next=`                               | `redirect()` with no session; `forbidden()` for a member |
+| In this app            | `session.ts`; the first line of `FeedWelcome`                | `session.ts`; the first line of `LabIndex`               |
+
+|               | `unauthorized()`, status 401                                                                 | `forbidden()`, status 403                                        |
+| ------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| What it means | "Who are you?" The visitor hasn't proved who they are                                        | "We know who you are, and you may not." The member lacks a right |
+| Renders       | The nearest `unauthorized.tsx`                                                               | The nearest `forbidden.tsx`                                      |
+| In this app   | Not used. A signed-out visitor gets `redirect()` to `/login?next=`, as `requireSession` does | `requireAdmin` → `forbidden()` → `app/forbidden.tsx`             |
+
+On `/lab` the 403 never reaches the browser: `forbidden()` runs inside `<Suspense>`, after Next has sent status 200. The rendering side explains why, in [rendering-lesson.md, WEB-11](./rendering-lesson.md#web-11-rendering-strategies-guide-and-the-lab-page).
+
+### The code
+
+```ts
+// EXISTING FILE: apps/web/src/lib/session.ts
+export async function requireAdmin(next: string): Promise<UserResponse> {
+  const me = await getMe();
+  if (me === null) {
+    redirect(loginHref(next));
+  }
+  if (me.role !== "admin") {
+    forbidden();
+  }
+  return me;
+}
+```
+
+```ts
+// EXISTING FILE: apps/api/src/users/users.controller.ts
+  @Can.Anyone()
+  @Get("me")
+  getMyUser(@CurrentUser() user: User): Promise<UserResponseDto> {
+    return this.usersService.getUserById(user.id);
+  }
+```
+
+The Next docs' `forbidden` examples read `session.role` from the session itself. This app can't: the access token carries no role, on purpose. A token can't change once it is signed, so a role in it would be a copy that goes stale the moment an admin is demoted (TOKENS_AND_SESSIONS.md, "What is inside the access token"). So `requireAdmin` asks Nest, which reads the role from the database on every request.
+
+### Watch out
+
+- **Never catch it, and always await it.** `redirect()` and `forbidden()` both work by throwing. A `try/catch` around `requireAdmin` swallows them, and a promise left unawaited throws where nothing catches it. Either way the page goes on as if the check passed. `LabIndex` awaits it on its first line, with no `try`.
+- **No route can make an admin, on purpose.** So the web e2e suite can't sign in as one through the app. `apps/api/test/e2e-set-role.ts` → `setE2eRole` changes one row in Postgres, for the test run only. It refuses any email that isn't `e2e-` plus 12 hex characters at `example.com`, a role not in `UserRole` and a database not on this machine. In round 2, qa-skeptic found that the CLI took the last of two `--role` flags. It now exits 1 on a repeated flag.
+- **A 429 from Nest shows the error page, not sign-in.** `getMe()` turns only a 401 into `null`. Any other failure is thrown, so a rate-limited member sees the generic error page. API-10 left this, and AUTH-52 (#46) owns the fix. `/lab` inherits it through `requireAdmin`.
+
+### Read more
+
+- [`forbidden`: role-based route protection](https://nextjs.org/docs/app/api-reference/functions/forbidden#role-based-route-protection)
+- [`forbidden.js`](https://nextjs.org/docs/app/api-reference/file-conventions/forbidden)
+- [`unauthorized`](https://nextjs.org/docs/app/api-reference/functions/unauthorized)
+- [`authInterrupts`](https://nextjs.org/docs/app/api-reference/config/next-config-js/authInterrupts)
+- [Next.js authentication: authorization](https://nextjs.org/docs/app/guides/authentication#authorization)
+- [NestJS docs: authorization with policies](https://docs.nestjs.com/security/authorization)
+- [TOKENS_AND_SESSIONS.md: What is inside the access token](../reference/TOKENS_AND_SESSIONS.md#what-is-inside-the-access-token)
+- [TOKENS_AND_SESSIONS.md: An ordinary request, the three guards](../reference/TOKENS_AND_SESSIONS.md#an-ordinary-request-the-three-guards)
+- [TOKEN_FYI.md: question 11, why there is no role in the JWT](../reference/TOKEN_FYI.md)
+- The rendering side of this story: [rendering-lesson.md, WEB-11](./rendering-lesson.md#web-11-rendering-strategies-guide-and-the-lab-page)
