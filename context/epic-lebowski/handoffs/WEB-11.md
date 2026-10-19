@@ -4,7 +4,7 @@
 - **Spec:** [issues/WEB-11.md](../issues/WEB-11.md)
 - **Branch:** `45-web-11-rendering-strategies-guide-and-the-lab`. Matches `feature/<id>-<slug>`: no (made by `worktree branch --github`)
 - **Blocked by:** none. WEB-5 and WEB-6 are ✅ Done
-- **Status:** Finalizing
+- **Status:** Done
 
 ## Scope
 
@@ -211,4 +211,5 @@ Closes #45
 - 2026-10-19: MEN-1 fixed (fe-tdd-dev): the member test says its noindex check proves /lab stays out of search, not that `forbidden()` ran. Playwright `lab.spec.ts` 4 passed; `e2e:check` clean. pr-finalizer phase 2 resumed.
 - 2026-10-19: Round 4: all three reviewers pass. QA-20 and MEN-1 fixed. Mentor wrote both lessons; pr-finalizer checked them: one entry and one Contents line each, snippets match the code.
 - 2026-10-19: Full checks: lint, format, typecheck pass; unit tests API 1226, web 1609; build passes with `/lab` as `◐`; API e2e 371; web e2e 118; `migration:check` clean; `e2e:check` clean.
-- 2026-10-19: Leftovers fixed in local specs: `issues/FEED-19.md` (member gets status 200 and noindex, WEB-11 removed from Blocked by) and `issues/WEB-47.md` (Partial Prefetching is on since WEB-5; WEB-47 only verifies it). Waiting for Craig's yes to mirror them to #54, #47 and #45, then push and open the PR.
+- 2026-10-19: Leftovers fixed in local specs: `issues/FEED-19.md` (member gets status 200 and noindex, WEB-11 removed from Blocked by) and `issues/WEB-47.md` (Partial Prefetching is on since WEB-5; WEB-47 only verifies it). Waiting for Craig's yes to mirror them to #54, #45 and #82, then push and open the PR.
+- 2026-10-19: With Craig's yes: #45, #54 and #82 mirrored from their specs (absolute links; read back, equal apart from a trailing newline). Pushed, and PR opened: https://github.com/craig-o-curtis/dudesphere/pull/96 (labels documentation, enhancement, epic-lebowski, fullstack, rendering-lesson, auth-lesson; milestone Phase 0: Foundation).
