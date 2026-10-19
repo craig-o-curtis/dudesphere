@@ -274,6 +274,12 @@ the web origin only, and say why in `overview.md`.
   `apps/web` never touches a database. Run it by hand from the root with
   `pnpm e2e:cleanup`. `pnpm e2e:check` deletes nothing: it counts the e2e rows
   left, and exits 1 if there are any.
+- `pnpm --filter @dudesphere/api e2e:set-role --email <email> --role <role>`
+  sets the role of one e2e user, so the web Playwright suite can sign in as an
+  admin (WEB-11). No route can make an admin. It lives in
+  `apps/api/test/e2e-set-role.ts`, and refuses an email that isn't
+  `e2e-<12 hex>@example.com`, a role that isn't in `UserRole`, and a database
+  not on this machine. It exits 1 on any failure, including no matching user.
 - The zero-`Date` policy and `@northguild/gmt` apply to `apps/web` and every
   package as well. Timestamps cross the API as ISO 8601 UTC strings and stay
   strings in the browser until a formatter needs them.
