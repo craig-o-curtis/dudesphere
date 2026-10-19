@@ -72,7 +72,7 @@ apps/web/src/
     (app)/dudes/[id], dudes/me
     (app)/lanes/..., abide/..., rug/..., laws/..., stranger, groups/..., nights/...
     (app)/admin/...
-    lab/page.tsx                             the rendering-strategies index (WEB-11)
+    (app)/lab/page.tsx                       the rendering-strategies index (WEB-11), admin only
     api/auth/{logout,logout-everywhere}/route.ts   AUTH-7: plain form POSTs, 303 to /
     api/auth/refresh/route.ts                      AUTH-8: GET for proxy, POST for clientFetch
     api/bff/[...path]/route.ts               AUTH-8: client fetches, Bearer added on the server
@@ -81,7 +81,8 @@ apps/web/src/
   proxy.ts            AUTH-8: refreshes a session about to run out, before the page renders
   lib/api.ts          'server-only' typed fetch to Nest: apiFetch, ApiRequestError, maps 400 field errors
   lib/session.ts      'server-only', the Data Access Layer: cookie names and options, startSession,
-                      clearSessionCookies, endOldSignIn, readSessionCookies, verifySession, getMe, requireSession
+                      clearSessionCookies, endOldSignIn, readSessionCookies, verifySession, getMe, requireSession,
+                      requireAdmin
   lib/access-token.ts readTokenExp and expiresWithin. Pure, no 'server-only', so proxy.ts can import it
   lib/refresh.ts      'server-only': refreshOnce, one refresh per refresh token (AUTH-8)
   lib/bff-paths.ts    bffTarget and the allow-list for /api/bff. Pure
@@ -95,6 +96,8 @@ apps/web/src/
                       copy), theme.ts (sets the theme cookie)
   lib/theme.ts        theme cookie name and value check
   lib/motion.ts       motion/react presets that copy the --dur-* tokens
+  content/lab.ts      'server-only': the strategy and route lists that /lab renders (WEB-11). lab.spec.ts keeps
+                      them equal to rendering-strategies.md
   components/ui/*     shared parts (Button, Text, Form, TextField, Stack, ToggleGroup...), each with a
                       .module.css and a spec. They know nothing about the app. Only these may import
                       @base-ui/react, which FEED-16 adds with Dialog
@@ -112,7 +115,8 @@ Route groups such as `(public)` and `(app)` share a layout only. They do not
 check auth. Each page, Server Action and Route Handler checks for itself.
 
 `next.config.ts` turns on `cacheComponents`, `partialPrefetching` and
-`reactCompiler`, and sets `experimental.agentFeedback: false`, so `next dev`
+`reactCompiler`, sets `experimental.authInterrupts: true` (for `forbidden()` and
+`unauthorized()`), and sets `experimental.agentFeedback: false`, so `next dev`
 sends no anonymous feedback about how agents use Next. It has no
 `transpilePackages`, `agentRules` or `agentUpgrade`. Earlier versions of this
 file named all three. Fixed security headers come in WEB-45, through

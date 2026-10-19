@@ -7,6 +7,7 @@ This file teaches how Next.js 16.4 makes a page's HTML in Dudesphere, and how lo
 - [AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies](#auth-7-bff-sign-up-sign-in-and-sign-out-with-httponly-cookies): A visitor can now sign up at `/signup` and sign in at `/login`, and both forms work with JavaScript off.
 - [AUTH-8: proxy.ts refresh and the Data Access Layer](#auth-8-proxyts-refresh-and-the-data-access-layer): A member's session now refreshes before a page renders, whether they load the page or click a link inside the app.
 - [AUTH-9: Forgot and reset password pages](#auth-9-forgot-and-reset-password-pages): A member who forgot their password can now ask for a link at `/forgot-password` and set a new password at `/reset-password`.
+- [WEB-11: Rendering strategies guide and the /lab page](#web-11-rendering-strategies-guide-and-the-lab-page): An admin can now open `/lab`, the Rendering lab, and see every rendering strategy the app teaches, with the routes that use each one.
 
 ## AUTH-7: BFF sign-up, sign-in and sign-out with httpOnly cookies
 
@@ -281,3 +282,89 @@ The page never awaits `searchParams`, so it has no request-time read and stays i
 - [Server Actions: security and the CSRF check](https://nextjs.org/docs/app/guides/server-actions#security)
 - [`Referrer-Policy` and the `Origin` header, MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy)
 - [rendering-strategies.md: Known limit, a form in a Suspense hole never shows with JavaScript off](../context/epic-lebowski/rendering-strategies.md#known-limit-a-form-in-a-suspense-hole-never-shows-with-javascript-off)
+
+## WEB-11: Rendering strategies guide and the /lab page
+
+[#45](https://github.com/craig-o-curtis/dudesphere/issues/45) · 2026-10-19 · Streaming dynamic, Data Access Layer, and `forbidden()` and `unauthorized()`
+
+**TLDR.** An admin can now open `/lab`, the Rendering lab, and see every rendering strategy the app teaches, with the routes that use each one. The idea: the static shell goes to every visitor, so anything only some visitors may see must be built inside the `<Suspense>` hole that checks who is asking. That check runs after Next has sent the shell with status 200, so `forbidden()` can swap the page for the "Off limits" page, but it can't change the status to 403.
+
+### How it works here
+
+A visitor opens `/lab`. Steps 5 to 7 are the three ways it can end.
+
+1. **At build.** `apps/web/src/app/(app)/lab/page.tsx` → `LabPage` is synchronous and reads nothing from the request. `next build` prerenders the `<h1>`, the intro line, the `metadata` title and `LabIndexSkeleton`, the hole's fallback, into the static shell. It lists the route as `◐ /lab`.
+2. **The rows stay out of the shell.** Only `apps/web/src/components/LabIndex/LabIndex.tsx` → `LabIndex` imports `labStrategies` and `labRoutes` from `apps/web/src/content/lab.ts`. It renders them only after `await requireAdmin("/lab")`, so no row text is in the prerendered HTML. `lab.ts` starts with `import "server-only"`, so the build fails if a Client Component ever imports it.
+3. **The request.** Next sends the shell at once, with status 200, and keeps the response open. Once the first bytes have gone, the status can't change.
+4. **The hole.** `LabIndex` awaits `apps/web/src/lib/session.ts` → `requireAdmin`. It calls `getMe()`, which reads the session cookie, so it must run inside `<Suspense>`. `getMe()` then asks Nest for the member. The auth side of this step is in [auth-lesson.md, WEB-11](./auth-lesson.md#web-11-rendering-strategies-guide-and-the-lab-page).
+5. **A member.** `requireAdmin` calls `forbidden()`, which throws. Next renders the nearest `forbidden.tsx`, `apps/web/src/app/forbidden.tsx` → `Forbidden`, in place of the whole page: the shell's `<h1>` and intro go too, and the root layout's header and footer stay. Next adds `<meta name="robots" content="noindex">`. The status stays 200.
+6. **An admin.** `requireAdmin` returns, and `LabIndex` renders one `<h2>` per strategy with its rows. React streams them in, and its inline script swaps them in for the fallback.
+7. **Signed out.** `requireAdmin` calls `redirect()`, also after streaming starts. So Next sends no 307. It streams a tag that redirects in the browser, and the visitor lands on `/login?next=%2Flab`.
+
+### Look-alikes
+
+|                         | `forbidden()` before streaming starts                                                           | `forbidden()` after streaming starts                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Where the call runs     | Before Next sends a byte, such as during prerender                                              | Inside a `<Suspense>` hole, after the shell has gone |
+| HTTP status             | 403                                                                                             | 200                                                  |
+| `noindex` tag           | Yes                                                                                             | Yes                                                  |
+| The page's static shell | None for a role check: under Cache Components, `cookies()` outside `<Suspense>` fails the build | Kept, and sent to every visitor first                |
+| In this app             | Not used. For a real 403 at request time, the docs say to check in `proxy.ts`                   | `LabIndex` → `requireAdmin` → `forbidden()`          |
+
+The plan expected a 403 for members. While building task 2, fullstack-hooker-upper found that the installed `forbidden.md` (functions, line 185) says a call after streaming starts "keeps its `200` status". On 2026-10-19 Craig chose to keep the static shell and accept 200 with `noindex`. So the tests check the forbidden copy, the `noindex` tag and that no row text is sent, never a 403.
+
+### The code
+
+```tsx
+// NEW FILE: apps/web/src/app/(app)/lab/page.tsx
+export default function LabPage() {
+  return (
+    <PageShell.Root>
+      <Heading level={1} size="3xl">
+        Rendering lab
+      </Heading>
+      <Text tone="muted">
+        Every rendering strategy this app teaches, and the routes that use it.
+      </Text>
+      <Suspense fallback={<LabIndexSkeleton />}>
+        <LabIndex />
+      </Suspense>
+    </PageShell.Root>
+  );
+}
+```
+
+```tsx
+// NEW FILE: apps/web/src/app/forbidden.tsx
+export default function Forbidden() {
+  return (
+    <Stack gap={3}>
+      <Heading level={1}>Off limits</Heading>
+      <Text size="lg">There are rules, and this room is one of them.</Text>
+      <Text>
+        <InlineLink href="/feed">Back to the feed</InlineLink>
+      </Text>
+    </Stack>
+  );
+}
+```
+
+Everything in `LabPage` outside the `<Suspense>` is safe for anyone: a heading and one line of intro. The check and the rows live in the same component, `LabIndex`, so the rows can't render unless the check passed.
+
+### Watch out
+
+- **Keep the gate in the component that renders the secret.** The static shell guide shows an `AuthGate` that sits beside the page's content in its own `<Suspense>` and returns `null`. That works for a redirect, but content beside the gate is still prerendered into the shell, and the shell goes to everyone. Here the rows render only after `await requireAdmin("/lab")`, in the same component. owasp-hacker checked the shell, the RSC payload, the prefetches and every `.next/static` file for row text, for signed-out and member visits, and found none.
+- **`forbidden.tsx` replaces the page's own `<h1>`.** The first version had no heading, so a member's `/lab` had none at all (A11Y-1). `Forbidden` now has its own `<h1>`, "Off limits".
+- **The tab title still says "Rendering lab" for a member.** The title is in the shell, which is sent before the role check runs (A11Y-3). The story accepts it, and `rendering-strategies.md` notes it.
+
+### Read more
+
+- [`forbidden`: calling it after streaming has started](https://nextjs.org/docs/app/api-reference/functions/forbidden#calling-forbidden-after-streaming-has-started)
+- [`forbidden.js`: 403 before streaming, 200 after](https://nextjs.org/docs/app/api-reference/file-conventions/forbidden)
+- [`loading.js`: status codes in a streamed response](https://nextjs.org/docs/app/api-reference/file-conventions/loading#status-codes)
+- [Optimizing the static shell: move authentication behind Suspense](https://nextjs.org/docs/app/guides/optimizing-the-static-shell#step-2-move-authentication-behind-suspense)
+- [Authentication with Cache Components](https://nextjs.org/docs/app/guides/authentication-with-cache-components)
+- [`redirect` in a streaming context](https://nextjs.org/docs/app/api-reference/functions/redirect)
+- [rendering-strategies.md: the `/lab` page](../context/epic-lebowski/rendering-strategies.md#the-lab-page)
+- [rendering-strategies.md: the Routes table](../context/epic-lebowski/rendering-strategies.md#routes)
+- The auth side of this story: [auth-lesson.md, WEB-11](./auth-lesson.md#web-11-rendering-strategies-guide-and-the-lab-page)

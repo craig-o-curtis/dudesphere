@@ -39,7 +39,7 @@ The issue's labels decide what you write. Each label maps to one lesson file:
    - each untracked file from `git status --short`.
 5. The lesson file for each topic, so you don't repeat a lesson already taught. Build on it instead, and link to it.
 6. The repo's own notes for the topic:
-   - rendering: the story's row in `context/epic-lebowski/rendering-strategies.md`;
+   - rendering: the story's row in `context/epic-lebowski/rendering-strategies.md`, and its entry in `apps/web/src/content/lab.ts`;
    - auth: `reference/TOKENS_AND_SESSIONS.md`, `reference/TOKEN_FYI.md` and `reference/NESTJS_REQUEST_LIFECYCLE.md`.
 
 ## Skills

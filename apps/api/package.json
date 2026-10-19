@@ -25,6 +25,7 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "e2e:cleanup": "tsx test/e2e-cleanup-cli.ts",
     "e2e:check": "tsx test/e2e-cleanup-cli.ts --check",
+    "e2e:set-role": "tsx test/e2e-set-role-cli.ts",
     "migration:generate": "typeorm-ts-node-esm migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-esm migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-esm migration:revert -d src/database/data-source.ts",

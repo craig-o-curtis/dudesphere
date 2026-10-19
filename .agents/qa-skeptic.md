@@ -95,7 +95,7 @@ Check the Definition of Done items a builder might forget:
 - each new table or collection that an e2e run writes to is in the shared e2e cleanup in `apps/api/test/`;
 - every suite that creates rows, API or web, runs that cleanup before and after it runs (the Vitest `globalSetup` and the Playwright `globalSetup` and `globalTeardown`). A suite or a script that creates rows the cleanup can't find, or that skips it, is a `major` finding;
 - the e2e data follows the naming rules;
-- the `rendering-strategies.md` row is there;
+- the `rendering-strategies.md` row is there, with the matching entry in `apps/web/src/content/lab.ts`, and `lab.spec.ts` passes;
 - `overview.md` is updated for an API change.
 
 ### 6. Prove findings

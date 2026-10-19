@@ -55,4 +55,9 @@ describe("next.config headers()", () => {
     expect(nextConfig.partialPrefetching).toBe(true);
     expect(nextConfig.reactCompiler).toBe(true);
   });
+
+  it("turns on authInterrupts, which forbidden() needs, and keeps agent feedback off", () => {
+    expect(nextConfig.experimental?.authInterrupts).toBe(true);
+    expect(nextConfig.experimental?.agentFeedback).toBe(false);
+  });
 });

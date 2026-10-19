@@ -36,7 +36,7 @@ Find the row: `grep -n '\*\*<ID>\*\*' -A2 context/epic-lebowski/tracker.md`. Rea
 6. The GitHub issue: `gh issue view <n> --comments`. The tracker's Issue column maps ids to numbers.
 7. `context/epic-lebowski/overview.md`: the decisions, the architecture, the risks.
 8. `context/epic-lebowski/research.md`: the legal and IP caveats, before you approve any name or UI copy.
-9. For a web story: `context/epic-lebowski/rendering-strategies.md` and `context/standards/nextjs.md`.
+9. For a web story: `context/epic-lebowski/rendering-strategies.md`, `apps/web/src/content/lab.ts` and `context/standards/nextjs.md`.
 10. The sections of `context/frontend-architecture.md` and `context/fullstack-architecture.md` that the spec links to.
 11. `context/epic-lebowski/handoffs/README.md`: the handoff template.
 
@@ -70,7 +70,7 @@ Find facts in the code yourself, or with Explore agents, so you never ask the us
   - an `E2E_TARGETS` entry in `apps/api/test/e2e-cleanup.ts` for each new table or collection an e2e run writes to;
   - unit and e2e specs for backend work;
   - keyboard-only use and reduced motion for web work;
-  - a `rendering-strategies.md` row;
+  - a `rendering-strategies.md` row and a `lab.ts` entry, with `lab.spec.ts` passing;
   - an `overview.md` update for any API change.
 
 ## 5. Grill

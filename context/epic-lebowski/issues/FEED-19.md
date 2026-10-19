@@ -6,14 +6,12 @@ Part of the Lebowski epic. See [index.md](../index.md). Realm: Feed. Phase 1. Bl
 
 ## Gap
 
-Admins can manage users and hashtags only through curl. The web app has no admin area. This is also the lesson's row for `forbidden()` with `experimental.authInterrupts` and for `after()`.
+Admins can manage users and hashtags only through curl. The web app has no admin area. It adds the admin pages to the `forbidden()` row that WEB-11 started with `/lab`, and it is the lesson's row for `after()`.
 
 ## Scope
 
-- `apps/web/next.config.ts`: `experimental.authInterrupts: true`.
-- `apps/web/src/app/(app)/admin/layout.tsx`: no auth check (layouts never check auth). A nav with "Users" and "Hashtags".
-- `apps/web/src/app/(app)/admin/forbidden.tsx`: "There are rules, and this room is one of them." with a link to `/feed`.
-- `apps/web/src/lib/session.ts` gains `requireAdmin()`: calls `getMe()`; no session redirects to `/login?next=`; a role other than `admin` calls `forbidden()`.
+- `experimental.authInterrupts: true` in `apps/web/next.config.ts`, the root `apps/web/src/app/forbidden.tsx` and `requireAdmin()` in `apps/web/src/lib/session.ts` already exist. WEB-11 built them for `/lab`. Reuse them.
+- `apps/web/src/app/(app)/admin/layout.tsx`: no auth check (layouts never check auth). A nav with "Users", "Hashtags" and "Rendering lab" (`/lab`, from WEB-11).
 - `apps/web/src/app/(app)/admin/users/page.tsx`:
   - `requireAdmin()` inside Suspense.
   - Nest `GET /users?limit=50&page=N` (Admin). Columns: id, username, email, display name, role, created, status.
@@ -43,12 +41,12 @@ Admins can manage users and hashtags only through curl. The web app has no admin
 
 ## Rendering strategy
 
-Dynamic: both pages read the session inside Suspense. `forbidden()` behind `experimental.authInterrupts` renders `forbidden.tsx` with a 403 status. `after()` writes the audit line after the response. Server Actions do the writes.
+Dynamic: both pages read the session inside Suspense. `forbidden()` behind `experimental.authInterrupts` renders `forbidden.tsx` with a `noindex` tag. The status stays 200, because `forbidden()` runs inside Suspense after streaming has started (WEB-11 chose this for `/lab`). `after()` writes the audit line after the response. Server Actions do the writes.
 
 ## Verification
 
 - As the seeded admin: both tables list rows; restore and hide work and update the table at once.
-- As a member: `/admin/users` answers 403 and renders the "There are rules" page.
+- As a member: `/admin/users` renders the forbidden page ("There are rules") with a `noindex` tag and status 200, and the HTML holds no table rows.
 - Anonymous: `/admin/users` redirects to `/login?next=%2Fadmin%2Fusers`.
 - Demote the admin in the database mid-session: the next action fails with Nest's 403 and the page shows the forbidden view.
 - Each action prints exactly one JSON audit line after the response.
@@ -57,9 +55,8 @@ Dynamic: both pages read the session inside Suspense. `forbidden()` behind `expe
 
 ## Done when
 
-- [ ] `authInterrupts` on; `forbidden.tsx` and `requireAdmin()`
+- [ ] Both pages gated by WEB-11's `requireAdmin()`, and the admin nav links to `/lab`
 - [ ] Users table with delete and restore
 - [ ] Hashtags table with hide, restore and the state filter
 - [ ] `after()` audit line on every action
-- [ ] Vitest specs for `requireAdmin()` branches
-- [ ] Row added to `rendering-strategies.md`
+- [ ] Rows added to `rendering-strategies.md` and `apps/web/src/content/lab.ts`
