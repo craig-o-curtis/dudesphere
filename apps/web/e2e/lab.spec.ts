@@ -76,7 +76,9 @@ test("a signed-out visit ends on /login?next=%2Flab", async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?next=%2Flab$/);
 });
 
-test("a member sees the forbidden page, a noindex tag and no row text", async ({ page }) => {
+test("a member sees the forbidden page, /lab stays noindex and no row text shows", async ({
+  page,
+}) => {
   await signUp(page);
   const response = await page.goto("/lab");
   await expect(page.getByText(FORBIDDEN_COPY)).toBeVisible();
@@ -86,6 +88,8 @@ test("a member sees the forbidden page, a noindex tag and no row text", async ({
     "href",
     "/feed",
   );
+  // The page sets noindex for every visitor, so this line checks that /lab stays out of search.
+  // It does not show that forbidden() ran. The copy and heading checks above do that.
   await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
   await expect(page.getByText(ROW_TEXT)).toHaveCount(0);
   const body = (await response?.text()) ?? "";
